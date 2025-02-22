@@ -1,0 +1,10 @@
+**/.coverage
+**/.mypy_cache
+**/.vscode
+**/__pycache__
+**/.pytest_cache
+# **/.env
+**/logs
+**/tmp
+
+.mypy_cache/**/*
