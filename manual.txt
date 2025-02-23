@@ -1,3 +1,11 @@
+./toolbox --tools_file "tools.yaml"
+
+
+Question:
+Find hotels in Basel with Basel in it's name
+Can you book the Hilton Basel for me?
+Oh wait, this is too expensive. Please cancel it and book the Hyatt Regency instead.
+
 How many table inside the database?
 List all the tables.
 In final_bom. who is the top quality?
@@ -5,14 +13,9 @@ Which supplier order most?
 
 
 
-Hotel
 
-./toolbox --tools_file "tools.yaml"
-
-
-
-Find hotels in Basel with Basel in it's name
-Can you book the Hilton Basel for me?
-Oh wait, this is too expensive. Please cancel it and book the Hyatt Regency instead.
-
+Git commit
+git commit -m "urmessagela"
+Push to origin
+git push origin main
 
