@@ -219,3 +219,12 @@ anthropic.env
 
 # direnv
 .env.local
+
+# my laptop files
+manual.txt
+solution.txt
+
+
+# config env files
+
+
