@@ -1,0 +1,94 @@
+{
+    "sources": {
+      "toolbox-db-source": {
+        "kind": "mysql",
+        "host": "127.0.0.1",
+        "port": "3306",
+        "database": "toolbox_db",
+        "user": "toolbox_user",
+        "password": "my-password"
+      }
+    },
+    "tools": [
+      {
+        "name": "search-hotels-by-name",
+        "kind": "mysql-sql",
+        "source": "toolbox-db-source",
+        "description": "Search for hotels based on name.",
+        "parameters": [
+          {
+            "name": "name",
+            "type": "string",
+            "description": "The name of the hotel."
+          }
+        ],
+        "statement": "SELECT * FROM hotels WHERE name LIKE CONCAT('%', ?, '%');"
+      },
+      {
+        "name": "search-hotels-by-location",
+        "kind": "mysql-sql",
+        "source": "toolbox-db-source",
+        "description": "Search for hotels based on location.",
+        "parameters": [
+          {
+            "name": "location",
+            "type": "string",
+            "description": "The location of the hotel."
+          }
+        ],
+        "statement": "SELECT * FROM hotels WHERE location LIKE CONCAT('%', ?, '%');"
+      },
+      {
+        "name": "book-hotel",
+        "kind": "mysql-sql",
+        "source": "toolbox-db-source",
+        "description": "Book a hotel by its ID. Returns a message indicating whether the hotel was successfully booked or not.",
+        "parameters": [
+          {
+            "name": "hotel_id",
+            "type": "string",
+            "description": "The ID of the hotel to book."
+          }
+        ],
+        "statement": "UPDATE hotels SET booked = 1 WHERE id = ?;"
+      },
+      {
+        "name": "update-hotel",
+        "kind": "mysql-sql",
+        "source": "toolbox-db-source",
+        "description": "Update a hotel's check-in and check-out dates by its ID. Returns a message indicating whether the hotel was successfully updated or not.",
+        "parameters": [
+          {
+            "name": "hotel_id",
+            "type": "string",
+            "description": "The ID of the hotel to update."
+          },
+          {
+            "name": "checkin_date",
+            "type": "string",
+            "description": "The new check-in date of the hotel (format: YYYY-MM-DD)."
+          },
+          {
+            "name": "checkout_date",
+            "type": "string",
+            "description": "The new check-out date of the hotel (format: YYYY-MM-DD)."
+          }
+        ],
+        "statement": "UPDATE hotels SET checkin_date = STR_TO_DATE(?, '%Y-%m-%d'), checkout_date = STR_TO_DATE(?, '%Y-%m-%d') WHERE id = ?;"
+      },
+      {
+        "name": "cancel-hotel",
+        "kind": "mysql-sql",
+        "source": "toolbox-db-source",
+        "description": "Cancel a hotel by its ID.",
+        "parameters": [
+          {
+            "name": "hotel_id",
+            "type": "string",
+            "description": "The ID of the hotel to cancel."
+          }
+        ],
+        "statement": "UPDATE hotels SET booked = 0 WHERE id = ?;"
+      }
+    ]
+  }
