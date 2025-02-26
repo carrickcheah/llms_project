@@ -13,7 +13,9 @@ name = "agent"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "azure-ai-inference" },
     { name = "langchain" },
+    { name = "langchain-anthropic" },
     { name = "langchain-community" },
     { name = "langchain-core" },
     { name = "langchain-ollama" },
@@ -36,7 +38,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "azure-ai-inference", specifier = ">=1.0.0b9" },
     { name = "langchain", specifier = ">=0.3.19" },
+    { name = "langchain-anthropic", specifier = ">=0.3.8" },
     { name = "langchain-community", specifier = ">=0.3.18" },
     { name = "langchain-core", specifier = ">=0.3.37" },
     { name = "langchain-ollama", specifier = ">=0.2.3" },
@@ -169,6 +173,24 @@ wheels = [
 ]
 
 [[package]]
+name = "anthropic"
+version = "0.47.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "distro" },
+    { name = "httpx" },
+    { name = "jiter" },
+    { name = "pydantic" },
+    { name = "sniffio" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fd/d9/13cf8a01817dc3b7aeca7e947a4b565ec9c9ee584a40051461969889e60e/anthropic-0.47.1.tar.gz", hash = "sha256:032e900a650077677c2970c1bffd54b2c274907fab7e226ec0e6a8540d422e97", size = 207769 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/f8/05c68c9cf935720ca4fb013e1155fa006f9deb562f6ac8a55c8d732491ab/anthropic-0.47.1-py3-none-any.whl", hash = "sha256:a822e8731613026410f7819604c58ccab50416158ccdda3b96a3abaf3a061453", size = 239496 },
+]
+
+[[package]]
 name = "anyio"
 version = "4.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -189,6 +211,34 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/49/7c/fdf464bcc51d23881d110abd74b512a42b3d5d376a55a831b44c603ae17f/attrs-25.1.0.tar.gz", hash = "sha256:1c97078a80c814273a76b2a298a932eb681c87415c11dee0a6921de7f1b02c3e", size = 810562 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fc/30/d4986a882011f9df997a55e6becd864812ccfcd821d64aac8570ee39f719/attrs-25.1.0-py3-none-any.whl", hash = "sha256:c75a69e28a550a7e93789579c22aa26b0f5b83b75dc4e08fe092980051e1090a", size = 63152 },
+]
+
+[[package]]
+name = "azure-ai-inference"
+version = "1.0.0b9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/6a/ed85592e5c64e08c291992f58b1a94dab6869f28fb0f40fd753dced73ba6/azure_ai_inference-1.0.0b9.tar.gz", hash = "sha256:1feb496bd84b01ee2691befc04358fa25d7c344d8288e99364438859ad7cd5a4", size = 182408 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/0f/27520da74769db6e58327d96c98e7b9a07ce686dff582c9a5ec60b03f9dd/azure_ai_inference-1.0.0b9-py3-none-any.whl", hash = "sha256:49823732e674092dad83bb8b0d1b65aa73111fab924d61349eb2a8cdc0493990", size = 124885 },
+]
+
+[[package]]
+name = "azure-core"
+version = "1.32.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "six" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/ee/668328306a9e963a5ad9f152cd98c7adad86c822729fd1d2a01613ad1e67/azure_core-1.32.0.tar.gz", hash = "sha256:22b3c35d6b2dae14990f6c1be2912bf23ffe50b220e708a28ab1bb92b1c730e5", size = 279128 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/39/83/325bf5e02504dbd8b4faa98197a44cdf8a325ef259b48326a2b6f17f8383/azure_core-1.32.0-py3-none-any.whl", hash = "sha256:eac191a0efb23bfa83fddf321b27b122b4ec847befa3091fa736a5c32c50d7b4", size = 198855 },
 ]
 
 [[package]]
@@ -718,6 +768,15 @@ wheels = [
 ]
 
 [[package]]
+name = "isodate"
+version = "0.7.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/54/4d/e940025e2ce31a8ce1202635910747e5a87cc3a6a6bb2d00973375014749/isodate-0.7.2.tar.gz", hash = "sha256:4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6", size = 29705 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/15/aa/0aca39a37d3c7eb941ba736ede56d689e7be91cab5d9ca846bde3999eba6/isodate-0.7.2-py3-none-any.whl", hash = "sha256:28009937d8031054830160fce6d409ed342816b543597cece116d966c6d99e15", size = 22320 },
+]
+
+[[package]]
 name = "jinja2"
 version = "3.1.5"
 source = { registry = "https://pypi.org/simple" }
@@ -885,6 +944,20 @@ wheels = [
 ]
 
 [[package]]
+name = "langchain-anthropic"
+version = "0.3.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anthropic" },
+    { name = "langchain-core" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/63/2f/6ec88725da9cbb1c2b1295f6903faa2fa87fda07c87f8f0dfdec85f687dc/langchain_anthropic-0.3.8.tar.gz", hash = "sha256:1932977b8105744739ffdcb39861b041b73ae93846d0896a775fcea9a29e4b2b", size = 40585 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/b1/9f3f1b94c8770b2745c6cb950ef0f3299c2178ed3f9d73d61ccf3215390c/langchain_anthropic-0.3.8-py3-none-any.whl", hash = "sha256:05a70f51500d3c4e0f3e463730e193a25b6244e06b3bda3d7b2ec21d83d081ae", size = 23266 },
+]
+
+[[package]]
 name = "langchain-community"
 version = "0.3.18"
 source = { registry = "https://pypi.org/simple" }
@@ -910,7 +983,7 @@ wheels = [
 
 [[package]]
 name = "langchain-core"
-version = "0.3.37"
+version = "0.3.39"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "jsonpatch" },
@@ -921,9 +994,9 @@ dependencies = [
     { name = "tenacity" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/86/1d/692541c2ff9d8d7c847638f1244bddbb773c984fbfbe1728ad5f100222b7/langchain_core-0.3.37.tar.gz", hash = "sha256:cda8786e616caa2f68f7cc9e811b9b50e3b63fb2094333318b348e5961a7ea01", size = 527209 }
+sdist = { url = "https://files.pythonhosted.org/packages/1a/0d/9df784c2c6fada292636ce2a4107141cef13ecdcf9fcbc1b118873b8d84a/langchain_core-0.3.39.tar.gz", hash = "sha256:97d49eccb1dea057b2efadae178bcc5e6472caa69c171fa4508fa6fb45f44c0e", size = 527875 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6a/f5/9ce2a94bc49b64c0bf53b17524d5fc5c926070e911b11d489979d47d5491/langchain_core-0.3.37-py3-none-any.whl", hash = "sha256:8202fd6506ce139a3a1b1c4c3006216b1c7fffa40bdd1779f7d2c67f75eb5f79", size = 413717 },
+    { url = "https://files.pythonhosted.org/packages/fd/3f/f14983390600c25a98000f2a49c8f98db412bde30433b87f7decab6034e7/langchain_core-0.3.39-py3-none-any.whl", hash = "sha256:00f35e15e5f21d77320b3f8b816a1bf5de0b40b7809cd625dc3813b850a87fb2", size = 414086 },
 ]
 
 [[package]]

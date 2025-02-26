@@ -198,7 +198,7 @@ with st.sidebar:
     # OpenAI configuration
     st.subheader("OpenAI Settings")
     api_key = st.text_input("OpenAI API Key", os.getenv("OPENAI_API_KEY", ""), type="password")
-    model_name = st.text_input("Model Name", os.getenv("OPENAI_MODEL", "gpt-4o"))
+    model_name = st.text_input("Model Name", os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
     temperature = st.slider("Temperature", 0.0, 1.0, float(os.getenv("OPENAI_TEMPERATURE", "0.0")))
     
     # Initialize button
