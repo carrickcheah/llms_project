@@ -18,6 +18,7 @@ dependencies = [
     { name = "langchain-anthropic" },
     { name = "langchain-community" },
     { name = "langchain-core" },
+    { name = "langchain-deepseek" },
     { name = "langchain-ollama" },
     { name = "langchain-openai" },
     { name = "langchain-qdrant" },
@@ -43,6 +44,7 @@ requires-dist = [
     { name = "langchain-anthropic", specifier = ">=0.3.8" },
     { name = "langchain-community", specifier = ">=0.3.18" },
     { name = "langchain-core", specifier = ">=0.3.37" },
+    { name = "langchain-deepseek", specifier = ">=0.1.2" },
     { name = "langchain-ollama", specifier = ">=0.2.3" },
     { name = "langchain-openai", specifier = ">=0.3.6" },
     { name = "langchain-qdrant", specifier = ">=0.2.0" },
@@ -997,6 +999,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1a/0d/9df784c2c6fada292636ce2a4107141cef13ecdcf9fcbc1b118873b8d84a/langchain_core-0.3.39.tar.gz", hash = "sha256:97d49eccb1dea057b2efadae178bcc5e6472caa69c171fa4508fa6fb45f44c0e", size = 527875 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fd/3f/f14983390600c25a98000f2a49c8f98db412bde30433b87f7decab6034e7/langchain_core-0.3.39-py3-none-any.whl", hash = "sha256:00f35e15e5f21d77320b3f8b816a1bf5de0b40b7809cd625dc3813b850a87fb2", size = 414086 },
+]
+
+[[package]]
+name = "langchain-deepseek"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/76/50/53c67820df28cd15b53eb4bd6b8e212bf74ea50448637bd9c057897884db/langchain_deepseek-0.1.2.tar.gz", hash = "sha256:0ccb482d1241ed16a5578dcb7606b847d923b7dd56737e7e5ba20be635d0ca34", size = 5437 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/94/8a7b5629a784e40024ae9e352c656f63a8c94184f4477b60a6c2a42bac7d/langchain_deepseek-0.1.2-py3-none-any.whl", hash = "sha256:6ec76c621670afa763671eba8a54ff356b1772f3779fea4ea963cf01e5119145", size = 5627 },
 ]
 
 [[package]]
