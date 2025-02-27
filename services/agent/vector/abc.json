@@ -1,94 +1,690 @@
-{
-    "sources": {
-      "toolbox-db-source": {
-        "kind": "mysql",
-        "host": "127.0.0.1",
-        "port": "3306",
-        "database": "toolbox_db",
-        "user": "toolbox_user",
-        "password": "my-password"
-      }
-    },
-    "tools": [
-      {
-        "name": "search-hotels-by-name",
-        "kind": "mysql-sql",
-        "source": "toolbox-db-source",
-        "description": "Search for hotels based on name.",
-        "parameters": [
-          {
-            "name": "name",
-            "type": "string",
-            "description": "The name of the hotel."
-          }
-        ],
-        "statement": "SELECT * FROM hotels WHERE name LIKE CONCAT('%', ?, '%');"
-      },
-      {
-        "name": "search-hotels-by-location",
-        "kind": "mysql-sql",
-        "source": "toolbox-db-source",
-        "description": "Search for hotels based on location.",
-        "parameters": [
-          {
-            "name": "location",
-            "type": "string",
-            "description": "The location of the hotel."
-          }
-        ],
-        "statement": "SELECT * FROM hotels WHERE location LIKE CONCAT('%', ?, '%');"
-      },
-      {
-        "name": "book-hotel",
-        "kind": "mysql-sql",
-        "source": "toolbox-db-source",
-        "description": "Book a hotel by its ID. Returns a message indicating whether the hotel was successfully booked or not.",
-        "parameters": [
-          {
-            "name": "hotel_id",
-            "type": "string",
-            "description": "The ID of the hotel to book."
-          }
-        ],
-        "statement": "UPDATE hotels SET booked = 1 WHERE id = ?;"
-      },
-      {
-        "name": "update-hotel",
-        "kind": "mysql-sql",
-        "source": "toolbox-db-source",
-        "description": "Update a hotel's check-in and check-out dates by its ID. Returns a message indicating whether the hotel was successfully updated or not.",
-        "parameters": [
-          {
-            "name": "hotel_id",
-            "type": "string",
-            "description": "The ID of the hotel to update."
-          },
-          {
-            "name": "checkin_date",
-            "type": "string",
-            "description": "The new check-in date of the hotel (format: YYYY-MM-DD)."
-          },
-          {
-            "name": "checkout_date",
-            "type": "string",
-            "description": "The new check-out date of the hotel (format: YYYY-MM-DD)."
-          }
-        ],
-        "statement": "UPDATE hotels SET checkin_date = STR_TO_DATE(?, '%Y-%m-%d'), checkout_date = STR_TO_DATE(?, '%Y-%m-%d') WHERE id = ?;"
-      },
-      {
-        "name": "cancel-hotel",
-        "kind": "mysql-sql",
-        "source": "toolbox-db-source",
-        "description": "Cancel a hotel by its ID.",
-        "parameters": [
-          {
-            "name": "hotel_id",
-            "type": "string",
-            "description": "The ID of the hotel to cancel."
-          }
-        ],
-        "statement": "UPDATE hotels SET booked = 0 WHERE id = ?;"
-      }
-    ]
+[
+  {
+    "user_query": "What shipping method do most customers choose?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport GROUP BY Ship_method ORDER BY count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "aggregation"
+  },
+  {
+    "user_query": "Which shipping method has the highest average revenue?",
+    "generated_sql": "SELECT Ship_method, AVG(Revenue) as avg_revenue FROM carricksport GROUP BY Ship_method ORDER BY avg_revenue DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "aggregation"
+  },
+  {
+    "user_query": "What are the most popular shipping methods by country?",
+    "generated_sql": "SELECT Country, Ship_method, COUNT(*) as count FROM carricksport GROUP BY Country, Ship_method ORDER BY Country, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Country", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "grouping"
+  },
+  {
+    "user_query": "Which shipping method has the highest rebate on average?",
+    "generated_sql": "SELECT Ship_method, AVG(Rebate) as avg_rebate FROM carricksport GROUP BY Ship_method ORDER BY avg_rebate DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Rebate"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "aggregation"
+  },
+  {
+    "user_query": "What shipping methods are used for orders with revenue over $1000?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Revenue > 1000 GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "filtering"
+  },
+  {
+    "user_query": "How has the most popular shipping method changed over time?",
+    "generated_sql": "SELECT YEAR(Order_date) as year, MONTH(Order_date) as month, Ship_method, COUNT(*) as count FROM carricksport GROUP BY year, month, Ship_method ORDER BY year, month, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "trend_analysis"
+  },
+  {
+    "user_query": "Do younger customers prefer different shipping methods than older customers?",
+    "generated_sql": "SELECT CASE WHEN Customer_Age < 30 THEN 'Under 30' WHEN Customer_Age < 50 THEN '30-49' ELSE '50+' END as age_group, Ship_method, COUNT(*) as count FROM carricksport GROUP BY age_group, Ship_method ORDER BY age_group, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_Age"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "demographic_analysis"
+  },
+  {
+    "user_query": "What cities have the highest usage of express shipping?",
+    "generated_sql": "SELECT City, COUNT(*) as express_count FROM carricksport WHERE Ship_method = 'Express' GROUP BY City ORDER BY express_count DESC LIMIT 10;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["City", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "location_analysis"
+  },
+  {
+    "user_query": "Which product has the most diverse shipping methods?",
+    "generated_sql": "SELECT Order_product, COUNT(DISTINCT Ship_method) as shipping_method_count FROM carricksport GROUP BY Order_product ORDER BY shipping_method_count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_product", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "diversity_analysis"
+  },
+  {
+    "user_query": "What's the average order quantity for each shipping method?",
+    "generated_sql": "SELECT Ship_method, AVG(Order_quantity) as avg_quantity FROM carricksport GROUP BY Ship_method ORDER BY avg_quantity DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_quantity"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "aggregation"
+  },
+  {
+    "user_query": "Which shipping method has the highest customer retention rate?",
+    "generated_sql": "SELECT Ship_method, COUNT(DISTINCT Customer_ID) as unique_customers, COUNT(*) as total_orders, COUNT(*)/COUNT(DISTINCT Customer_ID) as orders_per_customer FROM carricksport GROUP BY Ship_method ORDER BY orders_per_customer DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_ID"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_analysis"
+  },
+  {
+    "user_query": "What shipping methods do our top 10 customers prefer?",
+    "generated_sql": "SELECT c.Customer_ID, c.Customer_Name, Ship_method, COUNT(*) as method_count FROM carricksport c INNER JOIN (SELECT Customer_ID FROM carricksport GROUP BY Customer_ID ORDER BY SUM(Revenue) DESC LIMIT 10) top ON c.Customer_ID = top.Customer_ID GROUP BY c.Customer_ID, Ship_method ORDER BY c.Customer_ID, method_count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Customer_Name", "Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_preferences"
+  },
+  {
+    "user_query": "Is there a correlation between rebate amount and shipping method chosen?",
+    "generated_sql": "SELECT Ship_method, MIN(Rebate) as min_rebate, MAX(Rebate) as max_rebate, AVG(Rebate) as avg_rebate, STDDEV(Rebate) as stddev_rebate FROM carricksport GROUP BY Ship_method ORDER BY avg_rebate DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Rebate"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "correlation_analysis"
+  },
+  {
+    "user_query": "How many customers used standard shipping in January 2023?",
+    "generated_sql": "SELECT COUNT(DISTINCT Customer_ID) as customer_count FROM carricksport WHERE Ship_method = 'Standard' AND Order_date BETWEEN '2023-01-01' AND '2023-01-31';",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "time_based_filtering"
+  },
+  {
+    "user_query": "Which shipping method is most popular among customers over 50?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Customer_Age > 50 GROUP BY Ship_method ORDER BY count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_Age"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "demographic_filtering"
+  },
+  {
+    "user_query": "What's the quarterly trend of shipping method usage?",
+    "generated_sql": "SELECT YEAR(Order_date) as year, QUARTER(Order_date) as quarter, Ship_method, COUNT(*) as count FROM carricksport GROUP BY year, quarter, Ship_method ORDER BY year, quarter, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_date", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "trend_analysis"
+  },
+  {
+    "user_query": "Do high-value customers (revenue > $5000) use different shipping methods?",
+    "generated_sql": "SELECT c.Customer_ID, c.Customer_Name, Ship_method, COUNT(*) as method_count FROM carricksport c INNER JOIN (SELECT Customer_ID FROM carricksport GROUP BY Customer_ID HAVING SUM(Revenue) > 5000) high_value ON c.Customer_ID = high_value.Customer_ID GROUP BY c.Customer_ID, Ship_method ORDER BY c.Customer_ID, method_count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Customer_Name", "Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_segmentation"
+  },
+  {
+    "user_query": "What's the revenue distribution by shipping method?",
+    "generated_sql": "SELECT Ship_method, MIN(Revenue) as min_revenue, MAX(Revenue) as max_revenue, AVG(Revenue) as avg_revenue, SUM(Revenue) as total_revenue FROM carricksport GROUP BY Ship_method ORDER BY total_revenue DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "revenue_analysis"
+  },
+  {
+    "user_query": "Which shipping method has the highest percentage of repeat customers?",
+    "generated_sql": "SELECT Ship_method, COUNT(DISTINCT Customer_ID) as unique_customers, COUNT(DISTINCT CASE WHEN customer_orders > 1 THEN Customer_ID END) as repeat_customers, COUNT(DISTINCT CASE WHEN customer_orders > 1 THEN Customer_ID END) * 100.0 / COUNT(DISTINCT Customer_ID) as repeat_percentage FROM (SELECT Customer_ID, Ship_method, COUNT(*) as customer_orders FROM carricksport GROUP BY Customer_ID, Ship_method) as customer_counts GROUP BY Ship_method ORDER BY repeat_percentage DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_ID"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_loyalty"
+  },
+  {
+    "user_query": "How does shipping method choice vary by order quantity?",
+    "generated_sql": "SELECT CASE WHEN Order_quantity <= 5 THEN 'Small (1-5)' WHEN Order_quantity <= 20 THEN 'Medium (6-20)' ELSE 'Large (21+)' END as quantity_group, Ship_method, COUNT(*) as count FROM carricksport GROUP BY quantity_group, Ship_method ORDER BY quantity_group, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_quantity", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "order_size_analysis"
+  },
+  {
+    "user_query": "Which shipping method has the highest percentage for each product?",
+    "generated_sql": "SELECT Order_product, Ship_method, count, percentage FROM (SELECT Order_product, Ship_method, COUNT(*) as count, COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY Order_product) as percentage, ROW_NUMBER() OVER (PARTITION BY Order_product ORDER BY COUNT(*) DESC) as rn FROM carricksport GROUP BY Order_product, Ship_method) ranked WHERE rn = 1 ORDER BY Order_product;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_product", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "product_preference"
+  },
+  {
+    "user_query": "What shipping methods are used for orders with invoice numbers above 1000?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Invoice_no > 1000 GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Invoice_no", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "id_filtering"
+  },
+  {
+    "user_query": "Which shipping method has the most even distribution across all countries?",
+    "generated_sql": "SELECT Ship_method, COUNT(DISTINCT Country) as country_count, MIN(country_percentage) as min_percentage, MAX(country_percentage) as max_percentage, MAX(country_percentage) - MIN(country_percentage) as percentage_range FROM (SELECT Ship_method, Country, COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY Ship_method) as country_percentage FROM carricksport GROUP BY Ship_method, Country) country_dist GROUP BY Ship_method ORDER BY percentage_range ASC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Country"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "distribution_analysis"
+  },
+  {
+    "user_query": "Is there a day of the week preference for certain shipping methods?",
+    "generated_sql": "SELECT DAYNAME(Order_date) as day_of_week, Ship_method, COUNT(*) as count FROM carricksport GROUP BY day_of_week, Ship_method ORDER BY FIELD(day_of_week, 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'), count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_date", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "time_pattern_analysis"
+  },
+  {
+    "user_query": "Do customers who get rebates choose different shipping methods?",
+    "generated_sql": "SELECT CASE WHEN Rebate > 0 THEN 'With Rebate' ELSE 'No Rebate' END as rebate_group, Ship_method, COUNT(*) as count FROM carricksport GROUP BY rebate_group, Ship_method ORDER BY rebate_group, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Rebate", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "rebate_analysis"
+  },
+  {
+    "user_query": "Which shipping method is most popular in different cities?",
+    "generated_sql": "SELECT City, Ship_method, COUNT(*) as count FROM carricksport GROUP BY City, Ship_method HAVING COUNT(*) = (SELECT MAX(ship_count) FROM (SELECT City as c, Ship_method, COUNT(*) as ship_count FROM carricksport GROUP BY c, Ship_method) t WHERE t.c = City) ORDER BY City;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["City", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "location_preference"
+  },
+  {
+    "user_query": "Which customers have used all available shipping methods?",
+    "generated_sql": "SELECT c.Customer_ID, c.Customer_Name FROM carricksport c GROUP BY c.Customer_ID, c.Customer_Name HAVING COUNT(DISTINCT Ship_method) = (SELECT COUNT(DISTINCT Ship_method) FROM carricksport);",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Customer_Name", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_behavior"
+  },
+  {
+    "user_query": "Which shipping methods are most popular during holiday seasons?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE (MONTH(Order_date) = 12 AND DAY(Order_date) BETWEEN 1 AND 25) OR (MONTH(Order_date) = 11 AND DAY(Order_date) BETWEEN 20 AND 30) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "seasonal_analysis"
+  },
+  {
+    "user_query": "Which shipping method has the highest average rebate to revenue ratio?",
+    "generated_sql": "SELECT Ship_method, AVG(Rebate / Revenue) * 100 as avg_rebate_percentage FROM carricksport WHERE Revenue > 0 GROUP BY Ship_method ORDER BY avg_rebate_percentage DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Rebate", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "ratio_analysis"
+  },
+  {
+    "user_query": "Which shipping methods are most popular for weekend orders?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE DAYOFWEEK(Order_date) IN (1, 7) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "temporal_analysis"
+  },
+  {
+    "user_query": "What are the shipping preferences of our oldest vs youngest customers?",
+    "generated_sql": "SELECT CASE WHEN Customer_Age <= (SELECT MIN(Customer_Age) + 10 FROM carricksport) THEN 'Youngest' WHEN Customer_Age >= (SELECT MAX(Customer_Age) - 10 FROM carricksport) THEN 'Oldest' END as age_group, Ship_method, COUNT(*) as count FROM carricksport WHERE Customer_Age <= (SELECT MIN(Customer_Age) + 10 FROM carricksport) OR Customer_Age >= (SELECT MAX(Customer_Age) - 10 FROM carricksport) GROUP BY age_group, Ship_method ORDER BY age_group, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_Age"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "age_extremes_analysis"
+  },
+  {
+    "user_query": "What shipping methods have the highest impact on large orders by quantity?",
+    "generated_sql": "SELECT Ship_method, AVG(Order_quantity) as avg_quantity, MAX(Order_quantity) as max_quantity FROM carricksport GROUP BY Ship_method ORDER BY avg_quantity DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_quantity"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "volume_analysis"
+  },
+  {
+    "user_query": "Which countries have the most diverse shipping method usage?",
+    "generated_sql": "SELECT Country, COUNT(DISTINCT Ship_method) as shipping_method_count FROM carricksport GROUP BY Country ORDER BY shipping_method_count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Country", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "geographic_diversity"
+  },
+  {
+    "user_query": "What shipping methods do first-time vs repeat customers prefer?",
+    "generated_sql": "SELECT CASE WHEN order_count = 1 THEN 'First-time' ELSE 'Repeat' END as customer_type, Ship_method, COUNT(*) as count FROM (SELECT c.Customer_ID, c.Ship_method, (SELECT COUNT(*) FROM carricksport WHERE Customer_ID = c.Customer_ID) as order_count FROM carricksport c) customer_orders GROUP BY customer_type, Ship_method ORDER BY customer_type, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_ID"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_loyalty_analysis"
+  },
+  {
+    "user_query": "Which months have the highest usage of premium shipping methods?",
+    "generated_sql": "SELECT MONTH(Order_date) as month, MONTHNAME(Order_date) as month_name, COUNT(*) as premium_count FROM carricksport WHERE Ship_method IN ('Express', 'Premium', 'Next Day') GROUP BY month, month_name ORDER BY premium_count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "seasonal_preference"
+  },
+  {
+    "user_query": "What's the most common shipping method used by customers with the highest average order value?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Customer_ID IN (SELECT Customer_ID FROM carricksport GROUP BY Customer_ID HAVING AVG(Revenue) > (SELECT AVG(Revenue) * 1.5 FROM carricksport)) GROUP BY Ship_method ORDER BY count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_ID", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "high_value_preference"
+  },
+  {
+    "user_query": "What shipping methods are most popular for each customer age group by decade?",
+    "generated_sql": "SELECT FLOOR(Customer_Age/10)*10 as age_decade, Ship_method, COUNT(*) as count FROM carricksport GROUP BY age_decade, Ship_method HAVING COUNT(*) = (SELECT MAX(method_count) FROM (SELECT FLOOR(Customer_Age/10)*10 as decade, Ship_method, COUNT(*) as method_count FROM carricksport GROUP BY decade, Ship_method) t WHERE t.decade = age_decade) ORDER BY age_decade;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_Age"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "age_cohort_analysis"
+  },
+  {
+    "user_query": "Which combination of product and shipping method generates the highest average revenue?",
+    "generated_sql": "SELECT Order_product, Ship_method, AVG(Revenue) as avg_revenue FROM carricksport GROUP BY Order_product, Ship_method ORDER BY avg_revenue DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_product", "Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "product_shipping_performance"
+  },
+  {
+    "user_query": "How has the average rebate amount changed over time for each shipping method?",
+    "generated_sql": "SELECT YEAR(Order_date) as year, QUARTER(Order_date) as quarter, Ship_method, AVG(Rebate) as avg_rebate FROM carricksport WHERE Rebate > 0 GROUP BY year, quarter, Ship_method ORDER BY year, quarter, Ship_method;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date", "Rebate"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "rebate_trend_analysis"
+  },
+  {
+    "user_query": "What shipping methods are preferred by customers from our top 5 countries by order volume?",
+    "generated_sql": "SELECT c.Country, Ship_method, COUNT(*) as count FROM carricksport c INNER JOIN (SELECT Country FROM carricksport GROUP BY Country ORDER BY COUNT(*) DESC LIMIT 5) top ON c.Country = top.Country GROUP BY c.Country, Ship_method ORDER BY c.Country, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Country", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "geographic_preference"
+  },
+
+  
+
+  {
+    "user_query": "What is the ratio of domestic to international orders for each shipping method?",
+    "generated_sql": "SELECT Ship_method, SUM(CASE WHEN Country = 'USA' THEN 1 ELSE 0 END) as domestic_orders, SUM(CASE WHEN Country != 'USA' THEN 1 ELSE 0 END) as international_orders, SUM(CASE WHEN Country = 'USA' THEN 1 ELSE 0 END) / SUM(CASE WHEN Country != 'USA' THEN 1 ELSE 0 END) as domestic_to_intl_ratio FROM carricksport GROUP BY Ship_method ORDER BY domestic_to_intl_ratio DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Country"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "geographic_ratio_analysis"
+  },
+  {
+    "user_query": "Which shipping method has the most consistent order quantities?",
+    "generated_sql": "SELECT Ship_method, AVG(Order_quantity) as avg_quantity, STDDEV(Order_quantity) as stddev_quantity, STDDEV(Order_quantity) / AVG(Order_quantity) as coefficient_of_variation FROM carricksport GROUP BY Ship_method ORDER BY coefficient_of_variation ASC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_quantity"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "consistency_analysis"
+  },
+  {
+    "user_query": "What shipping methods are used for order quantities above the 90th percentile?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Order_quantity > (SELECT DISTINCT Order_quantity FROM carricksport ORDER BY Order_quantity DESC LIMIT 1 OFFSET (SELECT COUNT(*) * 0.1 FROM carricksport)) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_quantity"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "percentile_analysis"
+  },
+  {
+    "user_query": "What is the average age difference between customers who choose express shipping vs standard shipping?",
+    "generated_sql": "SELECT 'Express vs Standard' as comparison, (SELECT AVG(Customer_Age) FROM carricksport WHERE Ship_method = 'Express') - (SELECT AVG(Customer_Age) FROM carricksport WHERE Ship_method = 'Standard') as age_difference;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_Age"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "demographic_comparison"
+  },
+  {
+    "user_query": "Which shipping method has the highest revenue to order quantity ratio?",
+    "generated_sql": "SELECT Ship_method, SUM(Revenue) / SUM(Order_quantity) as revenue_per_unit FROM carricksport GROUP BY Ship_method ORDER BY revenue_per_unit DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Revenue", "Order_quantity"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "efficiency_analysis"
+  },
+  {
+    "user_query": "What shipping methods are used for the top 5% of orders by revenue?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Revenue >= (SELECT MIN(Revenue) FROM (SELECT Revenue FROM carricksport ORDER BY Revenue DESC LIMIT (SELECT FLOOR(COUNT(*) * 0.05) FROM carricksport)) as top_revenue) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "high_value_analysis"
+  },
+  {
+    "user_query": "How does average revenue differ by shipping method and day of the month?",
+    "generated_sql": "SELECT Ship_method, DAY(Order_date) as day_of_month, AVG(Revenue) as avg_revenue FROM carricksport GROUP BY Ship_method, day_of_month ORDER BY Ship_method, day_of_month;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "temporal_revenue_analysis"
+  },
+  {
+    "user_query": "What shipping methods have shown the strongest month-over-month growth in usage?",
+    "generated_sql": "SELECT current_month.Ship_method, current_month.year, current_month.month, current_month.count as current_count, prev_month.count as previous_count, (current_month.count - prev_month.count) * 100.0 / prev_month.count as growth_percentage FROM (SELECT Ship_method, YEAR(Order_date) as year, MONTH(Order_date) as month, COUNT(*) as count FROM carricksport GROUP BY Ship_method, year, month) current_month JOIN (SELECT Ship_method, YEAR(Order_date) as year, MONTH(Order_date) as month, COUNT(*) as count FROM carricksport GROUP BY Ship_method, year, month) prev_month ON current_month.Ship_method = prev_month.Ship_method AND ((current_month.year = prev_month.year AND current_month.month = prev_month.month + 1) OR (current_month.year = prev_month.year + 1 AND current_month.month = 1 AND prev_month.month = 12)) WHERE prev_month.count > 0 ORDER BY growth_percentage DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "growth_trend_analysis"
+  },
+  {
+    "user_query": "Which city has the highest variation in shipping methods used?",
+    "generated_sql": "SELECT City, COUNT(DISTINCT Ship_method) as shipping_method_count FROM carricksport GROUP BY City ORDER BY shipping_method_count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["City", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "geographic_diversity"
+  },
+  {
+    "user_query": "How do shipping method preferences change as customer age increases?",
+    "generated_sql": "SELECT FLOOR(Customer_Age/5)*5 as age_group, Ship_method, COUNT(*) as count, COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY FLOOR(Customer_Age/5)*5) as percentage FROM carricksport GROUP BY age_group, Ship_method ORDER BY age_group, percentage DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_Age", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "age_trend_analysis"
+  },
+  {
+    "user_query": "What's the most common shipping method for orders placed on the last day of each month?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE DAY(Order_date) = DAY(LAST_DAY(Order_date)) GROUP BY Ship_method ORDER BY count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "month_end_analysis"
+  },
+  {
+    "user_query": "Which customers have used the most different shipping methods?",
+    "generated_sql": "SELECT Customer_ID, Customer_Name, COUNT(DISTINCT Ship_method) as shipping_method_count FROM carricksport GROUP BY Customer_ID, Customer_Name ORDER BY shipping_method_count DESC LIMIT 10;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Customer_Name", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_flexibility"
+  },
+  {
+    "user_query": "What shipping methods are most popular for orders with both high revenue and large quantities?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Revenue > (SELECT AVG(Revenue) * 1.5 FROM carricksport) AND Order_quantity > (SELECT AVG(Order_quantity) * 1.5 FROM carricksport) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Revenue", "Order_quantity"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "high_value_high_volume_analysis"
+  },
+  {
+    "user_query": "How do rebate values differ between orders with different shipping methods?",
+    "generated_sql": "SELECT Ship_method, MIN(Rebate) as min_rebate, MAX(Rebate) as max_rebate, AVG(Rebate) as avg_rebate, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY Rebate) as median_rebate FROM carricksport GROUP BY Ship_method ORDER BY avg_rebate DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Rebate"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "rebate_distribution"
+  },
+  {
+    "user_query": "Which products have the most skewed shipping method distribution?",
+    "generated_sql": "SELECT Order_product, MAX(method_percentage) - MIN(method_percentage) as skew_factor FROM (SELECT Order_product, Ship_method, COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY Order_product) as method_percentage FROM carricksport GROUP BY Order_product, Ship_method) method_distribution GROUP BY Order_product ORDER BY skew_factor DESC LIMIT 10;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_product", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "product_distribution_analysis"
+  },
+  {
+    "user_query": "What is the average time between orders for customers who use express shipping vs standard shipping?",
+    "generated_sql": "SELECT 'Express' as shipping_type, AVG(DATEDIFF(next_order, Order_date)) as avg_days_between_orders FROM (SELECT Customer_ID, Order_date, LEAD(Order_date) OVER (PARTITION BY Customer_ID ORDER BY Order_date) as next_order FROM carricksport WHERE Ship_method = 'Express') order_dates WHERE next_order IS NOT NULL UNION SELECT 'Standard' as shipping_type, AVG(DATEDIFF(next_order, Order_date)) as avg_days_between_orders FROM (SELECT Customer_ID, Order_date, LEAD(Order_date) OVER (PARTITION BY Customer_ID ORDER BY Order_date) as next_order FROM carricksport WHERE Ship_method = 'Standard') order_dates WHERE next_order IS NOT NULL;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Order_date", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "repurchase_interval_analysis"
+  },
+  {
+    "user_query": "What shipping methods are most common in cities with the highest average order values?",
+    "generated_sql": "SELECT c.City, Ship_method, COUNT(*) as count FROM carricksport c INNER JOIN (SELECT City FROM carricksport GROUP BY City HAVING AVG(Revenue) > (SELECT AVG(Revenue) * 1.5 FROM carricksport) ORDER BY AVG(Revenue) DESC LIMIT 10) high_value ON c.City = high_value.City GROUP BY c.City, Ship_method ORDER BY c.City, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["City", "Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "high_value_location_analysis"
+  },
+  {
+    "user_query": "What shipping methods do customers choose when ordering multiple identical products?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Order_quantity > 1 AND Order_product IN (SELECT Order_product FROM carricksport GROUP BY Invoice_no, Order_product HAVING COUNT(*) = 1) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_quantity", "Order_product", "Invoice_no"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "bulk_order_analysis"
+  },
+  {
+    "user_query": "How do shipping method preferences differ for the first vs last purchase a customer makes?",
+    "generated_sql": "SELECT c.Customer_ID, first_purchase.Ship_method as first_purchase_method, last_purchase.Ship_method as last_purchase_method FROM (SELECT DISTINCT Customer_ID FROM carricksport) c JOIN (SELECT Customer_ID, Ship_method FROM carricksport a WHERE Order_date = (SELECT MIN(Order_date) FROM carricksport b WHERE a.Customer_ID = b.Customer_ID)) first_purchase ON c.Customer_ID = first_purchase.Customer_ID JOIN (SELECT Customer_ID, Ship_method FROM carricksport a WHERE Order_date = (SELECT MAX(Order_date) FROM carricksport b WHERE a.Customer_ID = b.Customer_ID)) last_purchase ON c.Customer_ID = last_purchase.Customer_ID WHERE first_purchase.Ship_method != last_purchase.Ship_method;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "customer_evolution"
+  },
+  {
+    "user_query": "Which shipping method has the most seasonal variation in usage?",
+    "generated_sql": "SELECT Ship_method, MIN(monthly_count) as min_monthly_count, MAX(monthly_count) as max_monthly_count, MAX(monthly_count) - MIN(monthly_count) as range_count, STDDEV(monthly_count) as stddev_count FROM (SELECT Ship_method, YEAR(Order_date) as year, MONTH(Order_date) as month, COUNT(*) as monthly_count FROM carricksport GROUP BY Ship_method, year, month) monthly_data GROUP BY Ship_method ORDER BY stddev_count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "seasonality_analysis"
+  },
+  {
+    "user_query": "What shipping methods are preferred for orders with the highest rebate to revenue ratio?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Rebate / Revenue > (SELECT AVG(Rebate / Revenue) * 1.5 FROM carricksport WHERE Revenue > 0) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Rebate", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "discount_analysis"
+  },
+  {
+    "user_query": "What combination of country and shipping method has the highest average revenue?",
+    "generated_sql": "SELECT Country, Ship_method, AVG(Revenue) as avg_revenue FROM carricksport GROUP BY Country, Ship_method ORDER BY avg_revenue DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Country", "Ship_method", "Revenue"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "geographic_revenue_analysis"
+  },
+  {
+    "user_query": "Which shipping method shows the most variation in customer age?",
+    "generated_sql": "SELECT Ship_method, MIN(Customer_Age) as min_age, MAX(Customer_Age) as max_age, AVG(Customer_Age) as avg_age, STDDEV(Customer_Age) as age_stddev FROM carricksport GROUP BY Ship_method ORDER BY age_stddev DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_Age"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "demographic_variation"
+  },
+  {
+    "user_query": "What shipping methods have the highest percentage of orders with round number quantities (10, 20, 50, etc.)?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as total_orders, SUM(CASE WHEN Order_quantity IN (10, 20, 25, 50, 100, 200, 250, 500, 1000) THEN 1 ELSE 0 END) as round_quantity_orders, SUM(CASE WHEN Order_quantity IN (10, 20, 25, 50, 100, 200, 250, 500, 1000) THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as round_quantity_percentage FROM carricksport GROUP BY Ship_method ORDER BY round_quantity_percentage DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_quantity"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "quantity_pattern_analysis"
+  },
+  {
+    "user_query": "How do shipping method preferences change from the beginning to the end of each quarter?",
+    "generated_sql": "SELECT YEAR(Order_date) as year, QUARTER(Order_date) as quarter, CASE WHEN MONTH(Order_date) IN (1, 4, 7, 10) AND DAY(Order_date) <= 15 THEN 'Early Quarter' WHEN MONTH(Order_date) IN (3, 6, 9, 12) AND DAY(Order_date) >= 15 THEN 'Late Quarter' END as quarter_period, Ship_method, COUNT(*) as count FROM carricksport WHERE (MONTH(Order_date) IN (1, 4, 7, 10) AND DAY(Order_date) <= 15) OR (MONTH(Order_date) IN (3, 6, 9, 12) AND DAY(Order_date) >= 15) GROUP BY year, quarter, quarter_period, Ship_method ORDER BY year, quarter, quarter_period, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "quarterly_trend_analysis"
+  },
+  {
+    "user_query": "Which invoice numbers are associated with unusual shipping method choices?",
+    "generated_sql": "SELECT Invoice_no, Ship_method FROM carricksport WHERE Ship_method NOT IN (SELECT Ship_method FROM carricksport GROUP BY Ship_method ORDER BY COUNT(*) DESC LIMIT 3);",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Invoice_no", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "anomaly_detection"
+  },
+  {
+    "user_query": "What products show the most balanced distribution across different shipping methods?",
+    "generated_sql": "SELECT Order_product, MAX(method_percentage) - MIN(method_percentage) as balance_factor FROM (SELECT Order_product, Ship_method, COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (PARTITION BY Order_product) as method_percentage FROM carricksport GROUP BY Order_product, Ship_method) product_methods GROUP BY Order_product HAVING COUNT(*) OVER (PARTITION BY Order_product) > 1 ORDER BY balance_factor ASC LIMIT 10;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_product", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "distribution_balance"
+  },
+  {
+    "user_query": "What shipping methods are chosen by customers who frequently change their preferred shipping method?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Customer_ID IN (SELECT Customer_ID FROM (SELECT Customer_ID, COUNT(DISTINCT Ship_method) as method_count FROM carricksport GROUP BY Customer_ID HAVING COUNT(*) >= 3 AND COUNT(DISTINCT Ship_method) > 1) diverse_customers) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_ID"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "preference_volatility"
+  },
+  {
+    "user_query": "How does order quantity affect shipping method choice for international orders?",
+    "generated_sql": "SELECT CASE WHEN Order_quantity < 10 THEN 'Small (<10)' WHEN Order_quantity < 50 THEN 'Medium (10-49)' ELSE 'Large (50+)' END as quantity_tier, Ship_method, COUNT(*) as count FROM carricksport WHERE Country != 'USA' GROUP BY quantity_tier, Ship_method ORDER BY quantity_tier, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Order_quantity", "Ship_method", "Country"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "international_volume_analysis"
+  },
+  {
+    "user_query": "What shipping methods are most popular on days with unusually high order volumes?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE DATE(Order_date) IN (SELECT DATE(Order_date) FROM carricksport GROUP BY DATE(Order_date) HAVING COUNT(*) > (SELECT AVG(daily_count) + STDDEV(daily_count) FROM (SELECT DATE(Order_date) as order_day, COUNT(*) as daily_count FROM carricksport GROUP BY order_day) daily_volumes)) GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "peak_volume_analysis"
+  },
+  {
+    "user_query": "What's the shipping method distribution for customers with names starting with each letter of the alphabet?",
+    "generated_sql": "SELECT LEFT(Customer_Name, 1) as first_letter, Ship_method, COUNT(*) as count FROM carricksport GROUP BY first_letter, Ship_method ORDER BY first_letter, count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_Name", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "alphabetical_distribution"
+  },
+  {
+    "user_query": "What shipping methods had the most growth during the holiday season compared to the rest of the year?",
+    "generated_sql": "SELECT Ship_method, SUM(CASE WHEN (MONTH(Order_date) = 11 AND DAY(Order_date) >= 15) OR (MONTH(Order_date) = 12 AND DAY(Order_date) <= 31) THEN 1 ELSE 0 END) as holiday_orders, SUM(CASE WHEN NOT((MONTH(Order_date) = 11 AND DAY(Order_date) >= 15) OR (MONTH(Order_date) = 12 AND DAY(Order_date) <= 31)) THEN 1 ELSE 0 END) as non_holiday_orders, (SUM(CASE WHEN (MONTH(Order_date) = 11 AND DAY(Order_date) >= 15) OR (MONTH(Order_date) = 12 AND DAY(Order_date) <= 31) THEN 1 ELSE 0 END) / 45) / (SUM(CASE WHEN NOT((MONTH(Order_date) = 11 AND DAY(Order_date) >= 15) OR (MONTH(Order_date) = 12 AND DAY(Order_date) <= 31)) THEN 1 ELSE 0 END) / 320) as daily_order_ratio FROM carricksport GROUP BY Ship_method ORDER BY daily_order_ratio DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "seasonal_growth_analysis"
+  },
+  {
+    "user_query": "What percentage of customers have only ever used a single shipping method?",
+    "generated_sql": "SELECT 'Single shipping method customers' as customer_type, COUNT(*) as customer_count, COUNT(*) * 100.0 / (SELECT COUNT(DISTINCT Customer_ID) FROM carricksport) as percentage FROM (SELECT Customer_ID FROM carricksport GROUP BY Customer_ID HAVING COUNT(DISTINCT Ship_method) = 1) single_method_customers;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Ship_method"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "loyalty_analysis"
+  },
+  {
+    "user_query": "Which shipping method has the highest customer loyalty across consecutive orders?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as consecutive_same_method FROM (SELECT a.Customer_ID, a.Ship_method, a.Order_date, b.Ship_method as next_method, b.Order_date as next_date FROM carricksport a JOIN carricksport b ON a.Customer_ID = b.Customer_ID AND a.Order_date < b.Order_date WHERE NOT EXISTS (SELECT 1 FROM carricksport c WHERE c.Customer_ID = a.Customer_ID AND c.Order_date > a.Order_date AND c.Order_date < b.Order_date)) consecutive_orders WHERE Ship_method = next_method GROUP BY Ship_method ORDER BY consecutive_same_method DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Customer_ID", "Ship_method", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "method_loyalty"
+  },
+  {
+    "user_query": "How does shipping method choice change on birthdays or special occasions?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE Order_product LIKE '%gift%' OR Order_product LIKE '%birthday%' OR Order_product LIKE '%anniversary%' GROUP BY Ship_method ORDER BY count DESC;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Order_product"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "special_occasion_analysis"
+  },
+  {
+    "user_query": "What is the most commonly used shipping method for customers' very first order?",
+    "generated_sql": "SELECT Ship_method, COUNT(*) as count FROM carricksport WHERE (Customer_ID, Order_date) IN (SELECT Customer_ID, MIN(Order_date) FROM carricksport GROUP BY Customer_ID) GROUP BY Ship_method ORDER BY count DESC LIMIT 1;",
+    "tables_used": ["carricksport"],
+    "columns_used": ["Ship_method", "Customer_ID", "Order_date"],
+    "schema_name": "nex_valiant",
+    "execute_in_mysql": true,
+    "query_type": "first_order_analysis"
   }
+]
+  
