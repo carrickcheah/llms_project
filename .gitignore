@@ -175,10 +175,15 @@ certificates/
 **/credentials.env
 **/comet.env
 **/cryptopanic_credentials.env
+**/settings.env
 
 # My laptop files
-manual.txt
+short.txt
 solution.txt
+**/tools.yaml
+tools.txt
+**/abc.json
+
 
 # Specific directories
 services/news_signal/data
