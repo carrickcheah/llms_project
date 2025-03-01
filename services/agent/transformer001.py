@@ -5,7 +5,7 @@ from langchain_community.document_loaders import JSONLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 
 # Path to your JSON file
-file_path = "/Users/carrickcheah/llms_project/services/agent/vector/abc.json"
+file_path = (os.getenv("OPENAI_API_KEY"))
 
 # Define the loader with corrected metadata_func
 loader = JSONLoader(

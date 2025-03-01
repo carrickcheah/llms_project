@@ -1,10 +1,6 @@
 ##########################################################################################
 #    Initialization utilities for database, LLM, and vector store connections            #
-##########################################################################################
-#   Contents of table                                                                    #
-#   1. Initialize Maria DB connection                                                    #
-#   2. Initialize OPENAI GPT-4o-mini                                                     #       
-#   3. Initialize Deepseek V3/ R1 model                                                  #
+##########################################################################################                                                 #
 #   4. Qdrant Initialization and other Functions                                         #
 #   5. Get existing Qdrant store                                                         #
 #   6. Init Qdrant from text                                                             #
@@ -12,141 +8,20 @@
 #   8. Sparse vector search                                                              #
 #   9. Hybrid vector search                                                              #
 #   10. Convenience function to create a search function based on the mode               #
-#   11. Init Lanchain format Deepseek                                                    #
+                                         #
 ##########################################################################################
-
-
-import os
-from typing import List, Optional, Union, Callable
-
-# Environment and database imports
-from langchain_community.utilities import SQLDatabase
-from langchain_openai import ChatOpenAI
-from langchain_deepseek import ChatDeepSeek
-
 # Qdrant imports
-from qdrant_client import QdrantClient
 from langchain_qdrant import QdrantVectorStore
 from langchain.embeddings.base import Embeddings
 from langchain.schema import Document
 from langchain_qdrant import RetrievalMode, FastEmbedSparse
-
+from loguru import logger
 
 # Load environment variables once
 from dotenv import load_dotenv
 load_dotenv()
 
 
-
-#####################################################################################
-####                           1.Init Maria DB connection                        ####
-#####################################################################################
-def initialize_database(database_uri: str = None) -> SQLDatabase:
-    """Initialize and validate the database connection.
-    
-    Args:
-        database_uri: URI for the database connection. If None, uses DATABASE_URI env var.
-        
-    Returns:
-        SQLDatabase: Initialized database connection
-        
-    Raises:
-        ValueError: If DATABASE_URI is not set
-        ConnectionError: If connection to the database fails
-    """
-    # Use provided URI or get from environment variable
-    database_uri = database_uri or os.getenv("DATABASE_URI")
-   
-    if not database_uri:
-        raise ValueError("DATABASE_URI is not set.")
-   
-    try:
-        db = SQLDatabase.from_uri(database_uri)
-        # Test the connection by getting table info
-        db.get_usable_table_names()
-        return db
-    except Exception as e:
-        raise ConnectionError(f"Failed to connect to database: {str(e)}")
-
-
-#####################################################################################
-####                        2. Init OPENAI GPT-4o-mini                           ####
-#####################################################################################
-def initialize_llm(api_key: str = None) -> ChatOpenAI:
-    """Initialize and validate the language model.
-    
-    Args:
-        api_key: OpenAI API key. If None, uses OPENAI_API_KEY env var.
-        
-    Returns:
-        ChatOpenAI: Initialized language model
-        
-    Raises:
-        ValueError: If OPENAI_API_KEY is not set
-        ConnectionError: If initialization of the language model fails
-    """
-    # Use provided API key or get from environment variable
-    api_key = api_key or os.getenv("OPENAI_API_KEY")
-   
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY is not set.")
-   
-    try:
-        model = ChatOpenAI(
-            api_key=api_key,
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),
-            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),
-            request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),
-            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),
-        )
-        return model
-    except Exception as e:
-        raise ConnectionError(f"Failed to initialize language model: {str(e)}")
-    
-
-#####################################################################################
-####                         3. Init Deepseek V3/ R1 model                       ####
-#####################################################################################
-
-def initialize_deepseek(api_key: Optional[str] = None) -> ChatDeepSeek:
-    """
-    Initialize and validate the DeepSeek language model using environment variables.
-
-    Args:
-        api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
-
-    Returns:
-        ChatDeepSeek: Initialized language model
-
-    Raises:
-        ValueError: If DEEPSEEK_API_KEY is not set
-        ConnectionError: If initialization of the language model fails
-    """
-    # Use provided API key or get from environment variable
-    api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-    base_url = os.getenv("DEEPSEEK_URL")
-    model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-
-    if not api_key:
-        raise ValueError("DEEPSEEK_API_KEY is not set.")
-    
-    if not base_url:
-        raise ValueError("DEEPSEEK_URL is not set.")
-
-    try:
-        model = ChatDeepSeek(
-            api_key=api_key,
-            model=model_name,
-            temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0.0")),
-            max_retries=int(os.getenv("DEEPSEEK_MAX_RETRIES", "3")),
-            request_timeout=int(os.getenv("DEEPSEEK_TIMEOUT", "30")),
-            max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", "2048")),
-            base_url=base_url
-        )
-        return model
-    except Exception as e:
-        raise ConnectionError(f"Failed to initialize language model: {str(e)}")
 
 
 #####################################################################################
@@ -477,48 +352,4 @@ def create_vector_search(mode: str = "dense") -> Callable:
     else:
         raise ValueError(f"Invalid search mode: {mode}. Must be 'dense', 'sparse', or 'hybrid'.")
     
-
-#####################################################################################
-####                  11       Init Lanchain format Deepseek                     ####
-#####################################################################################
-
-# def initialize_llm(api_key: str = None) -> ChatOpenAI:
-#     """Initialize and validate the language model using OpenAI client with DeepSeek API.
-    
-#     Args:
-#         api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
-        
-#     Returns:
-#         ChatOpenAI: Initialized language model configured for DeepSeek
-        
-#     Raises:
-#         ValueError: If DEEPSEEK_API_KEY is not set
-#         ConnectionError: If initialization of the language model fails
-#     """
-#     # Use provided API key or get from environment variable
-#     api_key = os.getenv("DEEPSEEK_API_KEY")
-#     base_url = os.getenv("DEEPSEEK_URL")
-#     model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-   
-#     if not api_key:
-#         raise ValueError("DEEPSEEK_API_KEY is not set.")
-    
-#     if not base_url:
-#         raise ValueError("DEEPSEEK_URL is not set.")
-   
-#     try:
-#         model = ChatOpenAI(
-#             api_key=api_key,
-#             model=model_name,
-#             temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0.0")),
-#             max_retries=int(os.getenv("DEEPSEEK_MAX_RETRIES", "3")),
-#             request_timeout=int(os.getenv("DEEPSEEK_TIMEOUT", "30")),
-#             max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", "2048")),
-#             base_url=base_url
-#         )
-#         return model
-#     except Exception as e:
-#         raise ConnectionError(f"Failed to initialize language model: {str(e)}")
-#####################################################################################
-#####################################################################################
 
