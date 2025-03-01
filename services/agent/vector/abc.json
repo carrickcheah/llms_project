@@ -5,8 +5,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "aggregation"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest average revenue?",
@@ -14,8 +13,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "aggregation"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What are the most popular shipping methods by country?",
@@ -23,8 +21,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Country", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "grouping"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest rebate on average?",
@@ -32,8 +29,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Rebate"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "aggregation"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are used for orders with revenue over $1000?",
@@ -41,8 +37,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "filtering"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How has the most popular shipping method changed over time?",
@@ -50,8 +45,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "trend_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Do younger customers prefer different shipping methods than older customers?",
@@ -59,8 +53,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_Age"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "demographic_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What cities have the highest usage of express shipping?",
@@ -68,8 +61,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["City", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "location_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which product has the most diverse shipping methods?",
@@ -77,8 +69,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_product", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "diversity_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What's the average order quantity for each shipping method?",
@@ -86,8 +77,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_quantity"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "aggregation"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest customer retention rate?",
@@ -95,8 +85,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_ID"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods do our top 10 customers prefer?",
@@ -104,8 +93,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Customer_Name", "Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_preferences"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Is there a correlation between rebate amount and shipping method chosen?",
@@ -113,8 +101,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Rebate"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "correlation_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How many customers used standard shipping in January 2023?",
@@ -122,8 +109,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "time_based_filtering"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method is most popular among customers over 50?",
@@ -131,8 +117,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_Age"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "demographic_filtering"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What's the quarterly trend of shipping method usage?",
@@ -140,8 +125,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_date", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "trend_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Do high-value customers (revenue > $5000) use different shipping methods?",
@@ -149,8 +133,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Customer_Name", "Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_segmentation"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What's the revenue distribution by shipping method?",
@@ -158,8 +141,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "revenue_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest percentage of repeat customers?",
@@ -167,8 +149,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_ID"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_loyalty"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How does shipping method choice vary by order quantity?",
@@ -176,8 +157,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_quantity", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "order_size_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest percentage for each product?",
@@ -185,8 +165,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_product", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "product_preference"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are used for orders with invoice numbers above 1000?",
@@ -194,8 +173,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Invoice_no", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "id_filtering"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the most even distribution across all countries?",
@@ -203,8 +181,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Country"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "distribution_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Is there a day of the week preference for certain shipping methods?",
@@ -212,8 +189,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_date", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "time_pattern_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Do customers who get rebates choose different shipping methods?",
@@ -221,8 +197,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Rebate", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "rebate_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method is most popular in different cities?",
@@ -230,8 +205,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["City", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "location_preference"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which customers have used all available shipping methods?",
@@ -239,8 +213,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Customer_Name", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_behavior"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping methods are most popular during holiday seasons?",
@@ -248,8 +221,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "seasonal_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest average rebate to revenue ratio?",
@@ -257,8 +229,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Rebate", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "ratio_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping methods are most popular for weekend orders?",
@@ -266,8 +237,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "temporal_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What are the shipping preferences of our oldest vs youngest customers?",
@@ -275,8 +245,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_Age"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "age_extremes_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods have the highest impact on large orders by quantity?",
@@ -284,8 +253,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_quantity"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "volume_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which countries have the most diverse shipping method usage?",
@@ -293,8 +261,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Country", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "geographic_diversity"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods do first-time vs repeat customers prefer?",
@@ -302,8 +269,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_ID"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_loyalty_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which months have the highest usage of premium shipping methods?",
@@ -311,8 +277,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "seasonal_preference"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What's the most common shipping method used by customers with the highest average order value?",
@@ -320,8 +285,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_ID", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "high_value_preference"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are most popular for each customer age group by decade?",
@@ -329,8 +293,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_Age"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "age_cohort_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which combination of product and shipping method generates the highest average revenue?",
@@ -338,8 +301,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_product", "Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "product_shipping_performance"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How has the average rebate amount changed over time for each shipping method?",
@@ -347,8 +309,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date", "Rebate"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "rebate_trend_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are preferred by customers from our top 5 countries by order volume?",
@@ -356,11 +317,8 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Country", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "geographic_preference"
+    "execute_in_mysql": true
   },
-
-  
 
   {
     "user_query": "What is the ratio of domestic to international orders for each shipping method?",
@@ -368,8 +326,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Country"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "geographic_ratio_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the most consistent order quantities?",
@@ -377,8 +334,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_quantity"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "consistency_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are used for order quantities above the 90th percentile?",
@@ -386,8 +342,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_quantity"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "percentile_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What is the average age difference between customers who choose express shipping vs standard shipping?",
@@ -395,8 +350,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_Age"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "demographic_comparison"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest revenue to order quantity ratio?",
@@ -404,8 +358,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Revenue", "Order_quantity"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "efficiency_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are used for the top 5% of orders by revenue?",
@@ -413,8 +366,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "high_value_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How does average revenue differ by shipping method and day of the month?",
@@ -422,8 +374,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "temporal_revenue_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods have shown the strongest month-over-month growth in usage?",
@@ -431,8 +382,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "growth_trend_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which city has the highest variation in shipping methods used?",
@@ -440,8 +390,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["City", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "geographic_diversity"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How do shipping method preferences change as customer age increases?",
@@ -449,8 +398,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_Age", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "age_trend_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What's the most common shipping method for orders placed on the last day of each month?",
@@ -458,8 +406,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "month_end_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which customers have used the most different shipping methods?",
@@ -467,8 +414,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Customer_Name", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_flexibility"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are most popular for orders with both high revenue and large quantities?",
@@ -476,8 +422,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Revenue", "Order_quantity"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "high_value_high_volume_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How do rebate values differ between orders with different shipping methods?",
@@ -485,8 +430,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Rebate"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "rebate_distribution"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which products have the most skewed shipping method distribution?",
@@ -494,8 +438,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_product", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "product_distribution_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What is the average time between orders for customers who use express shipping vs standard shipping?",
@@ -503,8 +446,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Order_date", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "repurchase_interval_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are most common in cities with the highest average order values?",
@@ -512,8 +454,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["City", "Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "high_value_location_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods do customers choose when ordering multiple identical products?",
@@ -521,8 +462,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_quantity", "Order_product", "Invoice_no"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "bulk_order_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How do shipping method preferences differ for the first vs last purchase a customer makes?",
@@ -530,8 +470,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "customer_evolution"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the most seasonal variation in usage?",
@@ -539,8 +478,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "seasonality_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are preferred for orders with the highest rebate to revenue ratio?",
@@ -548,8 +486,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Rebate", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "discount_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What combination of country and shipping method has the highest average revenue?",
@@ -557,8 +494,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Country", "Ship_method", "Revenue"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "geographic_revenue_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method shows the most variation in customer age?",
@@ -566,8 +502,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_Age"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "demographic_variation"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods have the highest percentage of orders with round number quantities (10, 20, 50, etc.)?",
@@ -575,8 +510,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_quantity"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "quantity_pattern_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How do shipping method preferences change from the beginning to the end of each quarter?",
@@ -584,8 +518,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "quarterly_trend_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which invoice numbers are associated with unusual shipping method choices?",
@@ -593,8 +526,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Invoice_no", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "anomaly_detection"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What products show the most balanced distribution across different shipping methods?",
@@ -602,8 +534,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_product", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "distribution_balance"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are chosen by customers who frequently change their preferred shipping method?",
@@ -611,8 +542,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_ID"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "preference_volatility"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How does order quantity affect shipping method choice for international orders?",
@@ -620,8 +550,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Order_quantity", "Ship_method", "Country"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "international_volume_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods are most popular on days with unusually high order volumes?",
@@ -629,8 +558,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "peak_volume_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What's the shipping method distribution for customers with names starting with each letter of the alphabet?",
@@ -638,8 +566,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_Name", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "alphabetical_distribution"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What shipping methods had the most growth during the holiday season compared to the rest of the year?",
@@ -647,8 +574,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "seasonal_growth_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What percentage of customers have only ever used a single shipping method?",
@@ -656,8 +582,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Ship_method"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "loyalty_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "Which shipping method has the highest customer loyalty across consecutive orders?",
@@ -665,8 +590,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Customer_ID", "Ship_method", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "method_loyalty"
+    "execute_in_mysql": true
   },
   {
     "user_query": "How does shipping method choice change on birthdays or special occasions?",
@@ -674,8 +598,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Order_product"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "special_occasion_analysis"
+    "execute_in_mysql": true
   },
   {
     "user_query": "What is the most commonly used shipping method for customers' very first order?",
@@ -683,8 +606,7 @@
     "tables_used": ["carricksport"],
     "columns_used": ["Ship_method", "Customer_ID", "Order_date"],
     "schema_name": "nex_valiant",
-    "execute_in_mysql": true,
-    "query_type": "first_order_analysis"
+    "execute_in_mysql": true
   }
 ]
   
