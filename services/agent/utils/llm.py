@@ -41,7 +41,7 @@ def initialize_llm(api_key: str) -> ChatOpenAI:
     try:
         model = ChatOpenAI(
             api_key=api_key,
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),  # Default to "gpt-4" if not set
+            model=os.getenv("OPENAI_MODEL", "gpt-4o"),  # Default to "gpt-4" if not set
             temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),  # Default to 0.0
             max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),  # Default to 3
             request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),  # Default to 30 seconds
@@ -101,43 +101,43 @@ def initialize_deepseek(api_key: Optional[str] = None) -> ChatDeepSeek:
 # ####                  3     Init Lanchain format Deepseek                       ####
 # #####################################################################################
 
-# # def initialize_llm(api_key: str = None) -> ChatOpenAI:
-# #     """Initialize and validate the language model using OpenAI client with DeepSeek API.
+# def initialize_llm(api_key: str = None) -> ChatOpenAI:
+#     """Initialize and validate the language model using OpenAI client with DeepSeek API.
     
-# #     Args:
-# #         api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
+#     Args:
+#         api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
         
-# #     Returns:
-# #         ChatOpenAI: Initialized language model configured for DeepSeek
+#     Returns:
+#         ChatOpenAI: Initialized language model configured for DeepSeek
         
-# #     Raises:
-# #         ValueError: If DEEPSEEK_API_KEY is not set
-# #         ConnectionError: If initialization of the language model fails
-# #     """
-# #     # Use provided API key or get from environment variable
-# #     api_key = os.getenv("DEEPSEEK_API_KEY")
-# #     base_url = os.getenv("DEEPSEEK_URL")
-# #     model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+#     Raises:
+#         ValueError: If DEEPSEEK_API_KEY is not set
+#         ConnectionError: If initialization of the language model fails
+#     """
+#     # Use provided API key or get from environment variable
+#     api_key = os.getenv("DEEPSEEK_API_KEY")
+#     base_url = os.getenv("DEEPSEEK_URL")
+#     model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
    
-# #     if not api_key:
-# #         raise ValueError("DEEPSEEK_API_KEY is not set.")
+#     if not api_key:
+#         raise ValueError("DEEPSEEK_API_KEY is not set.")
     
-# #     if not base_url:
-# #         raise ValueError("DEEPSEEK_URL is not set.")
+#     if not base_url:
+#         raise ValueError("DEEPSEEK_URL is not set.")
    
-# #     try:
-# #         model = ChatOpenAI(
-# #             api_key=api_key,
-# #             model=model_name,
-# #             temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0.0")),
-# #             max_retries=int(os.getenv("DEEPSEEK_MAX_RETRIES", "3")),
-# #             request_timeout=int(os.getenv("DEEPSEEK_TIMEOUT", "30")),
-# #             max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", "2048")),
-# #             base_url=base_url
-# #         )
-# #         return model
-# #     except Exception as e:
-# #         raise ConnectionError(f"Failed to initialize language model: {str(e)}")
+#     try:
+#         model = ChatOpenAI(
+#             api_key=api_key,
+#             model=model_name,
+#             temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0.0")),
+#             max_retries=int(os.getenv("DEEPSEEK_MAX_RETRIES", "3")),
+#             request_timeout=int(os.getenv("DEEPSEEK_TIMEOUT", "30")),
+#             max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", "2048")),
+#             base_url=base_url
+#         )
+#         return model
+#     except Exception as e:
+#         raise ConnectionError(f"Failed to initialize language model: {str(e)}")
 # #####################################################################################
 # #####################################################################################
 
