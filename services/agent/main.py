@@ -1,26 +1,24 @@
 # main.py ( always keep this # comment )
 import os
+import re
 from loguru import logger
-from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.runnables import RunnableLambda
 from langgraph.func import entrypoint
 from langgraph.checkpoint.memory import MemorySaver
-from hashlib import md5
 
 # Custom utility imports
 from utils.llm import initialize_openai, initialize_embeddings
 from utils.maria import initialize_database
 from utils.vector_database import qdrant_on_prem
-from utils.task import process_database_question
-from utils.tools import (
-    limit_schema_size,
-    load_sql_examples,
-    create_sql_generation_prompt,
-    initialize_sql_agent,
-    is_database_question
+from utils.tools import load_sql_examples, is_database_question
+from utils.task import (
+    find_similar_examples,
+    extract_relevant_tables,
+    execute_sql_query,
+    validate_sql_with_llm,  # Import the new validation function
 )
 
 # Global initialization
@@ -31,57 +29,25 @@ db = initialize_database(os.getenv("DATABASE_URI"))
 qdrant_store = qdrant_on_prem(embeddings, os.getenv("COLLECTION_NAME"))
 sql_examples = load_sql_examples(os.getenv("EXAMPLES_FILE_PATH"))
 
-# Global cache for table detection
-TABLE_CACHE = {}
+def extract_tables_from_sql(sql_query: str) -> list:
+    """Extract table names from an SQL query."""
+    table_pattern = r'(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s|;|$|\n)'
+    tables = re.findall(table_pattern, sql_query, re.IGNORECASE)
+    tables = list(set(t.strip() for t in tables if t.strip()))
+    logger.info(f"Extracted tables from SQL: {tables}")
+    return tables
 
-# Prompt template with Qdrant retrieval
-local_prompt_template = """
-System: You are a friendly expert SQL data analyst.
+def search_examples_for_sql(question: str, sql_examples) -> tuple[str, list]:
+    """Search sql_examples for an exact match and return its SQL and tables."""
+    for example in sql_examples:
+        if example["page_content"].strip().lower() == question.strip().lower():
+            sql_query = example["sql_query"]
+            logger.info(f"Exact match found in examples: '{sql_query}'")
+            tables = extract_tables_from_sql(sql_query)
+            return sql_query, tables
+    logger.warning(f"No exact match found in examples for '{question}'")
+    return None, []
 
-Given an input question, create a syntactically correct {dialect} query to run against the database.
-Use the following format for the response:
-
-Question: "{input}"
-SQLQuery: "SQL Query to run"
-SQLResult: "Result with column names identified (e.g., Customer_ID: value, Customer_Name: value)"
-Answer: "Final answer incorporating column names"
-Insight: "Optimize the Answer into a simple report, approximately 20 words"
-
-Only use the following tables:
-{table_info}
-
-Relevant context from vector search (past queries or schema info):
-{qdrant_context}
-
-Examples of SQL queries for similar questions:
-{few_shot_examples}
-"""
-prompt = PromptTemplate(
-    input_variables=["dialect", "input", "table_info", "qdrant_context", "few_shot_examples"],
-    template=local_prompt_template
-)
-
-# QA chain for non-database questions
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
-
-qa_chain = (
-    RunnableLambda(lambda x: {"question": x} if isinstance(x, str) else x)
-    | {
-        "context": qdrant_store.as_retriever() | format_docs,
-        "question": RunnablePassthrough(),
-        "dialect": lambda x: db.dialect,
-        "table_info": lambda x: db.get_table_info(),
-        "few_shot_examples": lambda x: "",
-        "input": lambda x: x["question"]
-    }
-    | prompt
-    | llm
-    | RunnableLambda(lambda x: x.content if hasattr(x, 'content') else (x.get('text', str(x)) if isinstance(x, dict) else str(x)))
-)
-logger.success("LCEL RAG chain initialized successfully with local prompt!")
-
-# Polite response for non-database questions
 def generate_polite_response(question: str) -> str:
     prompt = ChatPromptTemplate.from_template("""
     You are a friendly SQL Agent. Your role is to assist users with database-related questions.
@@ -93,45 +59,6 @@ def generate_polite_response(question: str) -> str:
     response_chain = prompt | llm | StrOutputParser()
     return response_chain.invoke({"question": question})
 
-# Dynamic table detection with LLM
-def detect_relevant_tables(question: str, db: SQLDatabase, llm) -> list:
-    cache_key = md5(question.encode()).hexdigest()
-    if cache_key in TABLE_CACHE:
-        logger.info(f"Using cached table detection for question: {question}")
-        return TABLE_CACHE[cache_key]
-
-    table_names = db.get_usable_table_names()
-    prompt = ChatPromptTemplate.from_template("""
-    You are an expert SQL analyst. Given a database question and a list of available tables,
-    identify which tables are most likely needed to answer the question.
-    Return only the table names as a comma-separated list (e.g., "sales, customers").
-    If unsure, return an empty string.
-
-    Question: "{question}"
-    Available tables: {table_names}
-    Table names:
-    """)
-    chain = prompt | llm | StrOutputParser()
-    response = chain.invoke({"question": question, "table_names": ", ".join(table_names)})
-    
-    detected_tables = [t.strip() for t in response.split(",") if t.strip() in table_names]
-    if not detected_tables:
-        logger.warning(f"No tables detected for question: {question}. Using fallback.")
-        detected_tables = table_names[:3] if len(table_names) >= 3 else table_names
-    
-    TABLE_CACHE[cache_key] = detected_tables
-    logger.info(f"Detected tables for '{question}': {detected_tables}")
-    return detected_tables
-
-# Search Qdrant for relevant context
-def search_qdrant_context(question: str, qdrant_store, embeddings, top_k=3) -> str:
-    question_embedding = embeddings.embed_query(question)
-    search_results = qdrant_store.search(question_embedding, limit=top_k)
-    context = "\n".join([f"- {result.payload.get('content', 'No content')}" for result in search_results])
-    logger.info(f"Qdrant context retrieved for '{question}':\n{context}")
-    return context if context else "No relevant context found in Qdrant."
-
-# Main workflow with corrected sql_generation_chain
 @entrypoint(checkpointer=MemorySaver())
 def sql_agent_workflow(inputs: dict) -> dict:
     question = inputs.get("question", "").strip()
@@ -141,31 +68,66 @@ def sql_agent_workflow(inputs: dict) -> dict:
     if is_database_question(question):
         logger.info(f"Database question detected: {question}")
         
-        # Define the SQL generation chain dynamically
-        sql_generation_chain = (
-            RunnableLambda(lambda x: {"question": x}) |
-            RunnablePassthrough.assign(qdrant_context=lambda x: search_qdrant_context(x["question"], qdrant_store, embeddings)) |
-            RunnablePassthrough.assign(table_info=lambda x: db.get_table_info(detect_relevant_tables(x["question"], db, llm))) |
-            RunnablePassthrough.assign(prompt=lambda x: prompt.format(
-                dialect=db.dialect,
-                input=x["question"],
-                table_info=x["table_info"],
-                qdrant_context=x["qdrant_context"],
-                few_shot_examples="\n".join([f"- Q: {ex['question']}\n  SQL: {ex['sql_query']}" for ex in sql_examples[:3]])
-            )) |
-            llm |
-            StrOutputParser()
-        )
+        # Step 1: Vector search for similar examples
+        similar_examples = find_similar_examples(question, qdrant_store, embeddings)
         
-        # Generate and execute SQL
-        response = process_database_question(question, sql_generation_chain, db, llm).result()
+        # Step 2: Check for exact match in vector results
+        sql_query, tables = None, []
+        if similar_examples:
+            for example in similar_examples:
+                if example["question"].strip().lower() == question.strip().lower():
+                    sql_query = example["sql"]
+                    tables = extract_tables_from_sql(sql_query)
+                    logger.info(f"Exact match found in Qdrant: '{sql_query}'")
+                    break
+        
+        # Step 3: Fallback to file-based examples
+        if not sql_query:
+            sql_query, tables = search_examples_for_sql(question, sql_examples)
+        
+        # Step 4: Generate SQL if no matches
+        if not sql_query:
+            logger.info("No exact match found; generating SQL as fallback.")
+            tables = extract_relevant_tables(question, db)
+            table_info = db.get_table_info(tables)
+            generation_prompt = PromptTemplate(
+                input_variables=["enter", "table_info"],
+                template="""
+                System: You are an expert SQL data analyst.
+                Given an input question, create a syntactically correct {dialect} query.
+                Return only the SQL query.
+                Question: "{enter}"
+                Available tables: {table_info}
+                """
+            ).format(dialect=db.dialect, enter=question, table_info=table_info)
+            sql_generation_chain = generation_prompt | llm | StrOutputParser()
+            sql_query = sql_generation_chain.invoke(question)
+            tables = extract_tables_from_sql(sql_query)
+
+        # Step 5: Validate SQL using LLM
+        if not validate_sql_with_llm(question, sql_query, db, llm):
+            return {"response": "The generated SQL query failed validation. Please refine your question or try again later."}
+
+        # Step 6: Execute and format response
+        result = execute_sql_query(sql_query, db)
+        dynamic_prompt = ChatPromptTemplate.from_template("""
+        Given an input question and its executed SQL result, return the answer with column names explored from the query.
+        Use the following format:
+
+        Question: "{question}"
+        SQLQuery: "{sql_query}"
+        SQLResult: "{result}"
+        Answer: "Final answer incorporating column names"
+        Insight: "Optimize the Answer into a simple report, approximately 20 words"
+        """)
+        response_chain = dynamic_prompt | llm | StrOutputParser()
+        response = response_chain.invoke({"question": question, "sql_query": sql_query, "result": result})
     else:
         logger.info(f"Non-database question detected: {question}")
         response = generate_polite_response(question)
 
     return {"response": response}
 
-# Interactive execution
 def run_interactive():
     config = {"configurable": {"thread_id": "sql_agent_thread"}}
     print("Hi I am SQL Agent. How can I help you today?")

@@ -1,6 +1,10 @@
 run:
 	uv run python main.py
 
+run2:
+	uv run python main2.py
+
+
 run-agent1:
 	uv run python agent001.py
 
