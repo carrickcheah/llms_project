@@ -1,9 +1,10 @@
-# CLI chat. It works
+# Streamlit chat. It works
 
 from typing import List
 import os
 import json
 from loguru import logger
+import streamlit as st
 from langchain_core.embeddings import Embeddings
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.output_parsers import StrOutputParser
@@ -23,19 +24,36 @@ from langchain_openai import ChatOpenAI
 # Suppress HuggingFace tokenizers parallelism warning
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+# Preload embeddings to avoid PyTorch/Streamlit conflict
+try:
+    embeddings = HuggingFaceEmbeddings(model_name="carrick113/autotrain-wsucv-dqrgc")
+    logger.info("HuggingFace embeddings preloaded successfully.")
+except Exception as e:
+    logger.error(f"Failed to preload embeddings: {str(e)}")
+    raise
+
+# Initialize session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "initialized" not in st.session_state:
+    st.session_state.initialized = False
+if "db" not in st.session_state:
+    st.session_state.db = None
+if "llm" not in st.session_state:
+    st.session_state.llm = None
+if "qdrant_store" not in st.session_state:
+    st.session_state.qdrant_store = None
+if "embeddings" not in st.session_state:
+    st.session_state.embeddings = embeddings  # Use preloaded embeddings
+if "sql_agent" not in st.session_state:
+    st.session_state.sql_agent = None
+if "sql_generation_chain" not in st.session_state:
+    st.session_state.sql_generation_chain = None
+if "qa_chain" not in st.session_state:
+    st.session_state.qa_chain = None
+
 def initialize_llm(api_key: str) -> ChatOpenAI:
-    """Initialize and validate the language model.
-    
-    Args:
-        api_key: OpenAI API key. Must be provided.
-        
-    Returns:
-        ChatOpenAI: Initialized language model
-        
-    Raises:
-        ValueError: If api_key is not set
-        ConnectionError: If initialization of the language model fails
-    """
+    """Initialize and validate the language model."""
     if not api_key:
         logger.error("api_key is not set. Please provide an API key.")
         raise ValueError("api_key is not set.")
@@ -43,11 +61,11 @@ def initialize_llm(api_key: str) -> ChatOpenAI:
     try:
         model = ChatOpenAI(
             api_key=api_key,
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),  # Default to "gpt-4o" if not set
-            temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),  # Default to 0.0
-            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),  # Default to 3
-            request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),  # Default to 30 seconds
-            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),  # Default to 2048 tokens
+            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),
+            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),
+            request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),
+            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),
         )
         logger.success("Language model initialized successfully!")
         return model
@@ -241,6 +259,7 @@ def test_embedding_retrieval(query, qdrant_store, embeddings):
         logger.info("=" * 50)
 
 def answer_with_fallback(question, qdrant_store, embeddings, db, sql_agent, sql_generation_chain, qa_chain):
+    """Process a question and return a response with SQL query and result if applicable."""
     try:
         logger.info(f"Running diagnostic test for question: {question}")
         retrieved_docs = test_embedding_retrieval(question, qdrant_store, embeddings)
@@ -287,7 +306,8 @@ def answer_with_fallback(question, qdrant_store, embeddings, db, sql_agent, sql_
                         """)
                         
                         logger.info("Generating SQL using retrieved examples...")
-                        retrieval_chain = retrieval_prompt | sql_agent.llm | StrOutputParser()
+                        # Fix: Use st.session_state.llm instead of sql_agent.llm
+                        retrieval_chain = retrieval_prompt | st.session_state.llm | StrOutputParser()
                         sql_query = retrieval_chain.invoke({
                             "question": question,
                             "examples": examples_text
@@ -299,13 +319,19 @@ def answer_with_fallback(question, qdrant_store, embeddings, db, sql_agent, sql_
                         try:
                             logger.info("Executing SQL query from retrieved examples...")
                             result = db.run(sql_query)
-                            return f"SQL Database Answer (using retrieved examples):\nQuery: {sql_query}\n\nResult: {result}"
+                            return {
+                                "answer": f"SQL Database Answer (using retrieved examples): {result}",
+                                "query": sql_query,
+                                "result": str(result)
+                            }
                         except Exception as sql_exec_error:
                             logger.warning(f"Error executing SQL from retrieved examples: {str(sql_exec_error)}")
+                            return {"error": f"Error executing SQL: {str(sql_exec_error)}"}
                     else:
                         logger.warning("No usable SQL examples found in retrieved documents")
                 except Exception as retrieval_error:
                     logger.warning(f"Error using retrieved examples: {str(retrieval_error)}")
+                    return {"error": f"Error processing retrieved examples: {str(retrieval_error)}"}
             
             try:
                 logger.info(f"Generating SQL query using file examples for: {question}")
@@ -314,7 +340,11 @@ def answer_with_fallback(question, qdrant_store, embeddings, db, sql_agent, sql_
                 
                 try:
                     result = db.run(sql_query)
-                    return f"SQL Database Answer (using file examples):\nQuery: {sql_query}\n\nResult: {result}"
+                    return {
+                        "answer": f"SQL Database Answer (using file examples): {result}",
+                        "query": sql_query,
+                        "result": str(result)
+                    }
                 except Exception as sql_exec_error:
                     logger.warning(f"Error executing generated SQL: {str(sql_exec_error)}")
                     
@@ -322,162 +352,239 @@ def answer_with_fallback(question, qdrant_store, embeddings, db, sql_agent, sql_
                     agent_response = sql_agent.invoke({"input": question})
                     
                     if isinstance(agent_response, dict) and "output" in agent_response:
-                        return f"SQL Database Answer (via agent): {agent_response['output']}"
+                        return {
+                            "answer": f"SQL Database Answer (via agent): {agent_response['output']}",
+                            "query": "Agent-generated query not explicitly available",
+                            "result": str(agent_response['output'])
+                        }
                     else:
-                        return f"SQL Database Answer (via agent): {agent_response}"
+                        return {
+                            "answer": f"SQL Database Answer (via agent): {agent_response}",
+                            "query": "Agent-generated query not explicitly available",
+                            "result": str(agent_response)
+                        }
             
             except Exception as sql_gen_error:
                 logger.error(f"SQL generation failed: {str(sql_gen_error)}")
-                return "I wasn't able to find relevant data to answer your question with the available tools."
+                return {"error": "I wasn't able to find relevant data to answer your question with the available tools."}
         else:
             logger.info(f"Non-database question detected. Trying to answer with RAG: {question}")
             response = qa_chain.invoke(question)
             
             if "I don't know" in response:
                 logger.info(f"RAG couldn't answer. Falling back to general response.")
-                return f"I don't have specific information about {question}. You might want to rephrase your question or ask about shipping methods, order data, or customer information that's available in the database."
+                return {
+                    "answer": f"I don't have specific information about {question}. You might want to rephrase your question or ask about shipping methods, order data, or customer information that's available in the database.",
+                    "query": None,
+                    "result": None
+                }
             
-            return f"Knowledge Base Answer: {response}"
+            return {
+                "answer": f"Knowledge Base Answer: {response}",
+                "query": None,
+                "result": None
+            }
             
     except Exception as e:
         logger.error(f"Error answering question '{question}': {str(e)}")
-        return f"Error: Could not process the question due to: {str(e)}"
+        return {"error": f"Error: Could not process the question due to: {str(e)}"}
 
-def main():
-    warnings.filterwarnings("ignore", category=UserWarning, module="langsmith")
+def initialize_agent():
+    """Initialize all components and store them in session state."""
+    with st.spinner("Initializing agent..."):
+        warnings.filterwarnings("ignore", category=UserWarning, module="langsmith")
 
-    # Initialize embeddings
-    try:
-        embeddings = HuggingFaceEmbeddings(model_name="carrick113/autotrain-wsucv-dqrgc")
-        logger.info("HuggingFace embeddings initialized successfully.")
-    except Exception as e:
-        logger.error(f"Failed to initialize embeddings: {str(e)}")
-        raise
+        # Use preloaded embeddings
+        st.session_state.embeddings = embeddings
 
-    # Connect to Qdrant
-    try:
-        qdrant_store = use_existing_qdrant(
-            embedding=embeddings,
-            url="http://localhost:6333",
-            collection_name="query_embeddings",
-            prefer_grpc=True
-        )
-    except Exception as e:
-        logger.error(f"Failed to connect to Qdrant vector store: {str(e)}")
-        raise
-
-    # Initialize database
-    try:
-        db = SQLDatabase.from_uri(
-            os.getenv("DATABASE_URI"),
-            sample_rows_in_table_info=2
-        )
-        logger.success("MariaDB database initialized successfully!")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        exit(1)
-
-    # Initialize LLM
-    try:
-        llm = initialize_llm(os.getenv("OPENAI_API_KEY"))
-    except Exception as e:
-        logger.error(f"Failed to initialize language model: {e}")
-        exit(1)
-
-    # Load SQL examples
-    examples_file_path = os.getenv("EXAMPLES_FILE_PATH", "/Users/carrickcheah/llms_project/services/agent/vector/huggingtrain.jsonl")
-    sql_examples = load_sql_examples(examples_file_path)
-
-    # Initialize SQL toolkit and agent
-    try:
-        full_toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-        
-        table_mentions = []
-        for example in sql_examples:
-            sql = example.get('sentence2_column', '').lower()
-            for word in ['from', 'join']:
-                if word in sql:
-                    parts = sql.split(word)[1].strip().split()
-                    if parts:
-                        table = parts[0].strip(';,() ')
-                        if table:
-                            table_mentions.append(table)
-        
-        from collections import Counter
-        table_counts = Counter(table_mentions)
-        relevant_tables = [table for table, _ in table_counts.most_common(15)]
-        
-        logger.info(f"Extracted tables from examples: {relevant_tables}")
-        
-        limited_toolkit = limit_schema_size(
-            full_toolkit, 
-            max_tables=15,
-            table_whitelist=relevant_tables
-        )
-        
-        logger.success("SQLDatabaseToolkit with limited schema initialized successfully!")
-        sql_agent = initialize_sql_agent(llm=llm, toolkit=limited_toolkit)
-        
-        schema_info = limited_toolkit.db.get_table_info()
-        sql_generation_prompt = create_sql_generation_prompt(sql_examples, schema_info)
-        sql_generation_chain = sql_generation_prompt | llm | StrOutputParser()
-        logger.success("SQL generation chain initialized successfully!")
-        
-    except Exception as e:
-        logger.error(f"Failed to create SQLDatabaseToolkit or SQL agent: {e}")
-        exit(1)
-
-    # Initialize RAG
-    try:
-        prompt = hub.pull("rlm/rag-prompt")
-        logger.info("RAG prompt pulled successfully from LangChain Hub.")
-        
-        def format_docs(docs):
-            return "\n\n".join(doc.page_content for doc in docs)
-
-        custom_prompt = prompt.partial(
-            additional_context="If no specific correlation data is available, respond with: 'Based on the available data, I don't know if there is a correlation between rebate amount and shipping method chosen. However, recent studies and trends suggest that shipping fees and rebates can influence customer behavior, such as choosing faster or cheaper shipping methods based on cost incentives. You can explore web-based studies or trending discussions on X for more insights.'"
-        )
-
-        qa_chain = (
-            {
-                "context": qdrant_store.as_retriever() | format_docs,
-                "question": RunnablePassthrough(),
-            }
-            | custom_prompt
-            | llm
-            | StrOutputParser()
-        )
-        logger.success("LCEL RAG chain initialized successfully.")
-    except Exception as e:
-        logger.error(f"Failed to initialize LCEL RAG chain: {str(e)}")
-        raise
-
-    # Chat loop
-    config = {"configurable": {"thread_id": "mysql-thread"}}
-    print("Hi, Im SQL Agent. How can i help you? \n")
-    conversation = []
-    
-    while True:
+        # Connect to Qdrant
         try:
-            user_query = input("User: ").strip().replace('[', '').replace(']', '')
-            if not user_query:
-                continue
-                
-            conversation.append(("user", user_query))
-            print(f"User: {user_query}")
-            
-            response = answer_with_fallback(user_query, qdrant_store, embeddings, db, sql_agent, sql_generation_chain, qa_chain)
-            print(f"Assistant: {response}")
-            conversation.append(("assistant", response))
-            
-        except KeyboardInterrupt:
-            print("\nExiting chat...")
-            break
+            st.session_state.qdrant_store = use_existing_qdrant(
+                embedding=st.session_state.embeddings,
+                url="http://localhost:6333",
+                collection_name="query_embeddings",
+                prefer_grpc=True
+            )
         except Exception as e:
-            logger.error(f"Error in chat loop: {str(e)}")
-            print(f"Assistant: Error: {str(e)}")
-            continue
+            logger.error(f"Failed to connect to Qdrant vector store: {str(e)}")
+            st.error(f"Failed to connect to Qdrant: {str(e)}")
+            return
 
-if __name__ == "__main__":
-    main()
+        # Initialize database
+        try:
+            st.session_state.db = SQLDatabase.from_uri(
+                os.getenv("DATABASE_URI"),
+                sample_rows_in_table_info=2
+            )
+            logger.success("MariaDB database initialized successfully!")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            st.error(f"Failed to initialize database: {e}")
+            return
+
+        # Initialize LLM
+        try:
+            st.session_state.llm = initialize_llm(os.getenv("OPENAI_API_KEY"))
+        except Exception as e:
+            logger.error(f"Failed to initialize language model: {e}")
+            st.error(f"Failed to initialize LLM: {e}")
+            return
+
+        # Load SQL examples
+        examples_file_path = os.getenv("EXAMPLES_FILE_PATH", "/Users/carrickcheah/llms_project/services/agent/vector/efg.jsonl")
+        sql_examples = load_sql_examples(examples_file_path)
+
+        # Initialize SQL toolkit and agent
+        try:
+            full_toolkit = SQLDatabaseToolkit(db=st.session_state.db, llm=st.session_state.llm)
+            
+            table_mentions = []
+            for example in sql_examples:
+                sql = example.get('sentence2_column', '').lower()
+                for word in ['from', 'join']:
+                    if word in sql:
+                        parts = sql.split(word)[1].strip().split()
+                        if parts:
+                            table = parts[0].strip(';,() ')
+                            if table:
+                                table_mentions.append(table)
+            
+            from collections import Counter
+            table_counts = Counter(table_mentions)
+            relevant_tables = [table for table, _ in table_counts.most_common(15)]
+            
+            logger.info(f"Extracted tables from examples: {relevant_tables}")
+            
+            limited_toolkit = limit_schema_size(
+                full_toolkit, 
+                max_tables=15,
+                table_whitelist=relevant_tables
+            )
+            
+            logger.success("SQLDatabaseToolkit with limited schema initialized successfully!")
+            st.session_state.sql_agent = initialize_sql_agent(llm=st.session_state.llm, toolkit=limited_toolkit)
+            
+            schema_info = limited_toolkit.db.get_table_info()
+            sql_generation_prompt = create_sql_generation_prompt(sql_examples, schema_info)
+            st.session_state.sql_generation_chain = sql_generation_prompt | st.session_state.llm | StrOutputParser()
+            logger.success("SQL generation chain initialized successfully!")
+            
+        except Exception as e:
+            logger.error(f"Failed to create SQLDatabaseToolkit or SQL agent: {e}")
+            st.error(f"Failed to initialize SQL agent: {e}")
+            return
+
+        # Initialize RAG
+        try:
+            prompt = hub.pull("rlm/rag-prompt")
+            logger.info("RAG prompt pulled successfully from LangChain Hub.")
+            
+            def format_docs(docs):
+                return "\n\n".join(doc.page_content for doc in docs)
+
+            custom_prompt = prompt.partial(
+                additional_context="If no specific correlation data is available, respond with: 'Based on the available data, I don't know if there is a correlation between rebate amount and shipping method chosen. However, recent studies and trends suggest that shipping fees and rebates can influence customer behavior, such as choosing faster or cheaper shipping methods based on cost incentives. You can explore web-based studies or trending discussions on X for more insights.'"
+            )
+
+            st.session_state.qa_chain = (
+                {
+                    "context": st.session_state.qdrant_store.as_retriever() | format_docs,
+                    "question": RunnablePassthrough(),
+                }
+                | custom_prompt
+                | st.session_state.llm
+                | StrOutputParser()
+            )
+            logger.success("LCEL RAG chain initialized successfully.")
+        except Exception as e:
+            logger.error(f"Failed to initialize LCEL RAG chain: {str(e)}")
+            st.error(f"Failed to initialize RAG chain: {str(e)}")
+            return
+
+        st.session_state.initialized = True
+        st.success("Agent initialized successfully!")
+
+# Sidebar for initialization
+with st.sidebar:
+    st.header("Agent Configuration")
+    # Add option to disable file watching to reduce PyTorch warnings
+    disable_watcher = st.checkbox("Disable File Watcher (Reduce Warnings)", value=False)
+    if st.button("Initialize Agent"):
+        if disable_watcher:
+            os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"] = "none"  # Disable watcher
+            logger.info("File watcher disabled to reduce PyTorch/Streamlit conflicts.")
+        initialize_agent()
+
+# Main chat interface
+st.title("🤖 SQL Agent Chat")
+st.caption("Query your database using natural language")
+
+# Display chat messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
+        if "query" in message and message["query"]:
+            with st.expander("View SQL Query"):
+                st.code(message["query"], language="sql")
+        if "result" in message and message["result"]:
+            with st.expander("View Raw SQL Results"):
+                st.text(message["result"])
+
+# Input for new questions
+if prompt := st.chat_input("Ask a question about your database..."):
+    # Add user message to chat history
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # Display user message
+    with st.chat_message("user"):
+        st.write(prompt)
+    
+    # Check if initialized
+    if not st.session_state.initialized:
+        with st.chat_message("assistant"):
+            st.write("Please initialize the agent first using the sidebar.")
+            st.session_state.messages.append({
+                "role": "assistant", 
+                "content": "Please initialize the agent first using the sidebar."
+            })
+    else:
+        # Process the question
+        with st.spinner("Thinking..."):
+            state = answer_with_fallback(
+                prompt, 
+                st.session_state.qdrant_store, 
+                st.session_state.embeddings, 
+                st.session_state.db, 
+                st.session_state.sql_agent, 
+                st.session_state.sql_generation_chain, 
+                st.session_state.qa_chain
+            )
+        
+        # Display assistant response
+        with st.chat_message("assistant"):
+            if state.get("error"):
+                st.error(state["error"])
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": f"Error: {state['error']}"
+                })
+            else:
+                st.write(state["answer"])
+                if state["query"]:
+                    with st.expander("View SQL Query"):
+                        st.code(state["query"], language="sql")
+                if state["result"]:
+                    with st.expander("View Raw SQL Results"):
+                        st.text(state["result"])
+                
+                # Add assistant message to chat history
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": state["answer"],
+                    "query": state["query"],
+                    "result": state["result"]
+                })
+
+# Reset file watcher to default after initialization (optional)
+if st.session_state.initialized and "STREAMLIT_SERVER_FILE_WATCHER_TYPE" in os.environ:
+    del os.environ["STREAMLIT_SERVER_FILE_WATCHER_TYPE"]

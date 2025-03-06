@@ -1,39 +1,33 @@
+# llm.py
 ##########################################################################################
 #    Initialization utilities for database, LLM, and vector store connections            #
 ##########################################################################################
 #   Contents of table                                                                    #                                               #
 #   1. Initialize OPENAI GPT-4o-mini                                                     #       
 #   2. Initialize Deepseek V3/ R1 model                                                  #
-#   3. Init Lanchain format Deepseek                                                    #
+#   3. Init Lanchain format Deepseek                                                     #
+#   4. Initialize Anthropic Claude 3.5 Haiku                                             #
 ##########################################################################################
 import os
 from loguru import logger
 from typing import Optional
+
 # Environment and database imports
 from langchain_openai import ChatOpenAI
 from langchain_deepseek import ChatDeepSeek
+from langchain_anthropic import ChatAnthropic
+from langchain_huggingface import HuggingFaceEmbeddings
 
 # Load environment variables once
 from dotenv import load_dotenv
 load_dotenv()
 
+##########################################################################################
+#                        1. Initialize OpenAI GPT-4o                                     #
+##########################################################################################
 
-#####################################################################################
-####                        1. Init OPENAI GPT-4o-mini                           ####
-#####################################################################################
-def initialize_llm(api_key: str) -> ChatOpenAI:
-    """Initialize and validate the language model.
-    
-    Args:
-        api_key: OpenAI API key. Must be provided.
-        
-    Returns:
-        ChatOpenAI: Initialized language model
-        
-    Raises:
-        ValueError: If api_key is not set
-        ConnectionError: If initialization of the language model fails
-    """
+def initialize_openai(api_key: str) -> ChatOpenAI:
+    """Initialize and validate the language model."""
     if not api_key:
         logger.error("api_key is not set. Please provide an API key.")
         raise ValueError("api_key is not set.")
@@ -41,49 +35,91 @@ def initialize_llm(api_key: str) -> ChatOpenAI:
     try:
         model = ChatOpenAI(
             api_key=api_key,
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),  # Default to "gpt-4" if not set
-            temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),  # Default to 0.0
-            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),  # Default to 3
-            request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),  # Default to 30 seconds
-            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),  # Default to 2048 tokens
+            model=os.getenv("OPENAI_MODEL", "gpt-4"),
+            temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),
+            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),
+            request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),
+            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),
         )
-        logger.success("Language model initialized successfully!")
+        logger.success(f"Language model '{model.model_name}' initialized successfully!")
         return model
     except Exception as e:
         logger.error(f"Failed to initialize language model. Details: {e}")
         raise ConnectionError(f"Failed to initialize language model: {str(e)}")
-    
-#####################################################################################
-####                         2. Init Deepseek V3/ R1 model                       ####
-#####################################################################################
 
-def initialize_deepseek(api_key: Optional[str] = None) -> ChatDeepSeek:
-    """
-    Initialize and validate the DeepSeek language model using environment variables.
+##########################################################################################
+#                        2. Initialize DeepSeek Chat Model                               #
+##########################################################################################
+
+def initialize_deepseek(api_key: str) -> ChatDeepSeek:
+    """Initialize DeepSeek model with environment-configured parameters.
 
     Args:
-        api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
+        api_key: DeepSeek API key (required).
 
     Returns:
-        ChatDeepSeek: Initialized language model
+        ChatDeepSeek: Initialized DeepSeek model.
 
+    Raises:
+        ValueError: If api_key is not provided.
+        ConnectionError: If initialization fails (e.g., network or API issues).
+    """
+    # Use environment variable if set, otherwise default to https://api.deepseek.com/v1
+    base_url = os.getenv("DEEPSEEK_URL", "https://api.deepseek.com/v1")
+    model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+
+    if not api_key:
+        logger.error("Missing DeepSeek API Key.")
+        raise ValueError("DeepSeek API key is required.")
+
+    try:
+        model = ChatDeepSeek(
+            api_key=api_key,
+            model=model_name,
+            temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0.0")),
+            max_retries=int(os.getenv("DEEPSEEK_MAX_RETRIES", "3")),
+            timeout=int(os.getenv("DEEPSEEK_TIMEOUT", "30")),
+            max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", "2048")),
+            base_url=base_url
+        )
+        logger.success(f"Language model '{model.model_name}' initialized successfully!")
+        return model
+    except Exception as e:
+        logger.error(f"DeepSeek model initialization failed: {e}")
+        raise ConnectionError(f"Failed to initialize DeepSeek model: {str(e)}")
+
+
+
+# #####################################################################################
+# ####                  3     Init Lanchain format Deepseek                       ####
+# #####################################################################################
+
+
+def initialize_open_deep(api_key: Optional[str] = None) -> ChatOpenAI:
+    """Initialize and validate the language model using OpenAI client with DeepSeek API.
+    
+    Args:
+        api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
+        
+    Returns:
+        ChatOpenAI: Initialized language model configured for DeepSeek
+        
     Raises:
         ValueError: If DEEPSEEK_API_KEY is not set
         ConnectionError: If initialization of the language model fails
     """
     # Use provided API key or get from environment variable
-    api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-    base_url = os.getenv("DEEPSEEK_URL")
+    base_url = os.getenv("DEEPSEEK_URL", "https://api.deepseek.com/v1")
     model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-
+   
     if not api_key:
         raise ValueError("DEEPSEEK_API_KEY is not set.")
     
     if not base_url:
         raise ValueError("DEEPSEEK_URL is not set.")
-
+   
     try:
-        model = ChatDeepSeek(
+        model = ChatOpenAI(
             api_key=api_key,
             model=model_name,
             temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0.0")),
@@ -92,54 +128,70 @@ def initialize_deepseek(api_key: Optional[str] = None) -> ChatDeepSeek:
             max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", "2048")),
             base_url=base_url
         )
+        logger.success(f"Language model '{model.model_name}' initialized successfully!")
         return model
     except Exception as e:
         raise ConnectionError(f"Failed to initialize language model: {str(e)}")
-    
 
-# #####################################################################################
-# ####                  3     Init Lanchain format Deepseek                       ####
-# #####################################################################################
+##########################################################################################
+#                     4. Initialize Anthropic Claude 3.5 Haiku                           #
+##########################################################################################
 
-# def initialize_llm(api_key: str = None) -> ChatOpenAI:
-#     """Initialize and validate the language model using OpenAI client with DeepSeek API.
-    
-#     Args:
-#         api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
-        
-#     Returns:
-#         ChatOpenAI: Initialized language model configured for DeepSeek
-        
-#     Raises:
-#         ValueError: If DEEPSEEK_API_KEY is not set
-#         ConnectionError: If initialization of the language model fails
-#     """
-#     # Use provided API key or get from environment variable
-#     api_key = os.getenv("DEEPSEEK_API_KEY")
-#     base_url = os.getenv("DEEPSEEK_URL")
-#     model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-   
-#     if not api_key:
-#         raise ValueError("DEEPSEEK_API_KEY is not set.")
-    
-#     if not base_url:
-#         raise ValueError("DEEPSEEK_URL is not set.")
-   
-#     try:
-#         model = ChatOpenAI(
-#             api_key=api_key,
-#             model=model_name,
-#             temperature=float(os.getenv("DEEPSEEK_TEMPERATURE", "0.0")),
-#             max_retries=int(os.getenv("DEEPSEEK_MAX_RETRIES", "3")),
-#             request_timeout=int(os.getenv("DEEPSEEK_TIMEOUT", "30")),
-#             max_tokens=int(os.getenv("DEEPSEEK_MAX_TOKENS", "2048")),
-#             base_url=base_url
-#         )
-#         return model
-#     except Exception as e:
-#         raise ConnectionError(f"Failed to initialize language model: {str(e)}")
-# #####################################################################################
-# #####################################################################################
+
+def initialize_anthropic(api_key: Optional[str] = None) -> ChatAnthropic:
+    """Initialize Claude 3.5 Haiku with environment-configured parameters."""
+
+    if not api_key:
+        logger.error("Missing Anthropic API Key.")
+        raise ValueError("ANTHROPIC_API_KEY is not set.")
+
+    try:
+        model = ChatAnthropic(
+            api_key=api_key,
+            model=os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-20241022"),
+            temperature=float(os.getenv("ANTHROPIC_TEMPERATURE", "0.0")),
+            max_retries=int(os.getenv("ANTHROPIC_MAX_RETRIES", "3")),
+            request_timeout=int(os.getenv("ANTHROPIC_TIMEOUT", "30")),
+            max_tokens=int(os.getenv("ANTHROPIC_MAX_TOKENS", "2048")),
+        )
+        logger.success(f"Language model '{model.model_name}' initialized successfully!")
+        return model
+    except Exception as e:
+        logger.error(f"Claude 3.5 Haiku initialization failed: {e}")
+        raise ConnectionError(f"Failed to initialize Claude model: {str(e)}")
+
+
+
+##########################################################################################
+#                          5.  Embedding model:  Huggingface                             #
+##########################################################################################
+
+
+def initialize_embeddings(model_name: str = "carrick113/autotrain-wsucv-dqrgc") -> HuggingFaceEmbeddings:
+    """Initialize HuggingFace embeddings with the specified model.
+
+    Args:
+        model_name: Name of the HuggingFace model to load (default: "carrick113/autotrain-wsucv-dqrgc").
+
+    Returns:
+        HuggingFaceEmbeddings: Initialized embeddings object.
+
+    Raises:
+        Exception: If embedding initialization fails (e.g., model not found, network error).
+    """
+    try:
+        embeddings = HuggingFaceEmbeddings(model_name=model_name)
+        logger.success(f"HuggingFace embeddings preloaded successfully with model: {model_name}")
+        return embeddings
+    except Exception as e:
+        logger.error(f"Failed to preload embeddings for model '{model_name}': {str(e)}")
+        raise
+
+
+
+
+
+#####################################################################################
 
 
 

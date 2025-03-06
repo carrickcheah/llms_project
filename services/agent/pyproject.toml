@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "azure-ai-inference>=1.0.0b9",
+    "gradio>=5.20.0",
     "huggingface-hub>=0.29.1",
     "jq>=1.8.0",
     "langchain>=0.3.19",

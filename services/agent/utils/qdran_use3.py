@@ -1,4 +1,4 @@
-# CLI chat. It works
+# add report generator
 
 from typing import List
 import os
@@ -24,18 +24,7 @@ from langchain_openai import ChatOpenAI
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def initialize_llm(api_key: str) -> ChatOpenAI:
-    """Initialize and validate the language model.
-    
-    Args:
-        api_key: OpenAI API key. Must be provided.
-        
-    Returns:
-        ChatOpenAI: Initialized language model
-        
-    Raises:
-        ValueError: If api_key is not set
-        ConnectionError: If initialization of the language model fails
-    """
+    """Initialize and validate the language model."""
     if not api_key:
         logger.error("api_key is not set. Please provide an API key.")
         raise ValueError("api_key is not set.")
@@ -43,11 +32,11 @@ def initialize_llm(api_key: str) -> ChatOpenAI:
     try:
         model = ChatOpenAI(
             api_key=api_key,
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),  # Default to "gpt-4o" if not set
-            temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),  # Default to 0.0
-            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),  # Default to 3
-            request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),  # Default to 30 seconds
-            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),  # Default to 2048 tokens
+            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            temperature=float(os.getenv("OPENAI_TEMPERATURE", "0.0")),
+            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),
+            request_timeout=int(os.getenv("OPENAI_TIMEOUT", "30")),
+            max_tokens=int(os.getenv("OPENAI_MAX_TOKENS", "2048")),
         )
         logger.success("Language model initialized successfully!")
         return model
@@ -343,6 +332,33 @@ def answer_with_fallback(question, qdrant_store, embeddings, db, sql_agent, sql_
         logger.error(f"Error answering question '{question}': {str(e)}")
         return f"Error: Could not process the question due to: {str(e)}"
 
+def generate_report(llm, raw_response, question):
+    """Use the OpenAI LLM to optimize the raw response into a polished report."""
+    report_prompt = ChatPromptTemplate.from_template(
+        """You are an expert report generator. Take the following raw response from a question-answering system
+        and transform it into a concise, professional report. Include the original question, the answer, 
+        key details (e.g., SQL query and result if applicable), and a brief conclusion. Format it clearly.
+
+        Current Date: March 02, 2025
+
+        Question: {question}
+        Raw Response: {raw_response}
+
+        Output the report only, without additional explanations."""
+    )
+    
+    report_chain = report_prompt | llm | StrOutputParser()
+    
+    try:
+        report = report_chain.invoke({
+            "question": question,
+            "raw_response": raw_response
+        })
+        return report
+    except Exception as e:
+        logger.error(f"Error generating report: {str(e)}")
+        return f"Error generating report: {str(e)}"
+
 def main():
     warnings.filterwarnings("ignore", category=UserWarning, module="langsmith")
 
@@ -455,7 +471,7 @@ def main():
 
     # Chat loop
     config = {"configurable": {"thread_id": "mysql-thread"}}
-    print("Hi, Im SQL Agent. How can i help you? \n")
+    print("MySQL + Qdrant Agent: Ask a question about your database or hotels. (Press Ctrl+C to exit)\n")
     conversation = []
     
     while True:
@@ -467,9 +483,15 @@ def main():
             conversation.append(("user", user_query))
             print(f"User: {user_query}")
             
-            response = answer_with_fallback(user_query, qdrant_store, embeddings, db, sql_agent, sql_generation_chain, qa_chain)
-            print(f"Assistant: {response}")
-            conversation.append(("assistant", response))
+            # Get raw response
+            raw_response = answer_with_fallback(user_query, qdrant_store, embeddings, db, sql_agent, sql_generation_chain, qa_chain)
+            print(f"Assistant (Raw Response): {raw_response}")
+            conversation.append(("assistant", raw_response))
+            
+            # Generate and display optimized report
+            report = generate_report(llm, raw_response, user_query)
+            print(f"\nOptimized Report:\n{report}")
+            conversation.append(("report", report))
             
         except KeyboardInterrupt:
             print("\nExiting chat...")

@@ -1,3 +1,4 @@
+# maria.py
 ##########################################################################################
 #    Initialization utilities for database, LLM, and vector store connections            #
 ##########################################################################################
@@ -8,11 +9,6 @@
 # Environment and database imports
 from langchain_community.utilities import SQLDatabase
 from loguru import logger
-
-# Load environment variables once
-from dotenv import load_dotenv
-load_dotenv()
-import os
 
 
 #####################################################################################
