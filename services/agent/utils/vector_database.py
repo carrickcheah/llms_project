@@ -73,7 +73,7 @@ def qdrant_on_prem(
                 logger.warning(f"Collection '{collection_name}' does not exist in Qdrant. "
                              f"It will be created when documents are added.")
             
-            logger.info(f"Successfully connected to Qdrant vector store '{collection_name}'.")
+            logger.success(f"Successfully connected to Qdrant vector store '{collection_name}'.")
             return qdrant_store
         
         except Exception as e:

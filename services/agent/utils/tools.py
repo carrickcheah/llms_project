@@ -8,9 +8,6 @@
 # 6. test_embedding_retrieval: Tests vector search functionality.                      #
 # 7. answer_with_fallback: Multi-method question answering with fallbacks.             #
 # 8. clean_sql_query: Removes markdown tags from SQL queries.                          #
-# 9. generate_sql_query: Generates SQL query from user question (Task).                #
-# 10. execute_sql_query: Executes SQL query and returns result (Task).                 #
-# 11. process_database_question: Processes database question with SQL (Task).          #
 ########################################################################################
 
 import json
@@ -326,47 +323,3 @@ def clean_sql_query(sql_query):
     if lines[0].strip() == '```sql' and lines[-1].strip() == '```':
         return '\n'.join(lines[1:-1])
     return sql_query
-
-########################################################################################
-##          Task Functions Moved from main.py                                         ##
-########################################################################################
-
-@task
-def generate_sql_query(question: str, sql_generation_chain) -> str:
-    """Generate an SQL query from the user's question."""
-    logger.info(f"Generating SQL for: {question}")
-    return sql_generation_chain.invoke({"question": question})
-
-@task
-def execute_sql_query(sql_query: str, db) -> str:
-    """Execute the SQL query and return the result."""
-    logger.info(f"Executing SQL: {sql_query}")
-    try:
-        result = db.run(sql_query)
-        return result
-    except Exception as e:
-        logger.error(f"SQL execution failed: {str(e)}")
-        return f"Error executing query: {str(e)}"
-
-@task
-def process_database_question(question: str, sql_generation_chain, db, llm) -> str:
-    """Process a database-related question by generating and executing an SQL query, then formatting the response."""
-    try:
-        sql_query = generate_sql_query(question, sql_generation_chain).result()
-        result = execute_sql_query(sql_query, db).result()
-        dynamic_prompt = ChatPromptTemplate.from_template("""
-        Given an input question and its executed SQL result, return the answer with column names explored from the query.
-        Use the following format:
-
-        Question: "{question}"
-        SQLQuery: "{sql_query}"
-        SQLResult: "{result}"
-        Answer: "Final answer incorporating column names"
-        Insight: "Optimize the Answer into a simple report, approximately 20 words"
-        """)
-        response_chain = dynamic_prompt | llm | StrOutputParser()
-        response = response_chain.invoke({"question": question, "sql_query": sql_query, "result": result})
-        return response
-    except Exception as e:
-        logger.error(f"Error processing database question: {str(e)}")
-        return f"Error: {str(e)}"
