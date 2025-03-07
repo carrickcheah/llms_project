@@ -492,3 +492,36 @@ def execute_sql_with_no_data_handling(question: str, sql_query: str, db: SQLData
         })
 
     return response
+
+
+
+
+@task
+def collect_user_feedback(question: str, response: str, feedback_store: dict) -> dict:
+    """
+    Collect user feedback on the agent's response and store it for analysis.
+
+    Args:
+        question (str): The user's original question
+        response (str): The agent's response
+        feedback_store (dict): In-memory store for feedback (thread-specific)
+
+    Returns:
+        dict: Feedback result with 'is_helpful' (bool) and 'comment' (str or None)
+    """
+    try:
+        # In an interactive context, this would prompt the user.
+        # For now, we'll simulate it in run_interactive and log it here.
+        logger.info(f"Collecting feedback for question: '{question}' | Response: '{response[:50]}...'")
+        # Placeholder for feedback input (handled in run_interactive)
+        feedback = {"is_helpful": None, "comment": None}
+        feedback_store.setdefault("responses", []).append({
+            "question": question,
+            "response": response,
+            "is_helpful": feedback["is_helpful"],
+            "comment": feedback["comment"]
+        })
+        return feedback
+    except Exception as e:
+        logger.error(f"Error collecting feedback: {str(e)}")
+        return {"is_helpful": None, "comment": f"Error: {str(e)}"}
