@@ -5,7 +5,7 @@ from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import RunnableLambda
-from langgraph.func import entrypoint
+from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import MemorySaver
 
 # Custom utility imports
@@ -13,14 +13,16 @@ from utils.llm import initialize_openai, initialize_embeddings
 from utils.maria import initialize_database
 from utils.vector_database import qdrant_on_prem
 from utils.tools import load_sql_examples, is_database_question
-from utils.task import execute_sql_with_no_data_handling
 from utils.task import (
+    execute_sql_with_no_data_handling,
     find_similar_examples,
     extract_relevant_tables,
     execute_sql_query,
     validate_sql_with_llm,
     search_examples_for_sql,
     extract_tables_from_sql,
+    generate_dynamic_sql,
+    format_response,
 )
 
 # Global initialization
@@ -68,7 +70,8 @@ def sql_agent_workflow(inputs: dict) -> dict:
         logger.info(f"Database question detected: {question}")
 
         # Step 1: Search for similar examples in vector store
-        similar_examples = find_similar_examples(question, qdrant_store, embeddings)
+        similar_examples_future = find_similar_examples(question, qdrant_store, embeddings)
+        similar_examples = similar_examples_future.result()
 
         # Step 2: Check for an exact match in vector search results
         sql_query = None
@@ -95,23 +98,8 @@ def sql_agent_workflow(inputs: dict) -> dict:
                 return {
                     "response": f"Sorry, I can't process your request because the following table(s) were not found: {', '.join(missing_tables)}."
                 }
-            table_info = db.get_table_info(tables)
-            generation_prompt = PromptTemplate(
-                input_variables=["dialect", "question", "table_info"],
-                template="""
-                System: You are an expert SQL data analyst.
-                Given an input question, create a syntactically correct {dialect} query.
-                Return only the SQL query.
-                Question: "{question}"
-                Available tables: {table_info}
-                """
-            )
-            sql_generation_chain = generation_prompt | llm | StrOutputParser()
-            sql_query = sql_generation_chain.invoke({
-                "dialect": db.dialect,
-                "question": question,
-                "table_info": table_info
-            })
+            sql_query_future = generate_dynamic_sql(question, tables, similar_examples, db, llm)
+            sql_query = sql_query_future.result()
             tables = extract_tables_from_sql(sql_query)
 
         # Step 5: Validate the generated SQL query
@@ -126,7 +114,8 @@ def sql_agent_workflow(inputs: dict) -> dict:
                 "response": f"Sorry, I can't execute the query because the following table(s) were not found: {', '.join(missing_tables)}."
             }
 
-        if not validate_sql_with_llm(question, sql_query, db, llm):
+        validation_future = validate_sql_with_llm(question, sql_query, db, llm)
+        if not validation_future.result():
             return {"response": "The generated SQL query failed validation. Please refine your question or try again later."}
 
         # Step 6: Execute the query with no-data handling

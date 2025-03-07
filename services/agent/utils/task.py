@@ -23,6 +23,7 @@ import re
 import json
 from difflib import SequenceMatcher
 from langchain_core.output_parsers import StrOutputParser
+from langgraph.func import task
 
 
 ########################################################################################
@@ -171,6 +172,7 @@ def extract_relevant_tables(question, db):
 ##      2. find_similar_examples: Uses embeddings to find similar examples            ##
 ########################################################################################
 
+@task
 def find_similar_examples(question, vector_store, embeddings):
     """
     Find the most similar examples to the user's question using vector embeddings.
@@ -217,6 +219,7 @@ def find_similar_examples(question, vector_store, embeddings):
 ##      3. generate_dynamic_sql: Creates SQL based on tables and examples             ##
 ########################################################################################
 
+@task
 def generate_dynamic_sql(question, relevant_tables, similar_examples, db, llm):
     """
     Generate an SQL query using relevant tables and similar examples.
@@ -234,7 +237,6 @@ def generate_dynamic_sql(question, relevant_tables, similar_examples, db, llm):
     try:
         table_info = db.get_table_info(relevant_tables)
         examples_text = "\n".join([f"- Q: {ex['question']}\n  SQL: {ex['sql']}" for ex in similar_examples[:3]])
-
         prompt = ChatPromptTemplate.from_template("""
         System: You are an expert SQL data analyst.
         Given an input question, create a syntactically correct {dialect} query.
@@ -244,8 +246,8 @@ def generate_dynamic_sql(question, relevant_tables, similar_examples, db, llm):
         Similar examples:
         {examples_text}
         """)
-        chain = prompt.format(dialect=db.dialect, question=question, table_info=table_info, examples_text=examples_text) | llm | StrOutputParser()
-        sql_query = chain.invoke({})
+        chain = prompt | llm | StrOutputParser()
+        sql_query = chain.invoke({"dialect": db.dialect, "question": question, "table_info": table_info, "examples_text": examples_text})
         logger.info(f"Generated SQL: {sql_query}")
         return sql_query
     except Exception as e:
@@ -256,6 +258,7 @@ def generate_dynamic_sql(question, relevant_tables, similar_examples, db, llm):
 ##      4. execute_sql_query: Executes SQL query and returns result                   ##
 ########################################################################################
 
+@task
 def execute_sql_query(sql_query: str, db: SQLDatabase) -> str:
     """Executes the SQL query and returns the result."""
     logger.info(f"Executing SQL: {sql_query}")
@@ -270,6 +273,7 @@ def execute_sql_query(sql_query: str, db: SQLDatabase) -> str:
 ##      5. format_response: Formats SQL results into user-friendly responses          ##
 ########################################################################################
 
+@task
 def format_response(question, sql_query, result, llm):
     """
     Format the SQL query result into a user-friendly response.
@@ -375,8 +379,8 @@ def clean_sql_query(sql_query: str) -> str:
 ##                              9. validate_sql_with_llm                               ##
 ########################################################################################
 
+@task
 def validate_sql_with_llm(question: str, sql_query: str, db: SQLDatabase, llm) -> bool:
-    """Validate SQL query using LLM before execution."""
     prompt = ChatPromptTemplate.from_template("""
     You are a SQL validation expert. Check if this SQL query correctly answers the question and matches the database schema.
 
@@ -389,19 +393,17 @@ def validate_sql_with_llm(question: str, sql_query: str, db: SQLDatabase, llm) -
     2. Proper filters (e.g., year)
     3. Appropriate aggregation
 
-    Respond with "VALID" or "INVALID" and a reason.
+    Respond with "VALID" or "INVALID" followed by a reason.
     """)
-
     schema_info = db.get_table_info(extract_tables_from_sql(sql_query))
     chain = prompt | llm | StrOutputParser()
     response = chain.invoke({"question": question, "sql_query": sql_query, "schema_info": schema_info})
-
-    if "VALID" in response:
+    is_valid = response.strip().startswith("VALID")
+    if is_valid:
         logger.info("SQL validation passed")
-        return True
     else:
         logger.warning(f"SQL validation failed: {response}")
-        return False
+    return is_valid
 
 ########################################################################################
 ##      10. search_examples_for_sql: Searches for exact match examples in file.         ##
