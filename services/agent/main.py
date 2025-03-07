@@ -1,6 +1,5 @@
 # main.py ( always keep this # comment )
 import os
-import re
 from loguru import logger
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_core.output_parsers import StrOutputParser
@@ -14,11 +13,14 @@ from utils.llm import initialize_openai, initialize_embeddings
 from utils.maria import initialize_database
 from utils.vector_database import qdrant_on_prem
 from utils.tools import load_sql_examples, is_database_question
+from utils.task import execute_sql_with_no_data_handling
 from utils.task import (
     find_similar_examples,
     extract_relevant_tables,
     execute_sql_query,
-    validate_sql_with_llm,  # Import the new validation function
+    validate_sql_with_llm,
+    search_examples_for_sql,
+    extract_tables_from_sql,
 )
 
 # Global initialization
@@ -28,25 +30,6 @@ embeddings = initialize_embeddings(os.getenv("HUGGINGFACE_MODEL"))
 db = initialize_database(os.getenv("DATABASE_URI"))
 qdrant_store = qdrant_on_prem(embeddings, os.getenv("COLLECTION_NAME"))
 sql_examples = load_sql_examples(os.getenv("EXAMPLES_FILE_PATH"))
-
-def extract_tables_from_sql(sql_query: str) -> list:
-    """Extract table names from an SQL query."""
-    table_pattern = r'(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s|;|$|\n)'
-    tables = re.findall(table_pattern, sql_query, re.IGNORECASE)
-    tables = list(set(t.strip() for t in tables if t.strip()))
-    logger.info(f"Extracted tables from SQL: {tables}")
-    return tables
-
-def search_examples_for_sql(question: str, sql_examples) -> tuple[str, list]:
-    """Search sql_examples for an exact match and return its SQL and tables."""
-    for example in sql_examples:
-        if example["page_content"].strip().lower() == question.strip().lower():
-            sql_query = example["sql_query"]
-            logger.info(f"Exact match found in examples: '{sql_query}'")
-            tables = extract_tables_from_sql(sql_query)
-            return sql_query, tables
-    logger.warning(f"No exact match found in examples for '{question}'")
-    return None, []
 
 def generate_polite_response(question: str) -> str:
     prompt = ChatPromptTemplate.from_template("""
@@ -61,18 +44,35 @@ def generate_polite_response(question: str) -> str:
 
 @entrypoint(checkpointer=MemorySaver())
 def sql_agent_workflow(inputs: dict) -> dict:
+    """
+    Workflow to process a user's question, generate and execute an SQL query if applicable,
+    and return a formatted response. Handles all no-data cases gracefully.
+    
+    Args:
+        inputs (dict): Dictionary containing the user's question under the key "question".
+    
+    Returns:
+        dict: Dictionary with a "response" key containing the answer or a no-data message.
+    """
     question = inputs.get("question", "").strip()
     if not question:
         return {"response": "Please provide a question."}
 
+    # Helper function to check if all required tables exist in the database
+    def check_tables_exist(tables, database):
+        existing_tables = set(database.get_usable_table_names())
+        missing_tables = [t for t in tables if t not in existing_tables]
+        return missing_tables
+
     if is_database_question(question):
         logger.info(f"Database question detected: {question}")
-        
-        # Step 1: Vector search for similar examples
+
+        # Step 1: Search for similar examples in vector store
         similar_examples = find_similar_examples(question, qdrant_store, embeddings)
-        
-        # Step 2: Check for exact match in vector results
-        sql_query, tables = None, []
+
+        # Step 2: Check for an exact match in vector search results
+        sql_query = None
+        tables = []
         if similar_examples:
             for example in similar_examples:
                 if example["question"].strip().lower() == question.strip().lower():
@@ -80,48 +80,57 @@ def sql_agent_workflow(inputs: dict) -> dict:
                     tables = extract_tables_from_sql(sql_query)
                     logger.info(f"Exact match found in Qdrant: '{sql_query}'")
                     break
-        
-        # Step 3: Fallback to file-based examples
+
+        # Step 3: Fallback to file-based examples if no exact match
         if not sql_query:
             sql_query, tables = search_examples_for_sql(question, sql_examples)
-        
-        # Step 4: Generate SQL if no matches
+
+        # Step 4: Generate SQL if no matches are found
         if not sql_query:
             logger.info("No exact match found; generating SQL as fallback.")
             tables = extract_relevant_tables(question, db)
+            missing_tables = check_tables_exist(tables, db)
+            if missing_tables:
+                logger.error(f"Table(s) {missing_tables} not found in database.")
+                return {
+                    "response": f"Sorry, I can't process your request because the following table(s) were not found: {', '.join(missing_tables)}."
+                }
             table_info = db.get_table_info(tables)
             generation_prompt = PromptTemplate(
-                input_variables=["enter", "table_info"],
+                input_variables=["dialect", "question", "table_info"],
                 template="""
                 System: You are an expert SQL data analyst.
                 Given an input question, create a syntactically correct {dialect} query.
                 Return only the SQL query.
-                Question: "{enter}"
+                Question: "{question}"
                 Available tables: {table_info}
                 """
-            ).format(dialect=db.dialect, enter=question, table_info=table_info)
+            )
             sql_generation_chain = generation_prompt | llm | StrOutputParser()
-            sql_query = sql_generation_chain.invoke(question)
+            sql_query = sql_generation_chain.invoke({
+                "dialect": db.dialect,
+                "question": question,
+                "table_info": table_info
+            })
             tables = extract_tables_from_sql(sql_query)
 
-        # Step 5: Validate SQL using LLM
+        # Step 5: Validate the generated SQL query
+        if sql_query is None or sql_query == "":
+            logger.warning("Failed to generate SQL query.")
+            return {"response": "Sorry, I could not generate a suitable SQL query for your question. Please try rephrasing it."}
+        
+        missing_tables = check_tables_exist(tables, db)
+        if missing_tables:
+            logger.error(f"Table(s) {missing_tables} not found in database.")
+            return {
+                "response": f"Sorry, I can't execute the query because the following table(s) were not found: {', '.join(missing_tables)}."
+            }
+
         if not validate_sql_with_llm(question, sql_query, db, llm):
             return {"response": "The generated SQL query failed validation. Please refine your question or try again later."}
 
-        # Step 6: Execute and format response
-        result = execute_sql_query(sql_query, db)
-        dynamic_prompt = ChatPromptTemplate.from_template("""
-        Given an input question and its executed SQL result, return the answer with column names explored from the query.
-        Use the following format:
-
-        Question: "{question}"
-        SQLQuery: "{sql_query}"
-        SQLResult: "{result}"
-        Answer: "Final answer incorporating column names"
-        Insight: "Optimize the Answer into a simple report, approximately 20 words"
-        """)
-        response_chain = dynamic_prompt | llm | StrOutputParser()
-        response = response_chain.invoke({"question": question, "sql_query": sql_query, "result": result})
+        # Step 6: Execute the query with no-data handling
+        response = execute_sql_with_no_data_handling(question, sql_query, db, llm)
     else:
         logger.info(f"Non-database question detected: {question}")
         response = generate_polite_response(question)

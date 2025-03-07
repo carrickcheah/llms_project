@@ -1,4 +1,14 @@
 # tools.py
+########################################################################################
+# tools.py
+# Contents:
+# 1. load_sql_examples: Loads SQL examples from a JSON/JSONL file.
+# 2. is_database_question: Determines if a question is database-related.
+# 3. extract_question_type: Extracts the type of question.
+# 4. save_query_results: Saves query results for improvement.
+# 5. get_table_columns: Gets column information for a table.
+# 6. get_sample_data: Gets sample data from a table.
+########################################################################################
 import json
 import os
 from loguru import logger
@@ -7,10 +17,10 @@ import re
 def load_sql_examples(file_path):
     """
     Load SQL examples from a JSON or JSONL file.
-    
+
     Args:
         file_path (str): Path to the file containing SQL examples
-        
+
     Returns:
         list: List of SQL examples
     """
@@ -27,24 +37,24 @@ def load_sql_examples(file_path):
             logger.warning(f"Examples file not found: {file_path}")
     except Exception as e:
         logger.error(f"Error loading SQL examples: {str(e)}")
-    
+
     return examples
 
 def is_database_question(question):
     """
     Determine if a question is likely asking for database information.
-    
+
     Args:
         question (str): The user's question
-        
+
     Returns:
         bool: True if it's a database question, False otherwise
     """
     question_lower = question.lower().strip()
-    
+
     db_keywords = [
-        'query', 'sql', 'database', 'table', 
-        'column', 'data', 'find', 'show me', 
+        'query', 'sql', 'database', 'table',
+        'column', 'data', 'find', 'show me',
         'list', 'how many', 'count', 'total',
         'average', 'sum', 'minimum', 'maximum',
         'top', 'rank', 'ordered by', 'group by',
@@ -57,7 +67,7 @@ def is_database_question(question):
         'search for', 'look up', 'locate', 'identify',
         'summarize', 'aggregate', 'breakdown', 'analyze'
     ]
-    
+
     db_patterns = [
         r'how many .+ (?:in|with|by|for)',
         r'what (?:is|are) the .+?(?:of|in|with|by|for)',
@@ -80,14 +90,14 @@ def is_database_question(question):
         r'.+ (?:grouped by|ordered by|sorted by) .+',
         r'(?:overall|breakdown|summary) .+'
     ]
-    
+
     time_indicators = [
-        'today', 'yesterday', 'this week', 'last week', 
+        'today', 'yesterday', 'this week', 'last week',
         'this month', 'last month', 'this year', 'last year',
-        'quarter', 'recent', 'latest', 'current', 'past', 
+        'quarter', 'recent', 'latest', 'current', 'past',
         'previous', 'since', 'from', 'between', 'during', 'after', 'before'
     ]
-    
+
     bi_terms = [
         'sales', 'revenue', 'profit', 'margin', 'cost', 'expense',
         'growth', 'decline', 'performance', 'kpi', 'metric',
@@ -98,48 +108,48 @@ def is_database_question(question):
         'distribution', 'allocation', 'portfolio', 'budget',
         'target', 'goal', 'benchmark', 'comparison'
     ]
-    
+
     for keyword in db_keywords:
         if keyword in question_lower:
             logger.debug(f"Database keyword detected: {keyword}")
             return True
-    
+
     for pattern in db_patterns:
         if re.search(pattern, question_lower):
             logger.debug(f"Database question pattern detected: {pattern}")
             return True
-    
+
     has_time = any(indicator in question_lower for indicator in time_indicators)
     has_bi_term = any(term in question_lower for term in bi_terms)
     if has_time and has_bi_term:
         logger.debug(f"Temporal + business indicator detected")
         return True
-    
+
     bi_term_count = sum(1 for term in bi_terms if term in question_lower)
     if bi_term_count >= 2:
         logger.debug(f"Multiple business terms detected: {bi_term_count}")
         return True
-    
+
     starting_words = ['who', 'what', 'when', 'where', 'how', 'which', 'why', 'find', 'list', 'show']
     if any(question_lower.startswith(word) for word in starting_words):
         logger.debug(f"Query indicator starting word detected")
         return True
-    
+
     logger.debug(f"Not classified as a database question: {question}")
     return False
 
 def extract_question_type(question):
     """
     Extract the type of question to help guide SQL generation.
-    
+
     Args:
         question (str): The user's question
-        
+
     Returns:
         str: The question type (aggregation, comparison, ranking, etc.)
     """
     question_lower = question.lower()
-    
+
     question_types = {
         'count': [r'how many', r'count', r'number of'],
         'sum': [r'total', r'sum', r'sum of', r'add up'],
@@ -153,14 +163,14 @@ def extract_question_type(question):
         'time_series': [r'over time', r'trend', r'history', r'development'],
         'lookup': [r'details of', r'information on', r'data for', r'specifics about']
     }
-    
+
     detected_types = []
     for q_type, patterns in question_types.items():
         for pattern in patterns:
             if re.search(pattern, question_lower):
                 detected_types.append(q_type)
                 break
-    
+
     if len(detected_types) > 1:
         if 'ranking' in detected_types:
             return 'ranking'
@@ -170,13 +180,13 @@ def extract_question_type(question):
             for agg_type in ['count', 'sum', 'average', 'maximum', 'minimum']:
                 if agg_type in detected_types:
                     return agg_type
-    
+
     return detected_types[0] if detected_types else 'general'
 
 def save_query_results(query, sql, result, success=True):
     """
     Save query results for continuous improvement.
-    
+
     Args:
         query (str): The user's question
         sql (str): The SQL query
@@ -187,12 +197,12 @@ def save_query_results(query, sql, result, success=True):
         log_dir = os.getenv("QUERY_LOG_DIR", "logs/queries")
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
-        
+
         from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         status = "success" if success else "failed"
         filename = f"{log_dir}/query_{status}_{timestamp}.json"
-        
+
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "query": query,
@@ -200,23 +210,23 @@ def save_query_results(query, sql, result, success=True):
             "result": result,
             "success": success
         }
-        
+
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(log_entry, f, indent=2, ensure_ascii=False)
-        
+
         logger.info(f"Query log saved to {filename}")
-    
+
     except Exception as e:
         logger.error(f"Error saving query log: {str(e)}")
 
 def get_table_columns(db, table_name):
     """
     Get column information for a specific table.
-    
+
     Args:
         db (SQLDatabase): Database connection
         table_name (str): Name of the table
-        
+
     Returns:
         list: List of column information dictionaries
     """
@@ -234,12 +244,12 @@ def get_table_columns(db, table_name):
 def get_sample_data(db, table_name, limit=5):
     """
     Get sample data from a table for better SQL generation.
-    
+
     Args:
         db (SQLDatabase): Database connection
         table_name (str): Name of the table
         limit (int): Number of rows to retrieve
-        
+
     Returns:
         str: Sample data as a string
     """
