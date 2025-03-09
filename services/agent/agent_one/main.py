@@ -6,7 +6,7 @@ from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import MemorySaver
 
 # Custom utility imports
-from model import initialize_openai, initialize_embeddings
+from model import initialize_openai, initialize_embeddings, initialize_open_deep
 from maria import initialize_database
 from vectordb import qdrant_on_prem
 from task_03 import load_sql_examples, is_database_question
@@ -26,7 +26,7 @@ from task_02 import (
 
 # Global initialization (Never edit this part)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-llm = initialize_openai(os.getenv("OPENAI_API_KEY"))
+llm = initialize_open_deep(os.getenv("DEEPSEEK_API_KEY"))
 embeddings = initialize_embeddings(os.getenv("HUGGINGFACE_MODEL"))
 db = initialize_database(os.getenv("DATABASE_URI"))
 qdrant_store = qdrant_on_prem(embeddings, os.getenv("COLLECTION_NAME"))
@@ -70,24 +70,20 @@ def sql_agent_workflow(inputs: dict, config: dict = None) -> dict:
                     exact_match_found = True
                     break
 
-        # Step 2: Validate and execute if exact match found, otherwise generate new SQL
+        # Step 2: Execute directly if exact match found (skip validation), otherwise generate new SQL
         if sql_query and exact_match_found:
             missing_tables = check_tables_exist(tables, db)
             if missing_tables:
                 logger.error(f"Table(s) {missing_tables} not found in database.")
                 response = f"Sorry, I can't execute the query because the following table(s) were not found: {', '.join(missing_tables)}."
             else:
-                is_valid_future = validate_sql_with_llm(question, sql_query, db, llm)
-                is_valid = is_valid_future.result()
-                if not is_valid:
-                    logger.info("Exact match SQL failed validation; falling back to generation.")
-                    sql_query = None  # Reset to trigger generation
-                else:
-                    response = execute_sql_with_no_data_handling(question, sql_query, db, llm)
-
-        # Step 3: Generate SQL if no valid exact match
-        if not sql_query:
-            logger.info("No valid exact match found; generating SQL.")
+                # Skip validation for exact matches and execute directly
+                logger.info("Exact match found; executing without validation")
+                response = execute_sql_with_no_data_handling(question, sql_query, db, llm)
+        
+        # Step 3: Generate SQL if no exact match
+        else:
+            logger.info("No exact match found; generating SQL.")
             tables = extract_relevant_tables(question, db)
             missing_tables = check_tables_exist(tables, db)
             if missing_tables:
@@ -98,7 +94,7 @@ def sql_agent_workflow(inputs: dict, config: dict = None) -> dict:
                 sql_query = sql_query_future.result()
                 if sql_query.startswith("Error:"):
                     logger.error(f"SQL generation failed: {sql_query}")
-                    response = f"Sorry, I couldn’t generate an SQL query due to an error: {sql_query}"
+                    response = f"Sorry, I couldn't generate an SQL query due to an error: {sql_query}"
                 else:
                     tables = extract_tables_from_sql(sql_query)
                     missing_tables = check_tables_exist(tables, db)
@@ -106,10 +102,24 @@ def sql_agent_workflow(inputs: dict, config: dict = None) -> dict:
                         logger.error(f"Table(s) {missing_tables} not found in database.")
                         response = f"Sorry, I can't execute the query because the following table(s) were not found: {', '.join(missing_tables)}."
                     else:
+# In main.py
                         is_valid_future = validate_sql_with_llm(question, sql_query, db, llm)
                         is_valid = is_valid_future.result()
                         if not is_valid:
-                            response = "The generated SQL query failed validation. Please try rephrasing your question (e.g., check product name or year)."
+                            # Replace the hardcoded message with a dynamic LLM-generated response
+                            products_list = [ex["question"] for ex in examples[:5]] if examples else []
+                            error_context = {
+                                "question": question,
+                                "available_examples": products_list,
+                                "database_tables": tables
+                            }
+                            error_response_future = generate_response(
+                                question=question,
+                                llm=llm,
+                                response_type="validation_failure",
+                                context=error_context
+                            )
+                            response = error_response_future.result()
                         else:
                             response = execute_sql_with_no_data_handling(question, sql_query, db, llm)
 

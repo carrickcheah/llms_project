@@ -24,20 +24,21 @@ from task_01 import clean_sql_query
 
 
 #########################################################################################
-##      1. generate_response: Formats SQL results into user-friendly responses          ##
+##      1. generate_response: Formats SQL results into user-friendly responses        ##
 #########################################################################################
 
 @task
-def generate_response(question, llm, sql_query=None, result=None, response_type="polite"):
+def generate_response(question, llm, sql_query=None, result=None, response_type="polite", context=None):
     """
-    Generate a response based on the type: polite (non-database) or formatted (SQL result).
+    Generate a response based on the type: polite (non-database), formatted (SQL result), or validation_failure.
 
     Args:
         question (str): The user's question
         llm: Language model
         sql_query (str, optional): The SQL query (for formatted response)
         result (str, optional): The SQL result (for formatted response)
-        response_type (str): "polite" (default) or "formatted"
+        response_type (str): "polite" (default), "formatted", or "validation_failure"
+        context (dict, optional): Additional context for generating the response
 
     Returns:
         str: Generated response
@@ -66,6 +67,26 @@ def generate_response(question, llm, sql_query=None, result=None, response_type=
             Insight: "Optimize the Answer into a simple report, approximately 20 words"
             """
             inputs = {"question": question, "sql_query": sql_query, "result": result}
+        elif response_type == "validation_failure":
+            # New response type for validation failures
+            products = ", ".join([f"'{ex.split('for ')[1].split(' in')[0]}'" for ex in context.get("available_examples", [])][:3]) if context and context.get("available_examples") else "various products"
+            
+            prompt_template = """
+            You are a helpful SQL Assistant. The user asked a question that could not be answered because the SQL query validation failed.
+            
+            User question: "{question}"
+            
+            Available example queries in our system involve: {products}
+            
+            Write a helpful response that:
+            1. Suggests checking if they're using the correct product name
+            2. Mentions some of the products our system recognizes (based on the examples)
+            3. Suggests they might try a different year or product category
+            
+            Keep your response friendly, helpful and concise (3-4 sentences maximum).
+            """
+            
+            inputs = {"question": question, "products": products}
         else:
             raise ValueError(f"Invalid response_type: {response_type}")
 
@@ -74,8 +95,8 @@ def generate_response(question, llm, sql_query=None, result=None, response_type=
         return chain.invoke(inputs)
     except Exception as e:
         logger.error(f"Error generating {response_type} response: {str(e)}")
-        return f"Error: {str(e)}"
-
+        return f"I couldn't process your request. Please try rephrasing your question or check if the information you're looking for is available in our database."
+    
 #########################################################################################
 ##      2. execute_sql_with_no_data_handling: Executes SQL with no-data fallback      ##
 #########################################################################################
@@ -196,3 +217,4 @@ def generate_polite_response(question: str, llm) -> str:
     """)
     response_chain = prompt | llm | StrOutputParser()
     return response_chain.invoke({"question": question})
+

@@ -1,8 +1,25 @@
+###################################################
+# Never edit this comments, notify me if you keen to edit.
+# task_03.py:
+
+
+# Content of tables
+# 1. load_sql_examples  
+# 2. is_database_question      
+# 3. extract_question_type
+# 4. save_query_results 
+# 5. get_table_columns 
+# 6. get_sample_data 
+###################################################
 import json
 import os
 from loguru import logger
 import re
 
+
+#######################################################
+##             1. load_sql_examples                 ##
+#######################################################
 def load_sql_examples(file_path):
     """
     Load SQL examples from a JSON or JSONL file.
@@ -28,6 +45,10 @@ def load_sql_examples(file_path):
         logger.error(f"Error loading SQL examples: {str(e)}")
 
     return examples
+
+#########################################################
+##              2. is_database_question                ##
+#########################################################
 
 def is_database_question(question):
     """
@@ -127,7 +148,9 @@ def is_database_question(question):
     logger.debug(f"Not classified as a database question: {question}")
     return False
 
-def extract_question_type(question):
+######################################################
+##            3. extract_question_type              ##
+#######################################################
     """
     Extract the type of question to help guide SQL generation.
 
@@ -172,6 +195,10 @@ def extract_question_type(question):
 
     return detected_types[0] if detected_types else 'general'
 
+
+#######################################################
+##              4.  save_query_results               ##
+#######################################################
 def save_query_results(query, sql, result, success=True):
     """
     Save query results for continuous improvement.
@@ -208,6 +235,10 @@ def save_query_results(query, sql, result, success=True):
     except Exception as e:
         logger.error(f"Error saving query log: {str(e)}")
 
+        
+#######################################################
+##              5.  get_table_columns                ##
+#######################################################
 def get_table_columns(db, table_name):
     """
     Get column information for a specific table.
@@ -230,6 +261,9 @@ def get_table_columns(db, table_name):
         logger.error(f"Error getting column info for {table_name}: {str(e)}")
         return []
 
+#######################################################
+##              6.  get_sample_data                  ##
+#######################################################
 def get_sample_data(db, table_name, limit=5):
     """
     Get sample data from a table for better SQL generation.
