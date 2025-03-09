@@ -169,7 +169,7 @@ def extract_relevant_tables(question, db):
     return relevant_tables
 
 ########################################################################################
-##      2. find_similar_examples: Uses embeddings to find similar examples            ##
+##      2. find_similar_examples: Uses embeddings to find similar examples          done
 ########################################################################################
 
 @task
@@ -216,7 +216,7 @@ def find_similar_examples(question, vector_store, embeddings):
         return []
 
 ########################################################################################
-##      3. generate_dynamic_sql: Creates SQL based on tables and examples             ##
+##      3. generate_dynamic_sql: Creates SQL based on tables and examples          done
 ########################################################################################
 
 @task
@@ -255,7 +255,7 @@ def generate_dynamic_sql(question, relevant_tables, similar_examples, db, llm):
         return f"Error: {str(e)}"
 
 ########################################################################################
-##      4. execute_sql_query: Executes SQL query and returns result                   ##
+##      4. execute_sql_query: Executes SQL query and returns result                done
 ########################################################################################
 
 @task
@@ -270,7 +270,7 @@ def execute_sql_query(sql_query: str, db: SQLDatabase) -> str:
         return f"Error executing query: {str(e)}"
 
 ########################################################################################
-##      5. format_response: Formats SQL results into user-friendly responses          ##
+##      5. format_response: Formats SQL results into user-friendly responses      done
 ########################################################################################
 
 @task
@@ -350,7 +350,7 @@ def evaluate_sql_quality(sql_query, question, db):
         return 0.0
 
 ########################################################################################
-##      7. extract_tables_from_sql: Helper to extract tables from SQL queries         ##
+##      7. extract_tables_from_sql: Helper to extract tables from SQL queries       done
 ########################################################################################
 
 def extract_tables_from_sql(sql_query: str) -> list:
@@ -362,7 +362,7 @@ def extract_tables_from_sql(sql_query: str) -> list:
     return tables
 
 ########################################################################################
-##      8. clean_sql_query: Helper to clean SQL queries                               ##
+##      8. clean_sql_query: Helper to clean SQL queries                        done
 ########################################################################################
 
 def clean_sql_query(sql_query: str) -> str:
@@ -376,13 +376,13 @@ def clean_sql_query(sql_query: str) -> str:
 
 
 ########################################################################################
-##                              9. validate_sql_with_llm                               ##
+##                              9. validate_sql_with_llm                      done
 ########################################################################################
 
 @task
 def validate_sql_with_llm(question: str, sql_query: str, db: SQLDatabase, llm) -> bool:
     prompt = ChatPromptTemplate.from_template("""
-    You are a SQL validation expert. Check if this SQL query correctly answers the question and matches the database schema.
+    You are a MariaDB SQL validation expert. Verify if this SQL query correctly answers the question, matches the database schema, and ensures compatibility with MariaDB
 
     Question: "{question}"
     SQL Query: "{sql_query}"

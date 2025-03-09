@@ -1,4 +1,4 @@
-# llm.py
+# llm.py #  never edit this row
 ##########################################################################################
 #    Initialization utilities for database, LLM, and vector store connections            #
 ##########################################################################################
@@ -146,20 +146,20 @@ def initialize_anthropic(api_key: Optional[str] = None) -> ChatAnthropic:
         raise ValueError("ANTHROPIC_API_KEY is not set.")
 
     try:
+        model_name = os.getenv("ANTHROPIC_MODEL", "claude-3-haiku-20240307")
         model = ChatAnthropic(
             api_key=api_key,
-            model=os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-20241022"),
+            model=model_name,
             temperature=float(os.getenv("ANTHROPIC_TEMPERATURE", "0.0")),
             max_retries=int(os.getenv("ANTHROPIC_MAX_RETRIES", "3")),
             request_timeout=int(os.getenv("ANTHROPIC_TIMEOUT", "30")),
             max_tokens=int(os.getenv("ANTHROPIC_MAX_TOKENS", "2048")),
         )
-        logger.success(f"Language model '{model.model_name}' initialized successfully!")
+        logger.success(f"Language model '{model_name}' initialized successfully!")
         return model
     except Exception as e:
-        logger.error(f"Claude 3.5 Haiku initialization failed: {e}")
+        logger.error(f"Claude model initialization failed: {e}")
         raise ConnectionError(f"Failed to initialize Claude model: {str(e)}")
-
 
 
 ##########################################################################################

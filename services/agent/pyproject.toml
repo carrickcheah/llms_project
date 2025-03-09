@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=0.47.1",
     "azure-ai-inference>=1.0.0b9",
     "gradio>=5.20.0",
     "huggingface-hub>=0.29.1",
@@ -25,6 +26,7 @@ dependencies = [
     "pycountry>=24.6.1",
     "pymysql>=1.1.1",
     "python-dotenv>=1.0.1",
+    "pyyaml>=6.0.2",
     "qdrant-client>=1.13.2",
     "requests>=2.32.3",
     "sentence-transformers>=3.4.1",
