@@ -6,7 +6,7 @@ from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import MemorySaver
 
 # Custom utility imports
-from model import initialize_openai, initialize_embeddings, initialize_open_deep
+from model import initialize_openai, initialize_embeddings, initialize_open_deep, initialize_nvidia_deep
 from maria import initialize_database
 from vectordb import qdrant_on_prem
 from task_03 import load_sql_examples, is_database_question
@@ -26,7 +26,8 @@ from task_02 import (
 
 # Global initialization (Never edit this part)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-llm = initialize_open_deep(os.getenv("DEEPSEEK_API_KEY"))
+# llm = initialize_open_deep(os.getenv("DEEPSEEK_API_KEY"))
+llm = initialize_nvidia_deep(os.getenv("NVIDIA_API_KEY"))
 embeddings = initialize_embeddings(os.getenv("HUGGINGFACE_MODEL"))
 db = initialize_database(os.getenv("DATABASE_URI"))
 qdrant_store = qdrant_on_prem(embeddings, os.getenv("COLLECTION_NAME"))
@@ -102,7 +103,7 @@ def sql_agent_workflow(inputs: dict, config: dict = None) -> dict:
                         logger.error(f"Table(s) {missing_tables} not found in database.")
                         response = f"Sorry, I can't execute the query because the following table(s) were not found: {', '.join(missing_tables)}."
                     else:
-# In main.py
+
                         is_valid_future = validate_sql_with_llm(question, sql_query, db, llm)
                         is_valid = is_valid_future.result()
                         if not is_valid:

@@ -15,6 +15,7 @@
 
 from loguru import logger
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.utilities.sql_database import SQLDatabase
 from langgraph.func import task
@@ -196,6 +197,7 @@ def collect_user_feedback(question: str, response: str, feedback_store: dict) ->
 ##      4. generate_polite_response: Generate a polite response for non-database questions  ##
 ##############################################################################################
 
+
 @task
 def generate_polite_response(question: str, llm) -> str:
     """
@@ -208,13 +210,20 @@ def generate_polite_response(question: str, llm) -> str:
     Returns:
         str: A polite response guiding the user to database-related questions
     """
-    prompt = ChatPromptTemplate.from_template("""
-    You are a friendly SQL Agent. Your role is to assist users with database-related questions.
-    If a user asks something unrelated to the database, respond politely and guide them to ask a database-related question.
-
-    User's input: "{question}"
-    Your response:
-    """)
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content="""
+        You are a friendly SQL Agent. Your role is to assist users with database-related questions.
+        If a user asks something unrelated to the database, respond politely and guide them to ask a database-related question.
+        """),
+        HumanMessage(content="User's input: \"{question}\"\nYour response:")
+    ])
     response_chain = prompt | llm | StrOutputParser()
     return response_chain.invoke({"question": question})
 
+
+# prompt = ChatPromptTemplate.from_messages([
+#     SystemMessage(content="You are a friendly SQL Agent..."),
+#     HumanMessage(content="User's input: \"hello\"\nYour response:"),
+#     AIMessage(content="Hi there! How can I help you with database questions today?"),
+#     HumanMessage(content="User's input: \"{question}\"\nYour response:")
+# ])
