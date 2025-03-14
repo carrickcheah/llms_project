@@ -1,0 +1,13 @@
+[project]
+name = "agent-production-planning"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "matplotlib>=3.10.1",
+    "openpyxl>=3.1.5",
+    "ortools>=9.12.4544",
+    "pandas>=2.2.3",
+    "plotly>=6.0.0",
+]
