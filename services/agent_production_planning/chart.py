@@ -1,24 +1,42 @@
 # chart.py
 import plotly.figure_factory as ff
 import plotly.offline as pyo
+import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
+    """
+    Create an interactive Gantt chart visualization of the production schedule.
+    
+    Args:
+        schedule: Dictionary mapping machine IDs to lists of scheduled jobs
+                 Each job is a tuple of (job_name, start_time, end_time, priority, [planned_start], [planned_end])
+        output_file: Path to save the HTML output
+        
+    Returns:
+        Boolean indicating success
+    """
+    current_time = int(datetime.now().timestamp())
     df_list = []
     # Priority colors from highest (red) to lowest (green)
     colors = {
-        'Priority 1 (Highest)': 'rgb(178, 34, 34)',    # Dark red
-        'Priority 2 (High)': 'rgb(255, 69, 0)',        # Orange-red
-        'Priority 3 (Medium)': 'rgb(255, 165, 0)',     # Orange
-        'Priority 4 (Normal)': 'rgb(30, 144, 255)',    # Blue
-        'Priority 5 (Low)': 'rgb(60, 179, 113)'        # Green
+        'Priority 1 (Highest)': 'rgb(255, 0, 0)',      # Bright red (unchanged)
+        'Priority 2 (High)': 'rgb(255, 165, 0)',       # Traffic light orange
+        'Priority 3 (Medium)': 'rgb(0, 128, 0)',       # Green
+        'Priority 4 (Normal)': 'rgb(128, 0, 128)',     # Purple (unchanged)
+        'Priority 5 (Low)': 'rgb(0, 0, 255)'        # Blue (unchanged)
     }
     
     # Check if schedule is empty
     if not schedule:
-        print("Warning: Empty schedule provided to create_interactive_gantt. Creating minimal chart.")
+        logger.warning("Empty schedule provided to create_interactive_gantt. Creating minimal chart.")
         # Create a dummy entry
         current_time = int(datetime.now().timestamp())
         df_list.append(dict(
@@ -36,46 +54,51 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
             if machine not in machine_groups:
                 machine_groups[machine] = []
             
-            for job_id, start, end in tasks:
-                # Parse job ID to extract priority if available
-                job_parts = str(job_id).split('_')
-                priority = None
+            for task in tasks:
+                # Handle different formats from scheduler
+                # Format 1: (job_id, start, end, priority)
+                # Format 2: (job_id, start, end, priority, planned_start, planned_end)
+                if len(task) >= 6:
+                    job_id, start, end, priority, planned_start, planned_end = task
+                elif len(task) >= 4:
+                    job_id, start, end, priority = task
+                    planned_start = start
+                    planned_end = end
+                else:
+                    logger.warning(f"Invalid task format: {task}")
+                    continue
                 
-                # Try to extract priority from job_id if it has a format like "JOXX12345_P1"
-                for part in job_parts:
-                    if part.startswith('P') and len(part) == 2 and part[1].isdigit():
-                        priority = int(part[1])
-                        break
-                
-                machine_groups[machine].append((job_id, start, end, priority))
+                machine_groups[machine].append((job_id, start, end, priority, planned_start, planned_end))
         
         # Process all jobs
         flat_schedule = []
         for machine, jobs in machine_groups.items():
-            for job_id, start, end, priority in jobs:
-                flat_schedule.append((job_id, machine, start, end, priority))
+            for job_id, start, end, priority, planned_start, planned_end in jobs:
+                flat_schedule.append((job_id, machine, start, end, priority, planned_start, planned_end))
         
         # Sort by start time
         flat_schedule.sort(key=lambda x: x[2])
         
-        for job_id, machine, start, end, priority in flat_schedule:
+        for job_id, machine, start, end, priority, planned_start, planned_end in flat_schedule:
             # Validate timestamps
             if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
-                print(f"Warning: Invalid timestamp for job {job_id} on machine {machine}")
+                logger.warning(f"Invalid timestamp for job {job_id} on machine {machine}")
                 continue
             
             # Skip invalid times
             if end <= start:
-                print(f"Warning: Job {job_id} has invalid time range: {start} to {end}")
+                logger.warning(f"Job {job_id} has invalid time range: {start} to {end}")
                 continue
             
             # Use extracted priority if available, otherwise default to 3 (medium)
             job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
-            priority_label = f"Priority {job_priority} ({'Highest' if job_priority == 1 else 'High' if job_priority == 2 else 'Medium' if job_priority == 3 else 'Normal' if job_priority == 4 else 'Low'})"
+            priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
             
             try:
                 start_date = datetime.fromtimestamp(start)
                 end_date = datetime.fromtimestamp(end)
+                planned_start_date = datetime.fromtimestamp(planned_start) if planned_start else None
+                planned_end_date = datetime.fromtimestamp(planned_end) if planned_end else None
                 duration_hours = (end-start)/3600
                 
                 # Machine name with shortened display for better visualization
@@ -83,21 +106,33 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
                 if len(str(machine)) > 15:
                     machine_display = str(machine)[:15] + "..."
                 
+                # Create description with original and planned times
+                description = (f"<b>Job:</b> {job_id}<br>"
+                              f"<b>Machine:</b> {machine}<br>"
+                              f"<b>Priority:</b> {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})<br>"
+                              f"<b>Start:</b> {start_date.strftime('%Y-%m-%d %H:%M')}<br>"
+                              f"<b>End:</b> {end_date.strftime('%Y-%m-%d %H:%M')}<br>"
+                              f"<b>Duration:</b> {duration_hours:.1f} hours<br>")
+                
+                # Add planned times if different from actual times
+                if planned_start_date and abs(planned_start - start) > 3600:  # More than 1 hour difference
+                    description += f"<b>Planned Start:</b> {planned_start_date.strftime('%Y-%m-%d %H:%M')}<br>"
+                
+                if planned_end_date and abs(planned_end - end) > 3600:  # More than 1 hour difference
+                    description += f"<b>Planned End:</b> {planned_end_date.strftime('%Y-%m-%d %H:%M')}<br>"
+                
+                description += f"<b>Days from now:</b> {(start-current_time)/(24*3600):.1f} days"
+                
                 df_list.append(dict(
                     Task=str(machine_display),
                     Start=start_date,
                     Finish=end_date,
                     Resource=str(job_id),
                     Priority=priority_label,
-                    Description=(f"<b>Job:</b> {job_id}<br>"
-                                f"<b>Machine:</b> {machine}<br>"
-                                f"<b>Priority:</b> {job_priority}<br>"
-                                f"<b>Start:</b> {start_date.strftime('%Y-%m-%d %H:%M')}<br>"
-                                f"<b>End:</b> {end_date.strftime('%Y-%m-%d %H:%M')}<br>"
-                                f"<b>Duration:</b> {duration_hours:.1f} hours")
+                    Description=description
                 ))
             except (ValueError, OverflowError) as e:
-                print(f"Error processing job {job_id}: {e}")
+                logger.error(f"Error processing job {job_id}: {e}")
     
     df = pd.DataFrame(df_list)
     
@@ -134,19 +169,43 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
             fig.data[i].hoverinfo = 'text'
         
         # Add a timestamp to show when this was generated
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         fig.add_annotation(
-            text=f"Generated on: {current_time}",
+            text=f"Generated on: {current_time_str}",
             xref="paper", yref="paper",
             x=0.5, y=-0.05,
             showarrow=False,
             font=dict(size=10, color="gray")
         )
         
+        # Add a vertical line for the current time
+        fig.add_shape(
+            type="line",
+            x0=datetime.fromtimestamp(current_time),
+            y0=0,
+            x1=datetime.fromtimestamp(current_time),
+            y1=1,
+            yref="paper",
+            line=dict(
+                color="red",
+                width=2,
+                dash="dash",
+            ),
+        )
+        
+        fig.add_annotation(
+            x=datetime.fromtimestamp(current_time),
+            y=1.01,
+            yref="paper",
+            text="Current Time",
+            showarrow=False,
+            font=dict(color="red"),
+        )
+        
         # Save the chart
         pyo.plot(fig, filename=output_file, auto_open=False)
-        print(f"Interactive Gantt chart saved to: {os.path.abspath(output_file)}")
+        logger.info(f"Interactive Gantt chart saved to: {os.path.abspath(output_file)}")
         return True
     except Exception as e:
-        print(f"Error creating Gantt chart: {e}")
+        logger.error(f"Error creating Gantt chart: {e}")
         return False
