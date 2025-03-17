@@ -1,9 +1,37 @@
-# chart.py (simplified for PROCESS_CODE)
+# chart.py (modified to ensure correct process sequence in visualization)
 import plotly.figure_factory as ff
 import plotly.offline as pyo
 import pandas as pd
 from datetime import datetime
 import os
+import re
+
+def extract_process_number(process_code):
+    """Extract process number (e.g., 1 from CP08-231B-P01-06 or cp08-231-P01)"""
+    # Convert to uppercase for consistency
+    process_code = process_code.upper()
+    
+    # Look for the pattern P followed by 2 digits
+    match = re.search(r'P(\d{2})', process_code)
+    if match:
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return 999
+    return 999
+
+def extract_job_family(process_code):
+    """Extract job family code (e.g., CP08-231B from CP08-231B-P01-06)"""
+    # Convert to uppercase for consistency
+    process_code = process_code.upper()
+    
+    match = re.search(r'(.*?)-P\d+', process_code)
+    if match:
+        return match.group(1)
+    parts = process_code.split("-P")
+    if len(parts) >= 2:
+        return parts[0]
+    return process_code
 
 def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
     """
@@ -53,8 +81,24 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
                 
                 flat_schedule.append((process_code, machine, start, end, priority))
         
-        # Now create the data for the chart
+        # Group processes by job family and sort by sequence number for proper Y-axis ordering
+        process_info = {}
         for process_code, machine, start, end, priority in flat_schedule:
+            family = extract_job_family(process_code)
+            sequence = extract_process_number(process_code)
+            if family not in process_info:
+                process_info[family] = []
+            process_info[family].append((process_code, machine, start, end, priority, sequence))
+
+        # Sort within each family by sequence number
+        sorted_flat_schedule = []
+        for family, processes in process_info.items():
+            # Sort by sequence number within family
+            sorted_processes = sorted(processes, key=lambda x: x[5])
+            sorted_flat_schedule.extend(sorted_processes)
+        
+        # Now create the data for the chart with proper sequence ordering
+        for process_code, machine, start, end, priority, _ in sorted_flat_schedule:
             # Validate timestamps
             if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
                 print(f"Warning: Invalid timestamp for process {process_code} on machine {machine}")
