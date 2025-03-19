@@ -1,173 +1,140 @@
-# greedy.py (modified to use PROCESS_CODE in output and enforce process sequence)
+import logging
 from datetime import datetime
 import re
 
+# Configure logging (standalone or align with project setup)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 def extract_process_number(process_code):
-    """Extract process number (e.g., 1 from CP08-231B-P01-06 or cp08-231-P01)"""
-    # Convert to uppercase for consistency
-    process_code = process_code.upper()
-    
-    # Look for the pattern P followed by 2 digits
-    match = re.search(r'P(\d{2})', process_code)
+    """
+    Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found.
+    """
+    print(f"Extracting sequence from: {process_code}")
+    match = re.search(r'P(\d{2})-\d+', str(process_code).upper())  # Match exactly two digits after P
     if match:
-        try:
-            return int(match.group(1))
-        except ValueError:
-            return 999
+        seq = int(match.group(1))
+        print(f"Extracted sequence: {seq}")
+        return seq
+    print("No match found, returning 999")
     return 999
 
 def extract_job_family(process_code):
-    """Extract job family code (e.g., CP08-231B from CP08-231B-P01-06)"""
-    # Convert to uppercase for consistency
-    process_code = process_code.upper()
-    
+    """
+    Extract the job family (e.g., 'CP08-231B') from the process code.
+    """
+    process_code = str(process_code).upper()
     match = re.search(r'(.*?)-P\d+', process_code)
     if match:
-        return match.group(1)
+        family = match.group(1)
+        logger.debug(f"Extracted family {family} from {process_code}")
+        return family
     parts = process_code.split("-P")
     if len(parts) >= 2:
-        return parts[0]
+        family = parts[0]
+        logger.debug(f"Extracted family {family} from {process_code} (using split)")
+        return family
+    logger.warning(f"Could not extract family from {process_code}, using full code")
     return process_code
 
-def greedy_schedule(jobs, machines, setup_times=None):
+def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
     """
-    Enhanced greedy scheduling algorithm with machine balancing and setup time consideration.
-    Enforces process code sequence dependencies (P01->P02->P03).
-    
+    Create a schedule using an enhanced greedy algorithm with process sequence enforcement,
+    considering due dates.
+
     Args:
-        jobs: List of tuples (job_name, process_code, machine, duration, due_time, priority, start_time)
-        machines: List of tuples (id, machine_name, capacity)
-        setup_times: Optional dictionary mapping (process_code1, process_code2) to setup duration
-    
+        jobs (list): List of job dictionaries (e.g., {'PROCESS_CODE': '...', 'MACHINE_ID': '...', 'processing_time': ..., 'DUE_DATE_TIME': ..., 'PRIORITY': ...})
+        machines (list): List of machine IDs
+        setup_times (dict): Dictionary mapping (process_code1, process_code2) to setup duration (default: None)
+        enforce_sequence (bool): Whether to enforce process sequence dependencies
+
     Returns:
-        Dictionary mapping machine IDs to lists of scheduled jobs (process_code, start_time, end_time, priority)
+        dict: Schedule as {machine: [(process_code, start, end, priority), ...]}
     """
-    print("Using enhanced greedy scheduling algorithm with process sequence enforcement")
     current_time = int(datetime.now().timestamp())
-    
-    # Filter valid jobs
-    valid_jobs = []
+    schedule = {machine: [] for machine in machines}
+    machine_availability = {machine: current_time for machine in machines}
+
+    # Validate jobs
     for job in jobs:
-        if len(job) < 6:
-            continue
-            
-        # Extract key job information
-        job_name = job[0] if len(job) > 0 else ""
-        process_code = job[1] if len(job) > 1 else ""
-        machine = job[2] if len(job) > 2 else ""
-        duration = job[3] if len(job) > 3 else 0
-        due_time = job[4] if len(job) > 4 else 0
-        priority = job[5] if len(job) > 5 else 5
-        earliest_start = job[6] if len(job) > 6 else int(datetime.now().timestamp())
-        
-        if duration <= 0 or not machine:
-            continue
-            
-        # Extract sequence information
-        family = extract_job_family(process_code)
-        sequence = extract_process_number(process_code)
-        
-        # Create expanded job tuple with family and sequence information
-        valid_job = (job_name, process_code, machine, duration, due_time, priority, 
-                     earliest_start, family, sequence)
-        valid_jobs.append(valid_job)
-    
-    # Group jobs by family
-    job_families = {}
-    for job in valid_jobs:
-        family = job[7]  # family is at index 7
-        if family not in job_families:
-            job_families[family] = []
-        job_families[family].append(job)
-    
-    # Sort each family by sequence number and set earliest_start times
-    # to ensure P01 finishes before P02 can start
-    consolidated_jobs = []
-    for family, family_jobs in job_families.items():
-        # Sort by sequence number
-        sorted_jobs = sorted(family_jobs, key=lambda j: j[8])  # sequence is at index 8
-        
-        # Set cascading earliest start times
-        prev_end_time = current_time
-        for i, job in enumerate(sorted_jobs):
-            job_name, process_code, machine, duration, due_time, priority, _, family, sequence = job
-            
-            # Set earliest start time to ensure sequence dependency
-            earliest_start = max(current_time, prev_end_time)
-            
-            # Update for next job in sequence
-            prev_end_time = earliest_start + duration
-            
-            # Re-create job tuple with updated earliest_start
-            updated_job = (job_name, process_code, machine, duration, due_time, priority, earliest_start)
-            consolidated_jobs.append(updated_job)
-            
-            print(f"Sequencing: {family} - {process_code} (seq {sequence}) can start after {datetime.fromtimestamp(earliest_start)}")
-    
-    # Prioritize jobs by a weighted score of priority and due date
-    # Priority 1 (highest) gets highest weight
-    def job_score(job):
-        _, _, _, _, due_time, priority, _ = job
-        days_to_due = max(0, (due_time - current_time) / (24 * 3600))
-        # Priority is 1-5 where 1 is highest, convert to 5-1 where 5 is highest
-        priority_weight = 6 - priority 
-        urgency = max(1, 30 - days_to_due)  # Higher urgency if fewer days to due date
-        return (priority_weight * 10) * urgency  # Weighted score favoring high priority and close due dates
-    
-    sorted_jobs = sorted(consolidated_jobs, key=job_score, reverse=True)
-    
-    # Initialize schedule data structures
-    machine_end_times = {m[1]: current_time for m in machines if m[1]}
-    machine_last_process = {}  # To track setup times
-    schedule = {}
-    
-    # Maximum number of jobs to consider (safety cap)
-    max_jobs = min(1000, len(sorted_jobs))
-    
-    # Schedule jobs one by one
-    for job in sorted_jobs[:max_jobs]:
-        job_name, process_code, machine, duration, due_time, priority, earliest_start = job
-        
-        if machine not in machine_end_times:
-            continue
-        
-        # Consider setup time if provided
-        setup_time = 0
-        if setup_times and process_code and machine in machine_last_process:
-            last_process = machine_last_process.get(machine)
-            if last_process and last_process in setup_times and process_code in setup_times[last_process]:
-                setup_time = setup_times[last_process][process_code]
-        
-        # Calculate start and end times
-        start_time = max(machine_end_times[machine] + setup_time, earliest_start)
-        end_time = start_time + duration
-        
-        # Add to schedule
-        if machine not in schedule:
-            schedule[machine] = []
-        
-        # MODIFIED: Use process_code instead of job_name as the first element in the tuple
-        schedule[machine].append((process_code, start_time, end_time, priority))
-        machine_end_times[machine] = end_time
-        machine_last_process[machine] = process_code
-        
-        # Print debugging information for high-priority jobs
-        if priority <= 2:  # Priority 1 or 2
-            print(f"Scheduled priority {priority} job {job_name} on {machine}: " +
-                  f"{datetime.fromtimestamp(start_time)} to {datetime.fromtimestamp(end_time)}")
-    
-    # Sort jobs by start time for each machine
-    for machine in schedule:
-        schedule[machine].sort(key=lambda x: x[1])
-    
-    total_jobs = sum(len(jobs) for jobs in schedule.values())
-    print(f"Enhanced greedy schedule created with {total_jobs} jobs")
-    
-    # Calculate schedule statistics
-    if total_jobs > 0:
-        earliest_start = min(job[1] for machine_jobs in schedule.values() for job in machine_jobs)
-        latest_end = max(job[2] for machine_jobs in schedule.values() for job in machine_jobs)
-        total_span = latest_end - earliest_start
-        print(f"Schedule span: {total_span/3600:.2f} hours ({datetime.fromtimestamp(earliest_start)} to {datetime.fromtimestamp(latest_end)})")
-    
+        if not isinstance(job.get('processing_time', 0), (int, float)) or job.get('processing_time', 0) <= 0:
+            logger.error(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}: {job.get('processing_time')}")
+            raise ValueError(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}")
+
+    # Enforce process sequence dependencies or sort by priority and due date
+    if enforce_sequence:
+        logger.info("Enforcing process sequence dependencies (P01->P02->P03)...")
+        # Group jobs by family
+        family_groups = {}
+        for job in jobs:
+            family = extract_job_family(job['PROCESS_CODE'])
+            if family not in family_groups:
+                family_groups[family] = []
+            family_groups[family].append(job)
+
+        # Sort within each family by sequence
+        sorted_jobs = []
+        for family, family_jobs in family_groups.items():
+            sorted_family_jobs = sorted(family_jobs, key=lambda x: extract_process_number(x['PROCESS_CODE']))
+            logger.info(f"Family {family} process sequence: {', '.join(job['PROCESS_CODE'] for job in sorted_family_jobs)}")
+            sorted_jobs.extend(sorted_family_jobs)
+    else:
+        # Sort by priority and due date (earlier due dates get higher priority)
+        sorted_jobs = sorted(jobs, key=lambda x: (x['PRIORITY'], x.get('DUE_DATE_TIME', float('inf'))))
+
+    # Track the latest end time for each family to enforce sequence
+    family_end_times = {}
+    for job in sorted_jobs:
+        job_id = job['PROCESS_CODE']
+        machine_id = job['MACHINE_ID']
+        duration = job['processing_time']
+        due_time = job.get('DUE_DATE_TIME', current_time + 30 * 24 * 3600)  # Default to 30 days if not provided
+        family = extract_job_family(job_id)
+
+        # Get the earliest start time considering sequence dependencies and due time
+        earliest_start = max(machine_availability[machine_id], current_time)
+        if enforce_sequence and family in family_end_times:
+            earliest_start = max(earliest_start, family_end_times[family])
+        # Ensure start time respects due date (start before due minus processing time)
+        earliest_start = min(earliest_start, due_time - duration)
+
+        # Schedule the job
+        start = earliest_start
+        end = start + duration
+
+        # Apply setup time if provided
+        if setup_times and job_id in setup_times and schedule[machine_id]:
+            last_job = schedule[machine_id][-1]
+            last_job_end = last_job[2]
+            setup_duration = setup_times[job_id].get(last_job[0], 0)
+            start = max(start, last_job_end + setup_duration)
+            end = start + duration
+
+        # Schedule the job
+        schedule[machine_id].append((job_id, start, end, job['PRIORITY']))
+        machine_availability[machine_id] = end
+        if enforce_sequence:
+            family_end_times[family] = end
+        logger.info(f"Scheduled priority {job['PRIORITY']} job {job.get('JOB_CODE', job_id)} on {machine_id}: "
+                    f"{datetime.fromtimestamp(start)} to {datetime.fromtimestamp(end)}")
+
+    logger.info(f"Enhanced greedy schedule created with {sum(len(tasks) for tasks in schedule.values())} jobs")
+    schedule_span = max((end for tasks in schedule.values() for _, _, end, _ in tasks), default=current_time) - \
+                    min((start for tasks in schedule.values() for _, start, _, _ in tasks), default=current_time)
+    logger.info(f"Schedule span: {schedule_span/3600:.2f} hours ({datetime.fromtimestamp(min((start for tasks in schedule.values() for _, start, _, _ in tasks), default=current_time))} to "
+                f"{datetime.fromtimestamp(max((end for tasks in schedule.values() for _, _, end, _ in tasks), default=current_time))})")
     return schedule
+
+if __name__ == "__main__":
+    # Example usage for testing
+    jobs = [
+        {'PROCESS_CODE': 'CP08-231B-P01-06', 'MACHINE_ID': 'WS01', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 20000, 'DUE_DATE_TIME': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P02-06', 'MACHINE_ID': 'PP23-060T', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 43636, 'DUE_DATE_TIME': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P03-06', 'MACHINE_ID': 'JIG-HAND BEND', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 60000, 'DUE_DATE_TIME': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P04-06', 'MACHINE_ID': 'PP23-060T', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 34325, 'DUE_DATE_TIME': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P05-06', 'MACHINE_ID': 'PP23', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 60000, 'DUE_DATE_TIME': 1744848000},
+    ]
+    machines = ['WS01', 'PP23-060T', 'JIG-HAND BEND', 'PP23']
+    setup_times = {job['PROCESS_CODE']: {prev_job['PROCESS_CODE']: 0 for prev_job in jobs if prev_job != job} for job in jobs}  # Placeholder setup times
+    schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=True)
+    print(schedule)

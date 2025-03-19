@@ -46,8 +46,8 @@ def clean_excel_data(df):
     if 'PROCESS_CODE' in df.columns:
         df = df[df['PROCESS_CODE'].notna() & (df['PROCESS_CODE'].str.len() > 0)]
     
-    # Process date columns
-    date_cols = ['LCD_DATE', 'PLANNED_START', 'PLANNED_END', 'LATEST COMPLETION DATE']
+    # Process date columns (only LCD_DATE for DUE_DATE_TIME)
+    date_cols = ['LCD_DATE']
     for col in date_cols:
         if col in df.columns:
             # Try multiple date formats
@@ -74,19 +74,7 @@ def clean_excel_data(df):
     # Calculate processing time from hours
     if 'HOURS NEEDED' in df.columns and 'OUTPUT_PER_HOUR' in df.columns:
         df.loc[df['OUTPUT_PER_HOUR'] <= 0, 'OUTPUT_PER_HOUR'] = 100
-        df['processing_time'] = df['HOURS NEEDED'] * 3600
-    
-    # Add auto-generated PLANNED_END if PLANNED_START is available but PLANNED_END is not
-    if 'PLANNED_START' in df.columns and 'HOURS NEEDED' in df.columns:
-        if 'PLANNED_END' not in df.columns:
-            df['PLANNED_END'] = None
-        mask = df['PLANNED_START'].notna() & df['HOURS NEEDED'].notna() & df['PLANNED_END'].isna()
-        if mask.any():
-            df.loc[mask, 'PLANNED_END'] = df.loc[mask].apply(
-                lambda row: row['PLANNED_START'] + timedelta(hours=float(row['HOURS NEEDED'])), 
-                axis=1
-            )
-            logger.info(f"Auto-generated PLANNED_END for {mask.sum()} rows")
+        df['processing_time'] = (df['HOURS NEEDED'] * 3600).astype(int)
     
     removed_rows = initial_rows - len(df)
     logger.info(f"Data cleaning: {len(df)} rows after cleaning (removed {removed_rows} invalid rows)")
@@ -100,7 +88,7 @@ def clean_excel_data(df):
     return df
 
 def convert_to_epoch(df, columns, base_date=None):
-    """Convert date/time/hour columns to epoch timestamps (seconds since Unix epoch)."""
+    """Convert date columns to epoch timestamps (seconds since Unix epoch)."""
     df = df.copy()
     if base_date is None:
         base_date = datetime.now()
@@ -110,7 +98,7 @@ def convert_to_epoch(df, columns, base_date=None):
     elif isinstance(base_date, pd.Timestamp):
         base_date = base_date.to_pydatetime().replace(tzinfo=None)
     
-    # Default dates for missing values (30 days from now for due dates)
+    # Default due date (30 days from now)
     default_due_date = int((datetime.now() + pd.Timedelta(days=30)).timestamp())
     
     for col in columns:
@@ -120,7 +108,6 @@ def convert_to_epoch(df, columns, base_date=None):
         
         epoch_col = f"epoch_{col.lower().replace(' ', '_').replace('-', '_')}"
         try:
-            # For date columns that should be datetime objects
             if df[col].dtype in ['object', 'string'] or pd.api.types.is_datetime64_any_dtype(df[col]):
                 # Try with multiple date formats
                 date_formats = ['%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']
@@ -143,17 +130,9 @@ def convert_to_epoch(df, columns, base_date=None):
                     df[epoch_col] = pd.to_datetime(df[col], errors='coerce').apply(
                         lambda x: int(x.timestamp()) if pd.notna(x) else None
                     )
-            # For numeric columns (hours) that should be added to base date
-            elif pd.api.types.is_numeric_dtype(df[col]):
-                df[epoch_col] = df[col].apply(
-                    lambda x: int(base_date.timestamp() + x * 3600) if pd.notna(x) else None
-                )
-            else:
-                logger.warning(f"Column '{col}' has unsupported type {df[col].dtype}. Skipping.")
-                continue
-                
-            # Handle special cases for required fields
-            if col in ['LATEST COMPLETION DATE', 'LCD_DATE'] and df[epoch_col].isna().all():
+            
+            # Handle special cases for due dates
+            if col in ['LCD_DATE'] and df[epoch_col].isna().all():
                 logger.warning(f"No valid data in '{col}' - setting default due dates (30 days from now)")
                 df[epoch_col] = default_due_date
             
@@ -161,8 +140,7 @@ def convert_to_epoch(df, columns, base_date=None):
             logger.info(f"Converted '{col}' to '{epoch_col}': {valid_count} valid timestamps")
         except Exception as e:
             logger.error(f"Error converting column '{col}' to epoch: {e}")
-            # For due date columns, use default values if conversion fails
-            if col in ['LATEST COMPLETION DATE', 'LCD_DATE']:
+            if col in ['LCD_DATE']:
                 logger.warning(f"Using default due dates for '{col}'")
                 df[epoch_col] = default_due_date
             else:
@@ -170,15 +148,15 @@ def convert_to_epoch(df, columns, base_date=None):
     
     return df
 
-def load_jobs_planning_data(file_path):
+def load_job_data(file_path):
     """
-    Load and process job planning data from Excel file.
-    
+    Load and process job data from Excel file.
+
     Args:
-        file_path: Path to Excel file containing job data
-        
+        file_path (str): Path to Excel file containing job data
+
     Returns:
-        Tuple of (jobs, machines, setup_times)
+        pd.DataFrame: Processed DataFrame with job data
     """
     if not os.path.exists(file_path):
         error_msg = f"Excel file not found at {file_path}"
@@ -212,7 +190,7 @@ def load_jobs_planning_data(file_path):
     df = clean_excel_data(df)
     
     # Convert date columns to epoch timestamps
-    date_columns = ['LCD_DATE', 'PLANNED_START', 'PLANNED_END', 'LATEST COMPLETION DATE']
+    date_columns = ['LCD_DATE']
     df = convert_to_epoch(df, date_columns)
     
     # Define column mapping to standardize column names
@@ -224,9 +202,6 @@ def load_jobs_planning_data(file_path):
         'NUMBER_OPERATOR': 'NUMBER_OPERATOR',
         'OUTPUT_PER_HOUR': 'OUTPUT_PER_HOUR',
         'DURATION_IN_HOUR': 'HOURS NEEDED',
-        'START_TIME': 'epoch_planned_start',
-        'END_TIME': 'epoch_planned_end',
-        'LATEST_COMPLETION_TIME': 'epoch_latest_completion_date',
         'PRIORITY': 'PRIORITY'
     }
     
@@ -237,31 +212,48 @@ def load_jobs_planning_data(file_path):
     if missing_columns:
         logger.warning(f"Missing columns: {missing_columns}")
     
-    # Create standardized dataframe
+    # Create standardized DataFrame
     data = pd.DataFrame()
-    data['DUE_DATE_TIME'] = df['epoch_lcd_date'] if 'epoch_lcd_date' in df.columns else pd.Series()
-    data['JOB_CODE'] = df['JOBCODE'] if 'JOBCODE' in df.columns else pd.Series()
-    data['PROCESS_CODE'] = df['PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else pd.Series()
-    data['MACHINE_ID'] = df['MACHINE_ID'] if 'MACHINE_ID' in df.columns else pd.Series()
-    data['NUMBER_OPERATOR'] = df['NUMBER_OPERATOR'] if 'NUMBER_OPERATOR' in df.columns else pd.Series(1)
-    data['OUTPUT_PER_HOUR'] = df['OUTPUT_PER_HOUR'] if 'OUTPUT_PER_HOUR' in df.columns else pd.Series(0)
-    data['DURATION_IN_HOUR'] = df['HOURS NEEDED'] if 'HOURS NEEDED' in df.columns else pd.Series(0)
-    data['START_TIME'] = df['epoch_planned_start'] if 'epoch_planned_start' in df.columns else pd.Series()
-    data['END_TIME'] = df['epoch_planned_end'] if 'epoch_planned_end' in df.columns else pd.Series()
-    data['LATEST_COMPLETION_TIME'] = df['epoch_latest_completion_date'] if 'epoch_latest_completion_date' in df.columns else pd.Series()
-    data['PRIORITY'] = df['PRIORITY'] if 'PRIORITY' in df.columns else pd.Series(3)
+    for standard_col, source_col in column_mapping.items():
+        data[standard_col] = df[source_col] if source_col in df.columns else pd.Series()
+    
+    # Ensure required columns have default values
+    data['NUMBER_OPERATOR'] = data['NUMBER_OPERATOR'].fillna(1).astype(int)
+    data['OUTPUT_PER_HOUR'] = data['OUTPUT_PER_HOUR'].fillna(100).astype(float)
+    data['DURATION_IN_HOUR'] = data['DURATION_IN_HOUR'].fillna(0).astype(float)
+    data['PRIORITY'] = data['PRIORITY'].fillna(3).astype(int)
+    data['DUE_DATE_TIME'] = data['DUE_DATE_TIME'].fillna(int((datetime.now() + pd.Timedelta(days=30)).timestamp())).astype(int)
     
     # Calculate processing time in seconds
     data['processing_time'] = (pd.to_numeric(data['DURATION_IN_HOUR'], errors='coerce').fillna(0) * 3600).astype(int)
     
+    # Log DataFrame details
     logger.info(f"DataFrame shape: {data.shape}")
     logger.info(f"DataFrame columns: {data.columns.tolist()}")
     logger.info(f"Sample data:\n{data.head(2)}")
     
-    # Convert dataframe to job tuples
+    return data
+
+def load_jobs_planning_data(file_path):
+    """
+    Load and process job planning data from Excel file.
+
+    Args:
+        file_path (str): Path to Excel file containing job data
+
+    Returns:
+        tuple: (jobs, machines, setup_times)
+            - jobs: List of job dictionaries
+            - machines: List of machine IDs
+            - setup_times: Dictionary of setup times between processes
+    """
+    # Load and process the data into a DataFrame
+    df = load_job_data(file_path)
+    
+    # Convert DataFrame to list of job dictionaries
     jobs = []
     current_time = int(datetime.now().timestamp())
-    for _, row in data.iterrows():
+    for _, row in df.iterrows():
         if pd.isna(row['PROCESS_CODE']) or pd.isna(row['MACHINE_ID']):
             logger.warning(f"Skipping row: PROCESS_CODE={row.get('PROCESS_CODE', 'NaN')}, MACHINE_ID={row.get('MACHINE_ID', 'NaN')}")
             continue
@@ -269,50 +261,47 @@ def load_jobs_planning_data(file_path):
         # Derive job code from process code if missing
         job_code = row['JOB_CODE'] if pd.notna(row['JOB_CODE']) else row['PROCESS_CODE'].split('-P')[0] if '-P' in row['PROCESS_CODE'] else row['PROCESS_CODE']
         
-        # Handle dates and times
-        due_seconds = row['LATEST_COMPLETION_TIME'] if pd.notna(row['LATEST_COMPLETION_TIME']) else current_time + 30 * 24 * 3600
+        # Handle due date
+        due_seconds = row['DUE_DATE_TIME']
         proc_time = row['processing_time']
         due_seconds = max(current_time + proc_time, int(due_seconds))
         
-        # Handle planned start and end times
-        start_seconds = row['START_TIME'] if pd.notna(row['START_TIME']) else current_time
-        start_seconds = max(current_time, int(start_seconds))
-        
-        end_seconds = row['END_TIME'] if pd.notna(row['END_TIME']) else start_seconds + proc_time
-        
         # Calculate priority
-        base_priority = int(row['PRIORITY']) if pd.notna(row['PRIORITY']) else 3
+        base_priority = int(row['PRIORITY'])
         base_priority = max(1, min(5, base_priority))
-        
-        # Adjust priority for urgent jobs
         days_remaining = (due_seconds - current_time) / (24 * 3600)
         if days_remaining <= 5 and base_priority > 1:
             base_priority -= 1
         final_priority = max(1, min(5, int(base_priority)))
         
-        # Create job tuple with all available information
-        job = (
-            job_code,               # Job name
-            row['PROCESS_CODE'],    # Process code
-            row['MACHINE_ID'],      # Machine ID
-            proc_time,              # Processing time in seconds
-            due_seconds,            # Due time in epoch seconds
-            final_priority,         # Priority (1-5, 1 is highest)
-            start_seconds,          # Planned start time
-            int(row['NUMBER_OPERATOR']) if pd.notna(row['NUMBER_OPERATOR']) else 1,  # Number of operators
-            float(row['OUTPUT_PER_HOUR']) if pd.notna(row['OUTPUT_PER_HOUR']) else 100.0,  # Output rate
-            end_seconds             # Planned end time
-        )
+        # Create job dictionary
+        job = {
+            'JOB_CODE': job_code,
+            'PROCESS_CODE': row['PROCESS_CODE'],
+            'MACHINE_ID': row['MACHINE_ID'],
+            'processing_time': proc_time,
+            'DUE_DATE_TIME': due_seconds,
+            'PRIORITY': final_priority,
+            'NUMBER_OPERATOR': int(row['NUMBER_OPERATOR']),
+            'OUTPUT_PER_HOUR': float(row['OUTPUT_PER_HOUR'])
+        }
         
         jobs.append(job)
     
     # Extract unique machines
-    machines_df = data[['MACHINE_ID']].drop_duplicates()
-    machines = [(i, m, 0) for i, m in enumerate(machines_df['MACHINE_ID']) if pd.notna(m)]
+    machines = sorted(df['MACHINE_ID'].dropna().unique())
     
-    # Generate setup times matrix
-    process_codes = [p for p in data['PROCESS_CODE'].unique() if pd.notna(p)]
-    setup_times = {p1: {p2: 10 if p1 == p2 else 30 for p2 in process_codes} for p1 in process_codes}
+    # Generate setup times (placeholder, adjust as needed)
+    process_codes = [p for p in df['PROCESS_CODE'].dropna().unique()]
+    setup_times = {p1: {p2: 0 for p2 in process_codes} for p1 in process_codes}  # No setup times for now
     
     logger.info(f"Generated {len(jobs)} valid jobs, {len(machines)} machines, and setup times for {len(process_codes)} processes")
     return jobs, machines, setup_times
+
+if __name__ == "__main__":
+    # Test the function
+    file_path = "mydata.xlsx"
+    jobs, machines, setup_times = load_jobs_planning_data(file_path)
+    print("Jobs:", jobs)
+    print("Machines:", machines)
+    print("Setup Times:", setup_times)
