@@ -40,7 +40,7 @@ def extract_job_family(process_code):
 def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
     """
     Create a schedule using an enhanced greedy algorithm with process sequence enforcement,
-    considering due dates.
+    considering due dates and earliest start times (CUT_Q).
 
     Args:
         jobs (list): List of job dictionaries (e.g., {'PROCESS_CODE': '...', 'MACHINE_ID': '...', 'processing_time': ..., 'DUE_DATE_TIME': ..., 'PRIORITY': ...})
@@ -60,6 +60,16 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         if not isinstance(job.get('processing_time', 0), (int, float)) or job.get('processing_time', 0) <= 0:
             logger.error(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}: {job.get('processing_time')}")
             raise ValueError(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}")
+
+    # Check for and log any jobs with CUT_Q (EARLIEST_START_TIME) constraints
+    cut_q_jobs = [job for job in jobs if job.get('EARLIEST_START_TIME', current_time) > current_time]
+    if cut_q_jobs:
+        logger.info(f"Found {len(cut_q_jobs)} jobs with CUT_Q (earliest start) constraints:")
+        for job in cut_q_jobs:
+            cut_q_date = datetime.fromtimestamp(job['EARLIEST_START_TIME']).strftime('%Y-%m-%d %H:%M')
+            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): Must start on or after {cut_q_date}")
+    else:
+        logger.info("No jobs with CUT_Q constraints found in input data")
 
     # Enforce process sequence dependencies or sort by priority and due date
     if enforce_sequence:
@@ -84,20 +94,50 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
 
     # Track the latest end time for each family to enforce sequence
     family_end_times = {}
+    
+    # Process each job in the sorted order
     for job in sorted_jobs:
         job_id = job['PROCESS_CODE']
         machine_id = job['MACHINE_ID']
         duration = job['processing_time']
         due_time = job.get('DUE_DATE_TIME', current_time + 30 * 24 * 3600)  # Default to 30 days if not provided
         family = extract_job_family(job_id)
-
-        # Get the earliest start time considering sequence dependencies and due time
-        earliest_start = max(machine_availability[machine_id], current_time)
-        if enforce_sequence and family in family_end_times:
-            earliest_start = max(earliest_start, family_end_times[family])
-        # Ensure start time respects due date (start before due minus processing time)
-        earliest_start = min(earliest_start, due_time - duration)
-
+        
+        # Get each constraint independently for clarity
+        
+        # 1. Current time constraint (can't schedule in the past)
+        time_constraint = current_time
+        
+        # 2. Machine availability constraint
+        machine_constraint = machine_availability[machine_id]
+        
+        # 3. Sequence constraint (if applicable)
+        sequence_constraint = family_end_times.get(family, current_time) if enforce_sequence else current_time
+        
+        # 4. CUT_Q constraint (earliest allowed start date from user input)
+        cut_q_constraint = job.get('EARLIEST_START_TIME', current_time)
+        
+        # Find the most restrictive constraint (maximum start time)
+        constraints = {
+            "Current Time": time_constraint,
+            "Machine Availability": machine_constraint,
+            "Sequence Dependency": sequence_constraint,
+            "CUT_Q (Earliest Start)": cut_q_constraint
+        }
+        
+        # Find the most restrictive constraint
+        earliest_start = max(constraints.values())
+        active_constraint = [name for name, value in constraints.items() if value == earliest_start][0]
+        
+        # Log which constraint is controlling this job's start time
+        if earliest_start > current_time:
+            active_date = datetime.fromtimestamp(earliest_start).strftime('%Y-%m-%d %H:%M')
+            logger.info(f"Job {job_id} start time ({active_date}) determined by: {active_constraint}")
+            
+            # Additional detailed logging for CUT_Q constraints
+            if active_constraint == "CUT_Q (Earliest Start)":
+                logger.info(f"  🚨 CUT_Q date restriction active for {job_id}: Cannot start before {active_date}")
+        
         # Schedule the job
         start = earliest_start
         end = start + duration
@@ -107,22 +147,34 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             last_job = schedule[machine_id][-1]
             last_job_end = last_job[2]
             setup_duration = setup_times[job_id].get(last_job[0], 0)
-            start = max(start, last_job_end + setup_duration)
-            end = start + duration
+            if start < last_job_end + setup_duration:
+                old_start = start
+                start = last_job_end + setup_duration
+                end = start + duration
+                logger.info(f"Applied setup time: Job {job_id} start delayed from {datetime.fromtimestamp(old_start).strftime('%Y-%m-%d %H:%M')} to {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')}")
 
         # Schedule the job
         schedule[machine_id].append((job_id, start, end, job['PRIORITY']))
         machine_availability[machine_id] = end
         if enforce_sequence:
             family_end_times[family] = end
-        logger.info(f"Scheduled priority {job['PRIORITY']} job {job.get('JOB_CODE', job_id)} on {machine_id}: "
-                    f"{datetime.fromtimestamp(start)} to {datetime.fromtimestamp(end)}")
+        
+        # Log the final scheduling decision
+        logger.info(f"✅ Scheduled job {job.get('JOB_CODE', job_id)} ({job_id}) on {machine_id}: "
+                   f"{datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} to {datetime.fromtimestamp(end).strftime('%Y-%m-%d %H:%M')}")
 
     logger.info(f"Enhanced greedy schedule created with {sum(len(tasks) for tasks in schedule.values())} jobs")
-    schedule_span = max((end for tasks in schedule.values() for _, _, end, _ in tasks), default=current_time) - \
-                    min((start for tasks in schedule.values() for _, start, _, _ in tasks), default=current_time)
-    logger.info(f"Schedule span: {schedule_span/3600:.2f} hours ({datetime.fromtimestamp(min((start for tasks in schedule.values() for _, start, _, _ in tasks), default=current_time))} to "
-                f"{datetime.fromtimestamp(max((end for tasks in schedule.values() for _, _, end, _ in tasks), default=current_time))})")
+    
+    if any(schedule.values()):
+        min_start = min((start for tasks in schedule.values() for _, start, _, _ in tasks), default=current_time)
+        max_end = max((end for tasks in schedule.values() for _, _, end, _ in tasks), default=current_time)
+        schedule_span = max_end - min_start
+        
+        logger.info(f"Schedule span: {schedule_span/3600:.2f} hours ({datetime.fromtimestamp(min_start).strftime('%Y-%m-%d %H:%M')} to "
+                    f"{datetime.fromtimestamp(max_end).strftime('%Y-%m-%d %H:%M')})")
+    else:
+        logger.warning("No jobs were scheduled!")
+    
     return schedule
 
 if __name__ == "__main__":

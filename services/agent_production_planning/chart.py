@@ -34,13 +34,33 @@ def extract_process_number(process_code):
     print("No match found, returning 999")
     return 999  # Default for invalid formats
 
-def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
+def get_buffer_status_color(buffer_hours):
+    """
+    Get color for buffer status based on hours remaining.
+    
+    Args:
+        buffer_hours (float): Hours remaining until deadline
+        
+    Returns:
+        str: Color code for the buffer status
+    """
+    if buffer_hours < 8:
+        return "red"  # Critical - less than 8 hours buffer
+    elif buffer_hours < 24:
+        return "orange"  # Warning - less than 24 hours buffer
+    elif buffer_hours < 72:
+        return "yellow"  # Caution - less than 3 days buffer
+    else:
+        return "green"  # OK - more than 3 days buffer
+
+def create_interactive_gantt(schedule, jobs=None, output_file='interactive_schedule.html'):
     """
     Create an interactive Gantt chart from the schedule and save it as an HTML file.
     Modified to show Machine ID in the y-axis labels alongside Process Code.
     
     Args:
         schedule (dict): Dictionary of machine schedules {machine: [(process_code, start, end, priority), ...]}
+        jobs (list): Optional list of job dictionaries with additional metadata like buffer times
         output_file (str): Path to save the HTML file
     
     Returns:
@@ -55,6 +75,12 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
         'Priority 4 (Normal)': 'rgb(128, 0, 128)',
         'Priority 5 (Low)': 'rgb(60, 179, 113)'
     }
+
+    # Create a lookup dictionary for job data if jobs list is provided
+    job_lookup = {}
+    if jobs:
+        for job in jobs:
+            job_lookup[job['PROCESS_CODE']] = job
 
     if not schedule or not any(schedule.values()):
         df_list.append(dict(
@@ -97,13 +123,29 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
 
             # Create task label that includes both process code and machine ID
             task_label = f"{process_code} ({machine})"
+            
+            # Add buffer information if available
+            buffer_info = ""
+            buffer_status = ""
+            if job_lookup and process_code in job_lookup:
+                job_data = job_lookup[process_code]
+                if 'DUE_DATE_TIME' in job_data:
+                    due_date = datetime.fromtimestamp(job_data['DUE_DATE_TIME'])
+                    buffer_hours = (job_data['DUE_DATE_TIME'] - end) / 3600
+                    buffer_status = get_buffer_status_color(buffer_hours)
+                    buffer_info = f"<br><b>Due Date:</b> {due_date.strftime('%Y-%m-%d %H:%M')}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
+                    
+                    # Add information about CUT_Q if it exists
+                    if 'EARLIEST_START_TIME' in job_data and job_data['EARLIEST_START_TIME'] > current_time:
+                        earliest_start = datetime.fromtimestamp(job_data['EARLIEST_START_TIME'])
+                        buffer_info += f"<br><b>Earliest Start:</b> {earliest_start.strftime('%Y-%m-%d %H:%M')}"
 
             description = (f"<b>Process:</b> {process_code}<br>"
                           f"<b>Machine:</b> {machine}<br>"
                           f"<b>Priority:</b> {job_priority}<br>"
                           f"<b>Start:</b> {start_date.strftime('%Y-%m-%d %H:%M')}<br>"
                           f"<b>End:</b> {end_date.strftime('%Y-%m-%d %H:%M')}<br>"
-                          f"<b>Duration:</b> {duration_hours:.1f} hours")
+                          f"<b>Duration:</b> {duration_hours:.1f} hours{buffer_info}")
 
             df_list.append(dict(
                 Task=task_label,  # Use the combined task label
@@ -111,7 +153,8 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
                 Finish=end_date,
                 Resource=machine,
                 Priority=priority_label,
-                Description=description
+                Description=description,
+                BufferStatus=buffer_status
             ))
 
     df = pd.DataFrame(df_list)
@@ -135,7 +178,7 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
     fig.update_layout(
         autosize=True,
         height=max(600, len(df) * 25),  # Increase row height for better readability
-        margin=dict(l=300, r=30, t=80, b=50),  # Increase left margin for longer y-axis labels
+        margin=dict(l=300, r=30, t=80, b=100),  # Increased bottom margin for legend
         legend_title_text='Priority Level',
         hovermode='closest',
         title={'text': "Interactive Production Schedule", 'font': {'size': 24}, 'x': 0.5, 'xanchor': 'center'},
@@ -147,6 +190,19 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
         fig.data[i].text = df['Description']
         fig.data[i].hoverinfo = 'text'
 
+    # Add buffer status indicators if available
+    if 'BufferStatus' in df.columns and df['BufferStatus'].notna().any():
+        for i, row in df.iterrows():
+            if pd.notna(row['BufferStatus']):
+                fig.add_trace(go.Scatter(
+                    x=[row['Finish']],
+                    y=[row['Task']],
+                    mode='markers',
+                    marker=dict(symbol='circle', size=10, color=row['BufferStatus']),
+                    showlegend=False,
+                    hoverinfo='none'
+                ))
+
     # Add generation timestamp
     fig.add_annotation(
         text=f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -155,6 +211,50 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
         showarrow=False,
         font=dict(size=10, color="gray")
     )
+    
+    # Add buffer status legend
+    fig.add_annotation(
+        text="Buffer Status:",
+        xref="paper", yref="paper",
+        x=0.5, y=-0.08,
+        showarrow=False,
+        font=dict(size=11, color="black", family="Arial")
+    )
+    
+    # Add colored rectangles with text for each buffer status
+    legend_items = [
+        {"color": "red", "text": "Critical (<8h)"},
+        {"color": "orange", "text": "Warning (<24h)"},
+        {"color": "yellow", "text": "Caution (<72h)"},
+        {"color": "green", "text": "OK (>72h)"}
+    ]
+    
+    # Position them horizontally with proper spacing
+    spacing = 0.12
+    start_x = 0.5 - ((len(legend_items) - 1) * spacing) / 2
+    for i, item in enumerate(legend_items):
+        x_pos = start_x + (i * spacing)
+
+        # Add colored square
+        fig.add_shape(
+            type="rect",
+            xref="paper", yref="paper",
+            x0=x_pos - 0.03, y0=-0.10,
+            x1=x_pos - 0.01, y1=-0.08,
+            fillcolor=item["color"],
+            line=dict(color=item["color"]),
+        )
+
+        # Add text label
+        fig.add_annotation(
+            text=item["text"],
+            xref="paper", yref="paper",
+            x=x_pos + 0.02, y=-0.09,
+            showarrow=False,
+            font=dict(size=10, color="black"),
+            align="left",
+            xanchor="left"
+        )
 
     try:
         pyo.plot(fig, filename=output_file, auto_open=False)
@@ -190,4 +290,4 @@ if __name__ == "__main__":
             ('CP08-231B-P05-06', 1710732000, 1710735000, 2),  # 2024-03-17 11:20 to 12:10
         ]
     }
-    create_interactive_gantt(example_schedule, 'test_schedule.html')
+    create_interactive_gantt(example_schedule, None, 'test_schedule.html')
