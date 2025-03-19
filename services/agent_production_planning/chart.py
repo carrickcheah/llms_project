@@ -212,16 +212,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         font=dict(size=10, color="gray")
     )
     
-    # Add buffer status legend
-    fig.add_annotation(
-        text="Buffer Status:",
-        xref="paper", yref="paper",
-        x=0.5, y=-0.08,
-        showarrow=False,
-        font=dict(size=11, color="black", family="Arial")
-    )
-    
-    # Add colored rectangles with text for each buffer status
+    # Add buffer status legend without title text
+    # Position them horizontally with proper spacing
     legend_items = [
         {"color": "red", "text": "Critical (<8h)"},
         {"color": "orange", "text": "Warning (<24h)"},
@@ -239,8 +231,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         fig.add_shape(
             type="rect",
             xref="paper", yref="paper",
-            x0=x_pos - 0.03, y0=-0.10,
-            x1=x_pos - 0.01, y1=-0.08,
+            x0=x_pos - 0.03, y0=-0.08,
+            x1=x_pos - 0.01, y1=-0.06,
             fillcolor=item["color"],
             line=dict(color=item["color"]),
         )
@@ -249,7 +241,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         fig.add_annotation(
             text=item["text"],
             xref="paper", yref="paper",
-            x=x_pos + 0.02, y=-0.09,
+            x=x_pos + 0.02, y=-0.07,
             showarrow=False,
             font=dict(size=10, color="black"),
             align="left",
