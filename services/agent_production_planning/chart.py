@@ -37,6 +37,7 @@ def extract_process_number(process_code):
 def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
     """
     Create an interactive Gantt chart from the schedule and save it as an HTML file.
+    Modified to show Machine ID in the y-axis labels alongside Process Code.
     
     Args:
         schedule (dict): Dictionary of machine schedules {machine: [(process_code, start, end, priority), ...]}
@@ -94,6 +95,9 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
             job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
             priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
 
+            # Create task label that includes both process code and machine ID
+            task_label = f"{process_code} ({machine})"
+
             description = (f"<b>Process:</b> {process_code}<br>"
                           f"<b>Machine:</b> {machine}<br>"
                           f"<b>Priority:</b> {job_priority}<br>"
@@ -102,7 +106,7 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
                           f"<b>Duration:</b> {duration_hours:.1f} hours")
 
             df_list.append(dict(
-                Task=process_code,
+                Task=task_label,  # Use the combined task label
                 Start=start_date,
                 Finish=end_date,
                 Resource=machine,
@@ -130,13 +134,13 @@ def create_interactive_gantt(schedule, output_file='interactive_schedule.html'):
 
     fig.update_layout(
         autosize=True,
-        height=max(400, len(df) * 20),
-        margin=dict(l=250, r=30, t=80, b=50),
+        height=max(600, len(df) * 25),  # Increase row height for better readability
+        margin=dict(l=300, r=30, t=80, b=50),  # Increase left margin for longer y-axis labels
         legend_title_text='Priority Level',
         hovermode='closest',
         title={'text': "Interactive Production Schedule", 'font': {'size': 24}, 'x': 0.5, 'xanchor': 'center'},
         xaxis={'title': {'text': 'Date and Time', 'font': {'size': 14}}},
-        yaxis={'title': {'text': 'Process Codes', 'font': {'size': 14}}}
+        yaxis={'title': {'text': 'Process Codes (Machine)', 'font': {'size': 14}}}
     )
 
     for i in range(len(fig.data)):

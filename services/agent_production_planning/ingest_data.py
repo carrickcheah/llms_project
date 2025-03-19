@@ -27,9 +27,8 @@ def clean_excel_data(df):
     # Define rules for numeric columns
     numeric_cols = {
         'NUMBER_OPERATOR': {'min': 1, 'max': 10, 'default': 1},
-        'OUTPUT_PER_HOUR': {'min': 0.1, 'max': 10000, 'default': 100},
-        'HOURS NEEDED': {'min': 0.1, 'max': 720, 'default': None},
-        'PRIORITY': {'min': 1, 'max': 5, 'default': 4}
+        'HOURS_NEED': {'min': 0.1, 'max': 720, 'default': None},
+        'PRIORTY': {'min': 1, 'max': 5, 'default': 4}  # Updated: Changed from PRIORITY to PRIORTY
     }
     
     # Process numeric columns with validation
@@ -46,12 +45,12 @@ def clean_excel_data(df):
     if 'PROCESS_CODE' in df.columns:
         df = df[df['PROCESS_CODE'].notna() & (df['PROCESS_CODE'].str.len() > 0)]
     
-    # Process date columns (only LCD_DATE for DUE_DATE_TIME)
-    date_cols = ['LCD_DATE']
+    # Process date columns
+    date_cols = ['LCD_DATE', 'PLANNED_START ', 'PLANNED_END', 'LATEST_COMPLETION_DATE']
     for col in date_cols:
         if col in df.columns:
             # Try multiple date formats
-            for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']:
+            for fmt in ['%Y-%m-%dT%H:%M:%S.000Z', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']:
                 try:
                     df[col] = pd.to_datetime(df[col], format=fmt, errors='coerce')
                     if df[col].notna().sum() > 0:
@@ -71,10 +70,9 @@ def clean_excel_data(df):
     if 'MACHINE_ID' in df.columns:
         df = df[df['MACHINE_ID'].notna() & (df['MACHINE_ID'].str.len() > 0)]
     
-    # Calculate processing time from hours
-    if 'HOURS NEEDED' in df.columns and 'OUTPUT_PER_HOUR' in df.columns:
-        df.loc[df['OUTPUT_PER_HOUR'] <= 0, 'OUTPUT_PER_HOUR'] = 100
-        df['processing_time'] = (df['HOURS NEEDED'] * 3600).astype(int)
+    # Calculate processing time from hours directly
+    if 'HOURS_NEED' in df.columns:
+        df['processing_time'] = (df['HOURS_NEED'] * 3600).astype(int)
     
     removed_rows = initial_rows - len(df)
     logger.info(f"Data cleaning: {len(df)} rows after cleaning (removed {removed_rows} invalid rows)")
@@ -110,7 +108,7 @@ def convert_to_epoch(df, columns, base_date=None):
         try:
             if df[col].dtype in ['object', 'string'] or pd.api.types.is_datetime64_any_dtype(df[col]):
                 # Try with multiple date formats
-                date_formats = ['%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']
+                date_formats = ['%Y-%m-%dT%H:%M:%S.000Z', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']
                 success = False
                 
                 for fmt in date_formats:
@@ -131,10 +129,12 @@ def convert_to_epoch(df, columns, base_date=None):
                         lambda x: int(x.timestamp()) if pd.notna(x) else None
                     )
             
-            # Handle special cases for due dates
+            # Handle special cases for dates
             if col in ['LCD_DATE'] and df[epoch_col].isna().all():
                 logger.warning(f"No valid data in '{col}' - setting default due dates (30 days from now)")
                 df[epoch_col] = default_due_date
+            elif col in ['PLANNED_START ', 'PLANNED_END', 'LATEST_COMPLETION_DATE'] and df[epoch_col].isna().all():
+                logger.warning(f"No valid data in '{col}' - these will be computed by the scheduler")
             
             valid_count = df[epoch_col].notna().sum()
             logger.info(f"Converted '{col}' to '{epoch_col}': {valid_count} valid timestamps")
@@ -143,6 +143,9 @@ def convert_to_epoch(df, columns, base_date=None):
             if col in ['LCD_DATE']:
                 logger.warning(f"Using default due dates for '{col}'")
                 df[epoch_col] = default_due_date
+            elif col in ['PLANNED_START ', 'PLANNED_END', 'LATEST_COMPLETION_DATE']:
+                logger.warning(f"Could not convert '{col}' to timestamp - will be computed by scheduler")
+                df[epoch_col] = None
             else:
                 df[epoch_col] = None
     
@@ -164,21 +167,26 @@ def load_job_data(file_path):
         raise FileNotFoundError(error_msg)
     
     try:
-        # Try different header rows to handle various formats
-        for header_row in [4, 0, 1, 2, 3]:
-            try:
-                df = pd.read_excel(file_path, header=header_row)
-                if len(df.columns) >= 5:  # Check if we have enough columns
-                    logger.info(f"Successfully loaded Excel with header at row {header_row}")
-                    break
-            except:
-                continue
-        else:
-            # If no header row works, try without header
-            df = pd.read_excel(file_path, header=None)
-            # Rename columns to default names
-            df.columns = [f"Column_{i}" for i in range(len(df.columns))]
-            logger.warning("Could not detect header row, using default column names")
+        # Explicitly use the "Jobs PlanningDetails-Draft" sheet and header at row 4
+        df = pd.read_excel(file_path, sheet_name="Jobs PlanningDetails-Draft", header=4)
+        logger.info(f"Successfully loaded Excel from 'Jobs PlanningDetails-Draft' sheet with header at row 4")
+        
+        # If that fails, try alternative approaches
+        if len(df.columns) < 5:
+            logger.warning("Sheet or header row may be incorrect. Attempting to find the correct sheet and header...")
+            # Try different sheets and header rows
+            for sheet in pd.ExcelFile(file_path).sheet_names:
+                for header_row in [4, 0, 1, 2, 3]:
+                    try:
+                        df = pd.read_excel(file_path, sheet_name=sheet, header=header_row)
+                        if len(df.columns) >= 5 and set(['JOBCODE', 'PROCESS_CODE', 'MACHINE_ID']).issubset(df.columns):
+                            logger.info(f"Found data in sheet '{sheet}' with header at row {header_row}")
+                            break
+                    except:
+                        continue
+                else:
+                    continue
+                break
     except Exception as e:
         logger.error(f"Error loading Excel file: {e}")
         raise
@@ -190,19 +198,22 @@ def load_job_data(file_path):
     df = clean_excel_data(df)
     
     # Convert date columns to epoch timestamps
-    date_columns = ['LCD_DATE']
+    date_columns = ['LCD_DATE', 'PLANNED_START ', 'PLANNED_END', 'LATEST_COMPLETION_DATE']
     df = convert_to_epoch(df, date_columns)
     
     # Define column mapping to standardize column names
+    # Updated: Modified mappings to match actual column names in your Excel file
     column_mapping = {
         'DUE_DATE_TIME': 'epoch_lcd_date',
         'JOB_CODE': 'JOBCODE',
         'PROCESS_CODE': 'PROCESS_CODE',
         'MACHINE_ID': 'MACHINE_ID',
         'NUMBER_OPERATOR': 'NUMBER_OPERATOR',
-        'OUTPUT_PER_HOUR': 'OUTPUT_PER_HOUR',
-        'DURATION_IN_HOUR': 'HOURS NEEDED',
-        'PRIORITY': 'PRIORITY'
+        'DURATION_IN_HOUR': 'HOURS_NEED',
+        'PRIORITY': 'PRIORTY',
+        'PLANNED_START': 'PLANNED_START ',  # Note the space after START in the column name
+        'PLANNED_END': 'PLANNED_END',
+        'LATEST_COMPLETION_DATE': 'LATEST_COMPLETION_DATE'
     }
     
     # Check for missing columns
@@ -219,12 +230,16 @@ def load_job_data(file_path):
     
     # Ensure required columns have default values
     data['NUMBER_OPERATOR'] = data['NUMBER_OPERATOR'].fillna(1).astype(int)
-    data['OUTPUT_PER_HOUR'] = data['OUTPUT_PER_HOUR'].fillna(100).astype(float)
     data['DURATION_IN_HOUR'] = data['DURATION_IN_HOUR'].fillna(0).astype(float)
     data['PRIORITY'] = data['PRIORITY'].fillna(3).astype(int)
     data['DUE_DATE_TIME'] = data['DUE_DATE_TIME'].fillna(int((datetime.now() + pd.Timedelta(days=30)).timestamp())).astype(int)
     
-    # Calculate processing time in seconds
+    # Planning columns - these can be None/NaN as they will be computed by the scheduler
+    data['PLANNED_START'] = data.get('PLANNED_START', pd.Series(dtype='object'))
+    data['PLANNED_END'] = data.get('PLANNED_END', pd.Series(dtype='object'))
+    data['LATEST_COMPLETION_DATE'] = data.get('LATEST_COMPLETION_DATE', pd.Series(dtype='object'))
+    
+    # Calculate processing time in seconds directly from HOURS_NEED
     data['processing_time'] = (pd.to_numeric(data['DURATION_IN_HOUR'], errors='coerce').fillna(0) * 3600).astype(int)
     
     # Log DataFrame details
@@ -283,7 +298,10 @@ def load_jobs_planning_data(file_path):
             'DUE_DATE_TIME': due_seconds,
             'PRIORITY': final_priority,
             'NUMBER_OPERATOR': int(row['NUMBER_OPERATOR']),
-            'OUTPUT_PER_HOUR': float(row['OUTPUT_PER_HOUR'])
+            # Add scheduling fields that might be populated from the Excel
+            'PLANNED_START': row.get('PLANNED_START'),
+            'PLANNED_END': row.get('PLANNED_END'),
+            'LATEST_COMPLETION_DATE': row.get('LATEST_COMPLETION_DATE')
         }
         
         jobs.append(job)

@@ -173,17 +173,15 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
     # Build the schedule
     schedule = {}
-    total_output = 0
+    total_jobs = 0
     for job in jobs:
         job_id = job['PROCESS_CODE']
         machine_id = job['MACHINE_ID']
         start = solver.Value(start_vars[(job_id, machine_id)])
         end = solver.Value(end_vars[(job_id, machine_id)])
         priority = job['PRIORITY']
-        output_rate = job.get('OUTPUT_PER_HOUR', 100)  # Default output rate if not provided
         duration_hours = (end - start) / 3600
-        job_output = output_rate * duration_hours
-        total_output += job_output
+        total_jobs += 1
 
         if machine_id not in schedule:
             schedule[machine_id] = []
@@ -195,7 +193,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
     # Log statistics
     logger.info(f"Scheduled {sum(len(jobs) for jobs in schedule.values())} jobs on {len(schedule)} machines")
-    logger.info(f"Expected total output: {total_output:.2f} units")
+    logger.info(f"Total jobs scheduled: {total_jobs}")
 
     return schedule
 
