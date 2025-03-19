@@ -182,7 +182,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         legend_title_text='Priority Level',
         hovermode='closest',
         title={'text': "Interactive Production Schedule", 'font': {'size': 24}, 'x': 0.5, 'xanchor': 'center'},
-        xaxis={'title': {'text': 'Date and Time', 'font': {'size': 14}}},
+        xaxis={'title': {'text': '', 'font': {'size': 14}}},  # Removed "Date and Time" label
         yaxis={'title': {'text': 'Process Codes (Machine)', 'font': {'size': 14}}}
     )
 
