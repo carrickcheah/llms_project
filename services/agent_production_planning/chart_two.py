@@ -36,25 +36,35 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         for job in jobs:
             process_code = job['PROCESS_CODE']
             if process_code in end_times:
-                job_start = start_times[process_code]
                 job_end = end_times[process_code]
                 due_time = job.get('LCD_DATE_EPOCH', 0)
+                
+                # UPDATED: Handle START_DATE and START_TIME properly
+                # If START_DATE_EPOCH exists, use it for display as START_DATE
+                user_start_date = ""
+                if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+                    user_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                    
+                    # For START_TIME, use START_DATE_EPOCH if it exists and is in the future
+                    # This ensures START_TIME matches START_DATE for future dates
+                    if job['START_DATE_EPOCH'] > int(datetime.now().timestamp()):
+                        job_start = job['START_DATE_EPOCH']
+                    else:
+                        job_start = start_times[process_code]
+                else:
+                    # No START_DATE specified, use the scheduled start time
+                    job_start = start_times[process_code]
+                
+                # Format the start and end dates for display
+                job_start_date = datetime.fromtimestamp(job_start).strftime('%Y-%m-%d %H:%M')
+                end_date = datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')
+                due_date = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
                 
                 # Calculate duration and buffer
                 duration_seconds = job_end - job_start
                 duration_hours = duration_seconds / 3600
                 buffer_seconds = max(0, due_time - job_end)
                 buffer_hours = buffer_seconds / 3600
-                
-                # Format dates for display
-                start_date = datetime.fromtimestamp(job_start).strftime('%Y-%m-%d %H:%M')
-                end_date = datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')
-                due_date = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
-                
-                # Get user-defined START_DATE if available
-                user_start_date = ""
-                if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
-                    user_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
                 
                 # Job family and sequence
                 job_code = job.get('JOB_CODE', process_code.split('-P')[0] if '-P' in process_code else process_code)
@@ -71,10 +81,6 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     buffer_status = "OK"
                 
                 # Add to schedule data
-                # Use START_TIME directly from job if available, otherwise calculate it from schedule
-                job_start_time = job.get('START_TIME', job_start)
-                job_start_date = datetime.fromtimestamp(job_start_time).strftime('%Y-%m-%d %H:%M')
-                
                 schedule_data.append({
                     'LCD_DATE': due_date,
                     'START_DATE': user_start_date,
@@ -222,21 +228,27 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
 
 if __name__ == "__main__":
     import sys
-    import json
     from ingest_data import load_jobs_planning_data
     from greedy import greedy_schedule
     
-    if len(sys.argv) >= 3:
-        input_file = sys.argv[1]
-        output_file = sys.argv[2]
+    # Use real data path
+    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
+    output_file = "schedule_view.html"
+    
+    try:
+        # Load job data from real data path
+        jobs, machines, setup_times = load_jobs_planning_data(file_path)
+        logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines from {file_path}")
         
-        # Load job data
-        try:
-            jobs, machines, setup_times = load_jobs_planning_data(input_file)
-            schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=True)
-            export_schedule_html(jobs, schedule, output_file)
-            print(f"Schedule exported to: {os.path.abspath(output_file)}")
-        except Exception as e:
-            print(f"Error: {e}")
-    else:
-        print("Usage: python chart_two.py input.xlsx output.html")
+        # Create schedule
+        schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=True)
+        logger.info(f"Generated schedule with {sum(len(jobs_list) for jobs_list in schedule.values())} scheduled tasks")
+        
+        # Export HTML
+        result = export_schedule_html(jobs, schedule, output_file)
+        if result:
+            logger.info(f"Schedule exported successfully to: {os.path.abspath(output_file)}")
+        else:
+            logger.error("Failed to export schedule to HTML")
+    except Exception as e:
+        logger.error(f"Error in main execution: {e}")
