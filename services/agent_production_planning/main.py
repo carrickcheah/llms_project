@@ -7,7 +7,7 @@ import pandas as pd
 from ingest_data import load_jobs_planning_data
 from sch_jobs import schedule_jobs
 from greedy import greedy_schedule
-from chart import create_interactive_gantt
+from chart_three import create_interactive_gantt  # Updated import
 from chart_two import export_schedule_html
 
 # Configure logging
