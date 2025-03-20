@@ -8,6 +8,7 @@ from ingest_data import load_jobs_planning_data
 from sch_jobs import schedule_jobs
 from greedy import greedy_schedule
 from chart import create_interactive_gantt
+from chart_two import export_schedule_html
 
 # Configure logging
 logging.basicConfig(
@@ -42,7 +43,7 @@ def add_balance_hours(jobs, schedule):
         process_code = job['PROCESS_CODE']
         if process_code in end_times:
             job_end = end_times[process_code]
-            due_time = job.get('DUE_DATE_TIME', 0)
+            due_time = job.get('LCD_DATE_EPOCH', 0)
             
             # Calculate buffer in hours
             buffer_seconds = max(0, due_time - job_end)
@@ -65,51 +66,6 @@ def get_buffer_status(buffer_hours):
         return "Caution"
     else:
         return "OK"
-
-def export_schedule_with_buffer(jobs, output_file="schedule_with_buffer.xlsx"):
-    """
-    Export the schedule with buffer information to an Excel file.
-    
-    Args:
-        jobs (list): List of job dictionaries with buffer information
-        output_file (str): Path to save the Excel file
-    """
-    # Create a DataFrame from the jobs list
-    df = pd.DataFrame(jobs)
-    
-    # Select columns for export
-    columns = [
-        'JOB_CODE', 'PROCESS_CODE', 'MACHINE_ID', 'PRIORITY',
-        'EARLIEST_START_TIME', 'END_TIME', 'DUE_DATE_TIME', 
-        'BALANCE_HOUR', 'BUFFER_STATUS'
-    ]
-    
-    # Convert timestamps to datetime
-    export_df = pd.DataFrame()
-    for col in columns:
-        if col in df.columns:
-            export_df[col] = df[col]
-    
-    # Convert timestamp columns to readable dates
-    time_columns = ['EARLIEST_START_TIME', 'END_TIME', 'DUE_DATE_TIME']
-    for col in time_columns:
-        if col in export_df.columns:
-            export_df[f"{col}_DATE"] = export_df[col].apply(
-                lambda x: datetime.fromtimestamp(x).strftime('%Y-%m-%d %H:%M:%S') if pd.notna(x) else None
-            )
-    
-    # Round buffer hours to 1 decimal place
-    if 'BALANCE_HOUR' in export_df.columns:
-        export_df['BALANCE_HOUR'] = export_df['BALANCE_HOUR'].round(1)
-    
-    # Save to Excel
-    try:
-        export_df.to_excel(output_file, index=False)
-        logger.info(f"Schedule with buffer information saved to {output_file}")
-        return True
-    except Exception as e:
-        logger.error(f"Error exporting schedule to Excel: {e}")
-        return False
 
 def main():
     print("Production Planning Scheduler")
@@ -144,13 +100,13 @@ def main():
 
     logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines")
 
-    # Check for CUT_Q dates and log them
-    cut_q_jobs = [job for job in jobs if job.get('EARLIEST_START_TIME', current_time) > current_time]
-    if cut_q_jobs:
-        logger.info(f"Found {len(cut_q_jobs)} jobs with CUT_Q (earliest start) constraints:")
-        for job in cut_q_jobs:
-            cut_q_date = datetime.fromtimestamp(job['EARLIEST_START_TIME']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): Must start on or after {cut_q_date}")
+    # Check for START_DATE values and log them
+    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    if start_date_jobs:
+        logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints:")
+        for job in start_date_jobs:
+            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): Must start on or after {start_date}")
 
     # Schedule jobs
     start_time = time.time()
@@ -181,9 +137,17 @@ def main():
     # Calculate BALANCE_HOUR for each job
     jobs = add_balance_hours(jobs, schedule)
     
-    # Export schedule with buffer information
-    export_file = os.path.splitext(args.output)[0] + "_schedule.xlsx"
-    export_schedule_with_buffer(jobs, export_file)
+    # Generate HTML view of the schedule
+    try:
+        html_output = os.path.splitext(args.output)[0] + "_view.html"
+        html_success = export_schedule_html(jobs, schedule, html_output)
+        if not html_success:
+            logger.error("Failed to generate HTML schedule view.")
+            return
+        logger.info(f"HTML schedule view saved to: {os.path.abspath(html_output)}")
+    except Exception as e:
+        logger.error(f"Error generating HTML schedule view: {e}")
+        return
 
     # Flatten the schedule and compute START_TIME, END_TIME, LATEST_COMPLETION_TIME as outputs
     flat_schedule = []
@@ -204,7 +168,7 @@ def main():
     for entry in flat_schedule:
         entry['LATEST_COMPLETION_TIME'] = latest_completion[entry['PROCESS_CODE']]
 
-# Log the schedule with computed times
+    # Log the schedule with computed times
     logger.info("Computed schedule with START_TIME, END_TIME, and LATEST_COMPLETION_TIME:")
     logger.info(df_schedule.to_string())
 
@@ -256,7 +220,7 @@ def main():
                 process = job['PROCESS_CODE']
                 machine = job['MACHINE_ID']
                 buffer = job['BALANCE_HOUR']
-                due_date = datetime.fromtimestamp(job['DUE_DATE_TIME']).strftime('%Y-%m-%d %H:%M')
+                due_date = datetime.fromtimestamp(job.get('LCD_DATE_EPOCH', 0)).strftime('%Y-%m-%d %H:%M')
                 print(f"  {process} on {machine}: {buffer:.1f} hours buffer, due {due_date}")
 
     print("\nSchedule statistics:")
@@ -270,14 +234,14 @@ def main():
     print(f"- Schedule span: {schedule_span/3600:.1f} hours")
     print(f"Scheduling completed in {time.time() - start_time:.2f} seconds")
     
-    # Check for CUT_Q constraints and their impact
-    cut_q_jobs = [job for job in jobs if job.get('EARLIEST_START_TIME', current_time) > current_time]
-    if cut_q_jobs:
-        print("\nCUT_Q constraints:")
-        for job in cut_q_jobs:
+    # Check for START_DATE constraints and their impact
+    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    if start_date_jobs:
+        print("\nSTART_DATE constraints:")
+        for job in start_date_jobs:
             process = job['PROCESS_CODE']
             machine = job['MACHINE_ID']
-            cut_q_date = datetime.fromtimestamp(job['EARLIEST_START_TIME']).strftime('%Y-%m-%d %H:%M')
+            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
             
             # Find the scheduled start time
             scheduled_start = None
@@ -289,13 +253,12 @@ def main():
             
             if scheduled_start:
                 scheduled_date = datetime.fromtimestamp(scheduled_start).strftime('%Y-%m-%d %H:%M')
-                impact = "RESPECTED" if scheduled_start >= job['EARLIEST_START_TIME'] else "VIOLATED"
-                print(f"  {process} on {machine}: CUT_Q={cut_q_date}, Scheduled={scheduled_date} - {impact}")
+                impact = "RESPECTED" if scheduled_start >= job['START_DATE_EPOCH'] else "VIOLATED"
+                print(f"  {process} on {machine}: START_DATE={start_date}, Scheduled={scheduled_date} - {impact}")
 
     print(f"\nResults saved to:")
     print(f"- Gantt chart: {os.path.abspath(args.output)}")
-    print(f"- Schedule Excel: {os.path.abspath(export_file)}")
+    print(f"- HTML Schedule View: {os.path.abspath(html_output)}")
 
 if __name__ == "__main__":
     main()
-

@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.figure_factory as ff
 import plotly.offline as pyo
 import pandas as pd
@@ -82,7 +82,13 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         for job in jobs:
             job_lookup[job['PROCESS_CODE']] = job
 
+    # Debug: Print schedule keys and size
+    logger.info(f"Schedule contains {len(schedule)} machines")
+    for machine, jobs_list in schedule.items():
+        logger.info(f"Machine {machine}: {len(jobs_list)} jobs")
+
     if not schedule or not any(schedule.values()):
+        logger.warning("Empty schedule received, creating placeholder task")
         df_list.append(dict(
             Task="No tasks scheduled",
             Start=datetime.fromtimestamp(current_time),
@@ -94,30 +100,62 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
     else:
         process_info = {}
         for machine, jobs in schedule.items():
-            for process_code, start, end, priority in jobs:
+            for job_data in jobs:
+                # Ensure we have at least 4 elements in the tuple
+                if len(job_data) < 4:
+                    logger.warning(f"Invalid job data for machine {machine}: {job_data}")
+                    continue
+                    
+                process_code, start, end, priority = job_data
+                
+                # Validate timestamps
                 if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
                     logger.warning(f"Invalid timestamp for process {process_code} on machine {machine}: start={start}, end={end}")
                     continue
                 if end <= start:
                     logger.warning(f"Invalid time range for process {process_code} on machine {machine}: {start} to {end}")
                     continue
+                    
                 family = extract_job_family(process_code)
                 sequence = extract_process_number(process_code)
+                
                 if family not in process_info:
                     process_info[family] = []
+                    
                 process_info[family].append((process_code, machine, start, end, priority, sequence))
+                logger.debug(f"Added {process_code} to family {family} with sequence {sequence}")
+
+        # Debug: Check process_info
+        logger.info(f"Organized jobs into {len(process_info)} job families")
+        for family, processes in process_info.items():
+            logger.debug(f"Family {family}: {len(processes)} processes")
 
         sorted_tasks = []
         for family in sorted(process_info.keys()):
             processes = process_info[family]
             sorted_processes = sorted(processes, key=lambda x: x[5])  # Sort by sequence
             sorted_tasks.extend(sorted_processes)
+            
+        # Debug: Check sorted_tasks
+        logger.info(f"Sorted task list contains {len(sorted_tasks)} tasks")
 
-        for process_code, machine, start, end, priority, _ in sorted_tasks:
-            start_date = datetime.fromtimestamp(start)
-            end_date = datetime.fromtimestamp(end)
-            duration_hours = (end - start) / 3600
+        for task_data in sorted_tasks:
+            process_code, machine, start, end, priority, _ = task_data
+            
+            # Debug: Print task info
+            logger.debug(f"Processing task: {process_code} on {machine} from {start} to {end}")
+            
+            # Ensure timestamps are valid, convert to datetime
+            try:
+                start_date = datetime.fromtimestamp(start)
+                end_date = datetime.fromtimestamp(end)
+                duration_hours = (end - start) / 3600
+            except Exception as e:
+                logger.error(f"Error converting timestamps for {process_code}: {e}")
+                logger.error(f"Start: {start}, End: {end}")
+                continue
 
+            # Ensure priority is valid
             job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
             priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
 
@@ -129,15 +167,19 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             buffer_status = ""
             if job_lookup and process_code in job_lookup:
                 job_data = job_lookup[process_code]
-                if 'DUE_DATE_TIME' in job_data:
-                    due_date = datetime.fromtimestamp(job_data['DUE_DATE_TIME'])
-                    buffer_hours = (job_data['DUE_DATE_TIME'] - end) / 3600
+                # Look for LCD_DATE_EPOCH first, then fall back to DUE_DATE_TIME
+                due_date_field = next((f for f in ['LCD_DATE_EPOCH', 'DUE_DATE_TIME'] if f in job_data), None)
+                
+                if due_date_field and job_data[due_date_field]:
+                    due_date = datetime.fromtimestamp(job_data[due_date_field])
+                    buffer_hours = (job_data[due_date_field] - end) / 3600
                     buffer_status = get_buffer_status_color(buffer_hours)
                     buffer_info = f"<br><b>Due Date:</b> {due_date.strftime('%Y-%m-%d %H:%M')}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
                     
                     # Add information about CUT_Q if it exists
-                    if 'EARLIEST_START_TIME' in job_data and job_data['EARLIEST_START_TIME'] > current_time:
-                        earliest_start = datetime.fromtimestamp(job_data['EARLIEST_START_TIME'])
+                    cut_q_field = next((f for f in ['CUT_Q_EPOCH', 'EARLIEST_START_TIME'] if f in job_data), None)
+                    if cut_q_field and job_data[cut_q_field] and job_data[cut_q_field] > current_time:
+                        earliest_start = datetime.fromtimestamp(job_data[cut_q_field])
                         buffer_info += f"<br><b>Earliest Start:</b> {earliest_start.strftime('%Y-%m-%d %H:%M')}"
 
             description = (f"<b>Process:</b> {process_code}<br>"
@@ -157,103 +199,134 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 BufferStatus=buffer_status
             ))
 
-    df = pd.DataFrame(df_list)
-
-    if df.empty:
+    # Check if we have any tasks
+    if not df_list:
         logger.error("No valid tasks to plot in Gantt chart.")
         return False
+        
+    # Create DataFrame
+    df = pd.DataFrame(df_list)
+    logger.info(f"Created DataFrame with {len(df)} rows for Gantt chart")
+    
+    # Debug: Print sample data
+    if not df.empty:
+        logger.debug(f"Sample data: {df.iloc[0].to_dict()}")
 
     # Deduplicate task_order to avoid Categorical error
     task_order = list(dict.fromkeys(df['Task'].tolist()))
     df['Task'] = pd.Categorical(df['Task'], categories=task_order, ordered=True)
 
-    fig = ff.create_gantt(df, colors=colors, index_col='Priority', show_colorbar=True,
-                          group_tasks=False,
-                          showgrid_x=True, showgrid_y=True,
-                          title='Interactive Production Schedule')
-
-    # Explicitly reverse the Y-axis to put lower sequences at the bottom
-    fig.update_yaxes(categoryorder='array', categoryarray=task_order, autorange="reversed")
-
-    fig.update_layout(
-        autosize=True,
-        height=max(600, len(df) * 25),  # Increase row height for better readability
-        margin=dict(l=300, r=30, t=80, b=100),  # Increased bottom margin for legend
-        legend_title_text='Priority Level',
-        hovermode='closest',
-        title={'text': "Interactive Production Schedule", 'font': {'size': 24}, 'x': 0.5, 'xanchor': 'center'},
-        xaxis={'title': {'text': '', 'font': {'size': 14}}},  # Removed "Date and Time" label
-        yaxis={'title': {'text': 'Process Codes (Machine)', 'font': {'size': 14}}}
-    )
-
-    for i in range(len(fig.data)):
-        fig.data[i].text = df['Description']
-        fig.data[i].hoverinfo = 'text'
-
-    # Add buffer status indicators if available
-    if 'BufferStatus' in df.columns and df['BufferStatus'].notna().any():
-        for i, row in df.iterrows():
-            if pd.notna(row['BufferStatus']):
-                fig.add_trace(go.Scatter(
-                    x=[row['Finish']],
-                    y=[row['Task']],
-                    mode='markers',
-                    marker=dict(symbol='circle', size=10, color=row['BufferStatus']),
-                    showlegend=False,
-                    hoverinfo='none'
-                ))
-
-    # Add generation timestamp
-    fig.add_annotation(
-        text=f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        xref="paper", yref="paper",
-        x=0.5, y=-0.05,
-        showarrow=False,
-        font=dict(size=10, color="gray")
-    )
-    
-    # Add buffer status legend without title text
-    # Position them horizontally with proper spacing
-    legend_items = [
-        {"color": "red", "text": "Critical (<8h)"},
-        {"color": "orange", "text": "Warning (<24h)"},
-        {"color": "yellow", "text": "Caution (<72h)"},
-        {"color": "green", "text": "OK (>72h)"}
-    ]
-    
-    # Position them horizontally with proper spacing
-    spacing = 0.12
-    start_x = 0.5 - ((len(legend_items) - 1) * spacing) / 2
-    for i, item in enumerate(legend_items):
-        x_pos = start_x + (i * spacing)
-
-        # Add colored square
-        fig.add_shape(
-            type="rect",
-            xref="paper", yref="paper",
-            x0=x_pos - 0.03, y0=-0.08,
-            x1=x_pos - 0.01, y1=-0.06,
-            fillcolor=item["color"],
-            line=dict(color=item["color"]),
-        )
-
-        # Add text label
-        fig.add_annotation(
-            text=item["text"],
-            xref="paper", yref="paper",
-            x=x_pos + 0.02, y=-0.07,
-            showarrow=False,
-            font=dict(size=10, color="black"),
-            align="left",
-            xanchor="left"
-        )
-
     try:
+        # Create Gantt chart
+        fig = ff.create_gantt(df, colors=colors, index_col='Priority', show_colorbar=True,
+                              group_tasks=False,
+                              showgrid_x=True, showgrid_y=True, 
+                              title='Interactive Production Schedule')
+        
+        # Explicitly reverse the Y-axis to put lower sequences at the bottom
+        fig.update_yaxes(categoryorder='array', categoryarray=task_order, autorange="reversed")
+
+        # Update layout for better visualization
+        fig.update_layout(
+            autosize=True,
+            height=max(800, len(df) * 30),  # Increased height for better visibility
+            margin=dict(l=350, r=50, t=100, b=100),  # Increased left margin for labels
+            legend_title_text='Priority Level',
+            hovermode='closest',
+            title={'text': "Interactive Production Schedule", 'font': {'size': 24}, 'x': 0.5, 'xanchor': 'center'},
+            xaxis={
+                'title': {'text': 'Date', 'font': {'size': 1}},
+                'rangeselector': {
+                    'buttons': [
+                        {'count': 7, 'label': '1w', 'step': 'day', 'stepmode': 'backward'},
+                        {'count': 1, 'label': '1m', 'step': 'month', 'stepmode': 'backward'},
+                        {'count': 6, 'label': '6m', 'step': 'month', 'stepmode': 'backward'},
+                        {'count': 1, 'label': 'YTD', 'step': 'year', 'stepmode': 'todate'},
+                        {'count': 1, 'label': '1y', 'step': 'year', 'stepmode': 'backward'},
+                        {'step': 'all', 'label': 'all'}
+                    ]
+                }
+            },
+            yaxis={'title': {'text': 'Process Codes (Machine)', 'font': {'size': 14}}}
+        )
+
+        # Add hover text
+        for i in range(len(fig.data)):
+            fig.data[i].text = df['Description']
+            fig.data[i].hoverinfo = 'text'
+
+        # Add buffer status indicators if available
+        if 'BufferStatus' in df.columns and df['BufferStatus'].notna().any():
+            for i, row in df.iterrows():
+                if pd.notna(row['BufferStatus']):
+                    fig.add_trace(go.Scatter(
+                        x=[row['Finish']],
+                        y=[row['Task']],
+                        mode='markers',
+                        marker=dict(symbol='circle', size=10, color=row['BufferStatus']),
+                        showlegend=False,
+                        hoverinfo='none'
+                    ))
+
+        # Add generation timestamp
+        fig.add_annotation(
+            text=f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            xref="paper", yref="paper",
+            x=0.5, y=-0.05,
+            showarrow=False,
+            font=dict(size=10, color="gray")
+        )
+        
+        # Add buffer status legend without title text
+        legend_items = [
+            {"color": "red", "text": "Critical (<8h)"},
+            {"color": "orange", "text": "Warning (<24h)"},
+            {"color": "yellow", "text": "Caution (<72h)"},
+            {"color": "green", "text": "OK (>72h)"}
+        ]
+        
+        # Position them horizontally with proper spacing
+        spacing = 0.12
+        start_x = 0.5 - ((len(legend_items) - 1) * spacing) / 2
+        for i, item in enumerate(legend_items):
+            x_pos = start_x + (i * spacing)
+
+            # Add colored square
+            fig.add_shape(
+                type="rect",
+                xref="paper", yref="paper",
+                x0=x_pos - 0.03, y0=-0.08,
+                x1=x_pos - 0.01, y1=-0.06,
+                fillcolor=item["color"],
+                line=dict(color=item["color"]),
+            )
+
+            # Add text label
+            fig.add_annotation(
+                text=item["text"],
+                xref="paper", yref="paper",
+                x=x_pos + 0.02, y=-0.07,
+                showarrow=False,
+                font=dict(size=10, color="black"),
+                align="left",
+                xanchor="left"
+            )
+
+        # For debug purposes, add a timestamp to the filename
+        debug_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        debug_output_file = output_file
+        if '.' in output_file:
+            name, ext = os.path.splitext(output_file)
+            debug_output_file = f"{name}_{debug_timestamp}{ext}"
+
+        # Save the figure
+        logger.info(f"Saving Gantt chart to: {os.path.abspath(output_file)}")
         pyo.plot(fig, filename=output_file, auto_open=False)
-        print(f"Interactive Gantt chart saved to: {os.path.abspath(output_file)}")
+        logger.info(f"Interactive Gantt chart saved to: {os.path.abspath(output_file)}")
         return True
+        
     except Exception as e:
-        logger.error(f"Error saving Gantt chart: {e}")
+        logger.error(f"Error creating or saving Gantt chart: {e}", exc_info=True)
         return False
 
 def flatten_schedule_to_list(schedule):

@@ -48,7 +48,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     and process sequence dependencies.
 
     Args:
-        jobs (list): List of job dictionaries (e.g., {'PROCESS_CODE': '...', 'MACHINE_ID': '...', 'processing_time': ..., 'DUE_DATE_TIME': ..., 'PRIORITY': ...})
+        jobs (list): List of job dictionaries (e.g., {'PROCESS_CODE': '...', 'MACHINE_ID': '...', 'processing_time': ..., 'LCD_DATE_EPOCH': ..., 'PRIORITY': ...})
         machines (list): List of machine IDs
         setup_times (dict): Dictionary mapping (process_code1, process_code2) to setup duration (default: None)
         enforce_sequence (bool): Whether to enforce process sequence dependencies
@@ -61,7 +61,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     current_time = int(datetime.now().timestamp())
 
     # Determine horizon (end of scheduling period)
-    horizon_end = current_time + max(job['DUE_DATE_TIME'] for job in jobs) + max(job['processing_time'] for job in jobs)
+    horizon_end = current_time + max(job.get('LCD_DATE_EPOCH', current_time + 2592000) for job in jobs) + max(job['processing_time'] for job in jobs)
     horizon = horizon_end - current_time
 
     # Create CP-SAT model
@@ -71,6 +71,14 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     solver.parameters.log_search_progress = True
     solver.parameters.num_search_workers = 16
 
+    # Check for jobs with START_DATE constraints
+    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    if start_date_jobs:
+        logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints for CP-SAT solver:")
+        for job in start_date_jobs:
+            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            logger.info(f"  Job {job['PROCESS_CODE']} on {job['MACHINE_ID']}: Must start on or after {start_date}")
+
     # Variables for each job
     start_vars = {}
     end_vars = {}
@@ -79,8 +87,11 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         job_id = job['PROCESS_CODE']
         machine_id = job['MACHINE_ID']
         duration = job['processing_time']
-        due_time = job['DUE_DATE_TIME']
+        due_time = job.get('LCD_DATE_EPOCH', horizon_end - duration)
         priority = job['PRIORITY']
+
+        # Get user-defined start date if exists
+        user_start_time = job.get('START_DATE_EPOCH', current_time)
 
         # Validate duration
         if not isinstance(duration, (int, float)) or duration <= 0:
@@ -88,7 +99,8 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             raise ValueError(f"Invalid duration for job {job_id}")
 
         # Define start and end variables with proper domains
-        earliest_start = current_time
+        # Use max of current_time and user_start_time for earliest possible start
+        earliest_start = max(current_time, user_start_time)
         start_var = model.NewIntVar(earliest_start, horizon_end, f'start_{machine_id}_{job_id}')
         end_var = model.NewIntVar(earliest_start, horizon_end + duration, f'end_{machine_id}_{job_id}')
         interval_var = model.NewIntervalVar(start_var, duration, end_var, f'interval_{machine_id}_{job_id}')
@@ -99,6 +111,11 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
         # Constraint: end = start + duration
         model.Add(end_var == start_var + duration)
+        
+        # If there's a user-defined start date, add a constraint for it
+        if user_start_time > current_time:
+            model.Add(start_var >= user_start_time)
+            logger.info(f"Added START_DATE constraint for {job_id}: must start on or after {datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')}")
 
     # Add machine no-overlap constraints
     for machine in machines:
@@ -141,7 +158,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     for job in jobs:
         job_id = job['PROCESS_CODE']
         machine_id = job['MACHINE_ID']
-        due_time = job['DUE_DATE_TIME']
+        due_time = job.get('LCD_DATE_EPOCH', 0)
         priority = job['PRIORITY']
         if due_time > 0:
             delay = model.NewIntVar(0, horizon_end - due_time, f'delay_{machine_id}_{job_id}')
@@ -200,9 +217,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 if __name__ == "__main__":
     # Example usage for testing
     jobs = [
-        {'PROCESS_CODE': 'CP08-231B-P01-06', 'MACHINE_ID': 'WS01', 'processing_time': 20000, 'DUE_DATE_TIME': 1744848000, 'PRIORITY': 2},
-        {'PROCESS_CODE': 'CP08-231B-P02-06', 'MACHINE_ID': 'PP23-060T', 'processing_time': 43636, 'DUE_DATE_TIME': 1744848000, 'PRIORITY': 2},
-        {'PROCESS_CODE': 'CP08-231B-P03-06', 'MACHINE_ID': 'JIG-HAND BEND', 'processing_time': 60000, 'DUE_DATE_TIME': 1744848000, 'PRIORITY': 2},
+        {'PROCESS_CODE': 'CP08-231B-P01-06', 'MACHINE_ID': 'WS01', 'processing_time': 20000, 'LCD_DATE_EPOCH': 1744848000, 'PRIORITY': 2},
+        {'PROCESS_CODE': 'CP08-231B-P02-06', 'MACHINE_ID': 'PP23-060T', 'processing_time': 43636, 'LCD_DATE_EPOCH': 1744848000, 'PRIORITY': 2},
+        {'PROCESS_CODE': 'CP08-231B-P03-06', 'MACHINE_ID': 'JIG-HAND BEND', 'processing_time': 60000, 'LCD_DATE_EPOCH': 1744848000, 'PRIORITY': 2},
     ]
     machines = ['WS01', 'PP23-060T', 'JIG-HAND BEND']
     schedule = schedule_jobs(jobs, machines, enforce_sequence=True)

@@ -40,10 +40,10 @@ def extract_job_family(process_code):
 def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
     """
     Create a schedule using an enhanced greedy algorithm with process sequence enforcement,
-    considering due dates and earliest start times (CUT_Q).
+    considering due dates and earliest start times (START_DATE).
 
     Args:
-        jobs (list): List of job dictionaries (e.g., {'PROCESS_CODE': '...', 'MACHINE_ID': '...', 'processing_time': ..., 'DUE_DATE_TIME': ..., 'PRIORITY': ...})
+        jobs (list): List of job dictionaries (e.g., {'PROCESS_CODE': '...', 'MACHINE_ID': '...', 'processing_time': ..., 'LCD_DATE_EPOCH': ..., 'PRIORITY': ...})
         machines (list): List of machine IDs
         setup_times (dict): Dictionary mapping (process_code1, process_code2) to setup duration (default: None)
         enforce_sequence (bool): Whether to enforce process sequence dependencies
@@ -61,15 +61,15 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             logger.error(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}: {job.get('processing_time')}")
             raise ValueError(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}")
 
-    # Check for and log any jobs with CUT_Q (EARLIEST_START_TIME) constraints
-    cut_q_jobs = [job for job in jobs if job.get('EARLIEST_START_TIME', current_time) > current_time]
-    if cut_q_jobs:
-        logger.info(f"Found {len(cut_q_jobs)} jobs with CUT_Q (earliest start) constraints:")
-        for job in cut_q_jobs:
-            cut_q_date = datetime.fromtimestamp(job['EARLIEST_START_TIME']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): Must start on or after {cut_q_date}")
+    # Check for and log any jobs with START_DATE constraints
+    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    if start_date_jobs:
+        logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints:")
+        for job in start_date_jobs:
+            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): Must start on or after {start_date}")
     else:
-        logger.info("No jobs with CUT_Q constraints found in input data")
+        logger.info("No jobs with START_DATE constraints found in input data")
 
     # Enforce process sequence dependencies or sort by priority and due date
     if enforce_sequence:
@@ -90,7 +90,7 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             sorted_jobs.extend(sorted_family_jobs)
     else:
         # Sort by priority and due date (earlier due dates get higher priority)
-        sorted_jobs = sorted(jobs, key=lambda x: (x['PRIORITY'], x.get('DUE_DATE_TIME', float('inf'))))
+        sorted_jobs = sorted(jobs, key=lambda x: (x['PRIORITY'], x.get('LCD_DATE_EPOCH', float('inf'))))
 
     # Track the latest end time for each family to enforce sequence
     family_end_times = {}
@@ -100,7 +100,7 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         job_id = job['PROCESS_CODE']
         machine_id = job['MACHINE_ID']
         duration = job['processing_time']
-        due_time = job.get('DUE_DATE_TIME', current_time + 30 * 24 * 3600)  # Default to 30 days if not provided
+        due_time = job.get('LCD_DATE_EPOCH', current_time + 30 * 24 * 3600)  # Default to 30 days if not provided
         family = extract_job_family(job_id)
         
         # Get each constraint independently for clarity
@@ -114,15 +114,15 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         # 3. Sequence constraint (if applicable)
         sequence_constraint = family_end_times.get(family, current_time) if enforce_sequence else current_time
         
-        # 4. CUT_Q constraint (earliest allowed start date from user input)
-        cut_q_constraint = job.get('EARLIEST_START_TIME', current_time)
+        # 4. START_DATE constraint (user-defined earliest start date)
+        start_date_constraint = job.get('START_DATE_EPOCH', current_time)
         
         # Find the most restrictive constraint (maximum start time)
         constraints = {
             "Current Time": time_constraint,
             "Machine Availability": machine_constraint,
             "Sequence Dependency": sequence_constraint,
-            "CUT_Q (Earliest Start)": cut_q_constraint
+            "START_DATE (User-defined)": start_date_constraint
         }
         
         # Find the most restrictive constraint
@@ -134,9 +134,9 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             active_date = datetime.fromtimestamp(earliest_start).strftime('%Y-%m-%d %H:%M')
             logger.info(f"Job {job_id} start time ({active_date}) determined by: {active_constraint}")
             
-            # Additional detailed logging for CUT_Q constraints
-            if active_constraint == "CUT_Q (Earliest Start)":
-                logger.info(f"  🚨 CUT_Q date restriction active for {job_id}: Cannot start before {active_date}")
+            # Additional detailed logging for START_DATE constraints
+            if active_constraint == "START_DATE (User-defined)":
+                logger.info(f"  🚨 START_DATE restriction active for {job_id}: Cannot start before {active_date}")
         
         # Schedule the job
         start = earliest_start
@@ -180,11 +180,11 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
 if __name__ == "__main__":
     # Example usage for testing
     jobs = [
-        {'PROCESS_CODE': 'CP08-231B-P01-06', 'MACHINE_ID': 'WS01', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 20000, 'DUE_DATE_TIME': 1744848000},
-        {'PROCESS_CODE': 'CP08-231B-P02-06', 'MACHINE_ID': 'PP23-060T', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 43636, 'DUE_DATE_TIME': 1744848000},
-        {'PROCESS_CODE': 'CP08-231B-P03-06', 'MACHINE_ID': 'JIG-HAND BEND', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 60000, 'DUE_DATE_TIME': 1744848000},
-        {'PROCESS_CODE': 'CP08-231B-P04-06', 'MACHINE_ID': 'PP23-060T', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 34325, 'DUE_DATE_TIME': 1744848000},
-        {'PROCESS_CODE': 'CP08-231B-P05-06', 'MACHINE_ID': 'PP23', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 60000, 'DUE_DATE_TIME': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P01-06', 'MACHINE_ID': 'WS01', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 20000, 'LCD_DATE_EPOCH': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P02-06', 'MACHINE_ID': 'PP23-060T', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 43636, 'LCD_DATE_EPOCH': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P03-06', 'MACHINE_ID': 'JIG-HAND BEND', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 60000, 'LCD_DATE_EPOCH': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P04-06', 'MACHINE_ID': 'PP23-060T', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 34325, 'LCD_DATE_EPOCH': 1744848000},
+        {'PROCESS_CODE': 'CP08-231B-P05-06', 'MACHINE_ID': 'PP23', 'JOB_CODE': 'JOAW24120317', 'PRIORITY': 2, 'processing_time': 60000, 'LCD_DATE_EPOCH': 1744848000},
     ]
     machines = ['WS01', 'PP23-060T', 'JIG-HAND BEND', 'PP23']
     setup_times = {job['PROCESS_CODE']: {prev_job['PROCESS_CODE']: 0 for prev_job in jobs if prev_job != job} for job in jobs}  # Placeholder setup times
