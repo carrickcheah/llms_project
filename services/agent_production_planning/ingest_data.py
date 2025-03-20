@@ -47,19 +47,30 @@ def clean_excel_data(df):
     if 'PROCESS_CODE' in df.columns:
         df = df[df['PROCESS_CODE'].notna() & (df['PROCESS_CODE'].str.len() > 0)]
     
-    # Process date columns
-    date_cols = ['LCD_DATE', 'PLANNED_START', 'PLANNED_END', 'LATEST_COMPLETION_DATE', 'START_DATE']
+    # Process date columns - handle column names with or without trailing spaces
+    base_date_cols = ['LCD_DATE', 'PLANNED_START', 'PLANNED_END', 'LATEST_COMPLETION_DATE', 'START_DATE']
+    date_cols = []
+    
+    # Find actual column names that match base names (handling trailing spaces)
+    for base_col in base_date_cols:
+        matching_cols = [col for col in df.columns if col.strip() == base_col]
+        if matching_cols:
+            date_cols.extend(matching_cols)
+        elif base_col in df.columns:
+            date_cols.append(base_col)
+    
+    logger.info(f"Date columns found in Excel: {date_cols}")
+    
     for col in date_cols:
-        if col in df.columns:
-            # Try multiple date formats - IMPORTANT: Added '%d/%m/%y' first for DD/MM/YY format
-            for fmt in ['%d/%m/%y', '%Y-%m-%dT%H:%M:%S.000Z', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']:
-                try:
-                    df[col] = pd.to_datetime(df[col], format=fmt, errors='coerce')
-                    if df[col].notna().sum() > 0:
-                        logger.info(f"Converted {col} using format {fmt}: {df[col].notna().sum()} valid dates")
-                        break
-                except:
-                    continue
+        # Try multiple date formats - IMPORTANT: Added '%d/%m/%y' first for DD/MM/YY format
+        for fmt in ['%d/%m/%y', '%Y-%m-%dT%H:%M:%S.000Z', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']:
+            try:
+                df[col] = pd.to_datetime(df[col], format=fmt, errors='coerce')
+                if df[col].notna().sum() > 0:
+                    logger.info(f"Converted {col} using format {fmt}: {df[col].notna().sum()} valid dates")
+                    break
+            except:
+                continue
     
     # Remove duplicates on key columns
     key_cols = [col for col in ['JOBCODE', 'PROCESS_CODE', 'MACHINE_ID'] if col in df.columns]
@@ -116,16 +127,23 @@ def convert_to_epoch(df, columns, base_date=None):
     # Default due date (30 days from now)
     default_due_date = int((datetime.now() + pd.Timedelta(days=30)).timestamp())
     
-    for col in columns:
-        if col not in df.columns:
-            logger.warning(f"Column '{col}' not found in DataFrame. Skipping.")
-            continue
-        
-        epoch_col = f"epoch_{col.lower().replace(' ', '_').replace('-', '_')}"
+    # Find the actual column names that match the base names (handling trailing spaces)
+    actual_columns = {}
+    for base_col in columns:
+        matching_cols = [col for col in df.columns if col.strip() == base_col]
+        if matching_cols:
+            actual_columns[base_col] = matching_cols[0]
+        elif base_col in df.columns:
+            actual_columns[base_col] = base_col
+    
+    logger.info(f"Found date columns: {list(actual_columns.items())}")
+    
+    for base_col, col in actual_columns.items():
+        epoch_col = f"epoch_{base_col.lower().replace(' ', '_').replace('-', '_')}"
         
         # Special handling for LCD_DATE - prioritize this as the first column
-        if col == 'LCD_DATE':
-            logger.info(f"Processing LCD_DATE column with special attention")
+        if base_col == 'LCD_DATE':
+            logger.info(f"Processing LCD_DATE column ('{col}') with special attention")
             epoch_col = 'LCD_DATE_EPOCH'  # Renamed to match expectation
             
             # Try with multiple date formats
@@ -143,20 +161,26 @@ def convert_to_epoch(df, columns, base_date=None):
                     logger.warning(f"Error with format {fmt}: {e}")
         
         # Special handling for START_DATE
-        elif col == 'START_DATE':
-            logger.info(f"Processing START_DATE column")
+        elif base_col == 'START_DATE':
+            logger.info(f"Processing START_DATE column ('{col}')")
             epoch_col = 'START_DATE_EPOCH'
             
             # Try with multiple date formats
             date_formats = ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y']
             for fmt in date_formats:
                 try:
-                    df[epoch_col] = pd.to_datetime(df[col], format=fmt, errors='coerce').apply(
-                        lambda x: int(x.timestamp()) if pd.notna(x) else None
-                    )
+                    # Convert to datetime first
+                    dates = pd.to_datetime(df[col], format=fmt, errors='coerce')
+                    # Then convert to epoch timestamps
+                    df[epoch_col] = dates.apply(lambda x: int(x.timestamp()) if pd.notna(x) else None)
                     valid_count = df[epoch_col].notna().sum()
                     logger.info(f"START_DATE with format {fmt}: {valid_count} valid dates")
                     if valid_count > 0:
+                        # Log each START_DATE for debugging
+                        for idx, timestamp in df[df[epoch_col].notna()][epoch_col].items():
+                            date_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M')
+                            process = df.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else f"Row {idx}"
+                            logger.info(f"  Found START_DATE for {process}: {date_str}")
                         break
                 except Exception as e:
                     logger.warning(f"Error with format {fmt}: {e}")
@@ -259,10 +283,22 @@ def load_job_data(file_path):
     date_columns = ['LCD_DATE', 'PLANNED_START', 'PLANNED_END', 'LATEST_COMPLETION_DATE', 'START_DATE']
     df = convert_to_epoch(df, date_columns)
     
+    # Find START_DATE column with or without trailing space
+    start_date_col = next((col for col in df.columns if col.strip() == 'START_DATE'), None)
+    if start_date_col:
+        logger.info(f"Found START_DATE column: '{start_date_col}'")
+    else:
+        logger.warning("No START_DATE column found in the data")
+    
+    # Find PLANNED_START column with or without trailing space
+    planned_start_col = next((col for col in df.columns if col.strip() == 'PLANNED_START'), None)
+    if planned_start_col:
+        logger.info(f"Found PLANNED_START column: '{planned_start_col}'")
+    
     # Define column mapping to standardize column names
     column_mapping = {
-        'LCD_DATE_EPOCH': 'LCD_DATE_EPOCH',  # Keep as is for chart_two.py
-        'START_DATE_EPOCH': 'START_DATE_EPOCH',  # New column for user-defined start date
+        'LCD_DATE_EPOCH': 'LCD_DATE_EPOCH',  # Keep original name
+        'START_DATE_EPOCH': 'START_DATE_EPOCH',  # Keep original name
         'JOB_CODE': 'JOBCODE',
         'PROCESS_CODE': 'PROCESS_CODE',
         'MACHINE_ID': 'MACHINE_ID',
@@ -270,8 +306,8 @@ def load_job_data(file_path):
         'DURATION_IN_HOUR': 'HOURS_NEED',
         'SETUP_TIME': 'SETTING_HOUR',
         'DOWNTIME': 'NO_PRODUCTION_HOUR',
-        'PRIORITY': 'PRIORTY',  # Map to PRIORTY (note spelling)
-        'PLANNED_START': 'PLANNED_START',
+        'PRIORITY': 'PRIORITY',  # Map to PRIORITY
+        'PLANNED_START': planned_start_col if planned_start_col else 'PLANNED_START',
         'PLANNED_END': 'PLANNED_END',
         'LATEST_COMPLETION_DATE': 'LATEST_COMPLETION_DATE'
     }
@@ -427,8 +463,9 @@ def load_jobs_planning_data(file_path):
 
 if __name__ == "__main__":
     # Test the function
-    file_path = "mydata.xlsx"
+    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
     jobs, machines, setup_times = load_jobs_planning_data(file_path)
     print("Jobs:", jobs)
     print("Machines:", machines)
     print("Setup Times:", setup_times)
+

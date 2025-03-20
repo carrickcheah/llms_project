@@ -71,6 +71,10 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     buffer_status = "OK"
                 
                 # Add to schedule data
+                # Use START_TIME directly from job if available, otherwise calculate it from schedule
+                job_start_time = job.get('START_TIME', job_start)
+                job_start_date = datetime.fromtimestamp(job_start_time).strftime('%Y-%m-%d %H:%M')
+                
                 schedule_data.append({
                     'LCD_DATE': due_date,
                     'START_DATE': user_start_date,
@@ -78,7 +82,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     'JOB_CODE': job_code,
                     'MACHINE_ID': job.get('MACHINE_ID', 'Unknown'),
                     'PRIORTY': job.get('PRIORITY', 3),
-                    'START_TIME': start_date,
+                    'START_TIME': job_start_date,
                     'END_TIME': end_date,
                     'DURATION_HOURS': round(duration_hours, 1),
                     'BUFFER_HOURS': round(buffer_hours, 1),
@@ -108,11 +112,6 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         .status-warning {{ background-color: rgba(255, 165, 0, 0.1); }}
         .status-caution {{ background-color: rgba(255, 255, 0, 0.1); }}
         .status-ok {{ background-color: rgba(0, 128, 0, 0.1); }}
-        .priority-1 {{ color: #dc3545; font-weight: bold; }}
-        .priority-2 {{ color: #fd7e14; font-weight: bold; }}
-        .priority-3 {{ color: #28a745; }}
-        .priority-4 {{ color: #6610f2; }}
-        .priority-5 {{ color: #17a2b8; }}
         .table-container {{ margin-top: 30px; }}
         .filter-section {{ margin-bottom: 20px; }}
     </style>
@@ -170,9 +169,6 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             elif row['BUFFER_STATUS'] == 'OK':
                 buffer_class = "status-ok"
             
-            # Get priority class
-            priority_class = f"priority-{row['PRIORTY']}"
-            
             html_content += f"""
                     <tr class="{buffer_class}">
                         <td>{row['LCD_DATE']}</td>
@@ -180,7 +176,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         <td>{row['PROCESS_CODE']}</td>
                         <td>{row['JOB_CODE']}</td>
                         <td>{row['MACHINE_ID']}</td>
-                        <td class="{priority_class}">{row['PRIORTY']}</td>
+                        <td>{row['PRIORTY']}</td>
                         <td>{row['START_TIME']}</td>
                         <td>{row['END_TIME']}</td>
                         <td>{row['DURATION_HOURS']}</td>

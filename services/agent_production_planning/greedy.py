@@ -62,12 +62,19 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             raise ValueError(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}")
 
     # Check for and log any jobs with START_DATE constraints
-    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    # Use .get with None to ensure we capture START_DATE_EPOCH even if it's 0
+    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None]
     if start_date_jobs:
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints:")
         for job in start_date_jobs:
-            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): Must start on or after {start_date}")
+            epoch_time = job['START_DATE_EPOCH']
+            if epoch_time > current_time:
+                start_date = datetime.fromtimestamp(epoch_time).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): MUST start on or after {start_date}")
+                # Force this job to have a start date constraint
+                logger.info(f"  Enforcing START_DATE constraint for {job['PROCESS_CODE']}")
+            else:
+                logger.info(f"  Job {job['PROCESS_CODE']} has START_DATE in the past, not enforcing")
     else:
         logger.info("No jobs with START_DATE constraints found in input data")
 
@@ -89,8 +96,25 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             logger.info(f"Family {family} process sequence: {', '.join(job['PROCESS_CODE'] for job in sorted_family_jobs)}")
             sorted_jobs.extend(sorted_family_jobs)
     else:
-        # Sort by priority and due date (earlier due dates get higher priority)
-        sorted_jobs = sorted(jobs, key=lambda x: (x['PRIORITY'], x.get('LCD_DATE_EPOCH', float('inf'))))
+        # First, identify and prioritize jobs with START_DATE constraints
+        start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None]
+        future_start_date_jobs = [job for job in start_date_jobs if job['START_DATE_EPOCH'] > current_time]
+        
+        if future_start_date_jobs:
+            logger.info(f"Prioritizing {len(future_start_date_jobs)} jobs with future START_DATE constraints")
+            # Sort the remaining jobs by priority and due date
+            for job in future_start_date_jobs:
+                job_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"  Prioritizing job {job['PROCESS_CODE']} with START_DATE={job_start_date}")
+        
+        # Sort jobs: START_DATE jobs first (sorted by START_DATE), then priority and due date
+        # This ensures jobs with START_DATE are scheduled first at their constraint time
+        sorted_jobs = sorted(jobs, key=lambda x: (
+            0 if ('START_DATE_EPOCH' in x and x['START_DATE_EPOCH'] is not None and x['START_DATE_EPOCH'] > current_time) else 1,
+            x.get('START_DATE_EPOCH', float('inf')),
+            x['PRIORITY'], 
+            x.get('LCD_DATE_EPOCH', float('inf'))
+        ))
 
     # Track the latest end time for each family to enforce sequence
     family_end_times = {}
@@ -115,7 +139,31 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         sequence_constraint = family_end_times.get(family, current_time) if enforce_sequence else current_time
         
         # 4. START_DATE constraint (user-defined earliest start date)
-        start_date_constraint = job.get('START_DATE_EPOCH', current_time)
+        # If START_DATE_EPOCH exists and is valid, use it as a hard constraint
+        if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None:
+            start_date_constraint = job['START_DATE_EPOCH']
+            # For jobs with START_DATE in the future, log and enforce
+            if start_date_constraint > current_time:
+                start_date_str = datetime.fromtimestamp(start_date_constraint).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"ENFORCING START_DATE for job {job_id}: {start_date_str}")
+                
+                # Check if this is a P01 job (first in sequence) with START_DATE constraint
+                if '-P01-' in job_id or job_id.endswith('-P01'):
+                    # For START_DATE constrained P01 jobs, override machine availability
+                    # This ensures the job starts exactly at its START_DATE regardless of machine availability
+                    if machine_constraint > start_date_constraint:
+                        logger.info(f"🚨 OVERRIDING machine availability for {job_id} - START_DATE constraint takes precedence")
+                        logger.info(f"  Original machine availability: {datetime.fromtimestamp(machine_constraint).strftime('%Y-%m-%d %H:%M')}")
+                        logger.info(f"  Setting machine free at START_DATE: {start_date_str}")
+                        machine_constraint = start_date_constraint
+            else:
+                # Even if START_DATE is in the past, log it
+                start_date_str = datetime.fromtimestamp(start_date_constraint).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"START_DATE for job {job_id} is in the past ({start_date_str}), not restricting")
+                start_date_constraint = current_time
+        else:
+            # No START_DATE provided for this job
+            start_date_constraint = current_time
         
         # Find the most restrictive constraint (maximum start time)
         constraints = {
@@ -147,11 +195,22 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             last_job = schedule[machine_id][-1]
             last_job_end = last_job[2]
             setup_duration = setup_times[job_id].get(last_job[0], 0)
+            
+            # Check if this is a START_DATE constrained P01 job
+            is_start_date_job = ('START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None 
+                                and job['START_DATE_EPOCH'] > current_time)
+            is_p01_job = ('-P01-' in job_id or job_id.endswith('-P01'))
+            is_start_date_priority = is_start_date_job and is_p01_job and active_constraint == "START_DATE (User-defined)"
+            
             if start < last_job_end + setup_duration:
-                old_start = start
-                start = last_job_end + setup_duration
-                end = start + duration
-                logger.info(f"Applied setup time: Job {job_id} start delayed from {datetime.fromtimestamp(old_start).strftime('%Y-%m-%d %H:%M')} to {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')}")
+                # For START_DATE constrained P01 jobs, we ignore setup times to enforce exact START_DATE
+                if is_start_date_priority:
+                    logger.info(f"⚠️ Skipping setup time for START_DATE constrained job {job_id} to ensure exact START_DATE constraint is met")
+                else:
+                    old_start = start
+                    start = last_job_end + setup_duration
+                    end = start + duration
+                    logger.info(f"Applied setup time: Job {job_id} start delayed from {datetime.fromtimestamp(old_start).strftime('%Y-%m-%d %H:%M')} to {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')}")
 
         # Schedule the job
         schedule[machine_id].append((job_id, start, end, job['PRIORITY']))

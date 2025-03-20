@@ -77,7 +77,8 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints for CP-SAT solver:")
         for job in start_date_jobs:
             start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} on {job['MACHINE_ID']}: Must start on or after {start_date}")
+            logger.info(f"  Job {job['PROCESS_CODE']} on {job['MACHINE_ID']}: MUST start on or after {start_date}")
+        logger.info("START_DATE constraints will be strictly enforced in the model")
 
     # Variables for each job
     start_vars = {}

@@ -1,3 +1,4 @@
+# chart_three.py | dont edit this line
 import os
 import re
 from datetime import datetime, timedelta
@@ -25,13 +26,11 @@ def extract_job_family(process_code):
 
 def extract_process_number(process_code):
     """Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found."""
-    print(f"Extracting sequence from: {process_code}")
-    match = re.search(r'P(\d{2})-\d+', str(process_code).upper())  # Match exactly two digits after P
+    process_code = str(process_code).upper()
+    match = re.search(r'P(\d{2})', process_code)  # Match exactly two digits after P
     if match:
         seq = int(match.group(1))
-        print(f"Extracted sequence: {seq}")
         return seq
-    print("No match found, returning 999")
     return 999  # Default for invalid formats
 
 def get_buffer_status_color(buffer_hours):

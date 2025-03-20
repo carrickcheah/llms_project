@@ -7,7 +7,7 @@ import pandas as pd
 from ingest_data import load_jobs_planning_data
 from sch_jobs import schedule_jobs
 from greedy import greedy_schedule
-from chart_three import create_interactive_gantt  # Updated import
+from chart import create_interactive_gantt
 from chart_two import export_schedule_html
 
 # Configure logging
@@ -20,36 +20,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def add_balance_hours(jobs, schedule):
+def add_schedule_times_and_buffer(jobs, schedule):
     """
-    Calculate the buffer time (BALANCE_HOUR) between job completion and deadline.
+    Add schedule times (START_TIME and END_TIME) to job dictionaries and
+    calculate the buffer time (BALANCE_HOUR) between job completion and deadline.
     
     Args:
         jobs (list): List of job dictionaries
         schedule (dict): Schedule as {machine: [(process_code, start, end, priority), ...]}
         
     Returns:
-        list: Updated jobs list with BALANCE_HOUR added
+        list: Updated jobs list with START_TIME, END_TIME, and BALANCE_HOUR added
     """
-    # Create a lookup of end times from the schedule
-    end_times = {}
+    # Create a lookup of start and end times from the schedule
+    times = {}
     for machine, tasks in schedule.items():
         for task in tasks:
-            process_code, _, end, _ = task
-            end_times[process_code] = end
+            process_code, start, end, _ = task
+            times[process_code] = (start, end)
     
-    # Add BALANCE_HOUR to each job
+    # Add schedule times and BALANCE_HOUR to each job
     for job in jobs:
         process_code = job['PROCESS_CODE']
-        if process_code in end_times:
-            job_end = end_times[process_code]
+        if process_code in times:
+            job_start, job_end = times[process_code]
             due_time = job.get('LCD_DATE_EPOCH', 0)
             
             # Calculate buffer in hours
             buffer_seconds = max(0, due_time - job_end)
             buffer_hours = buffer_seconds / 3600
             
-            # Add to job data
+            # Add to job data - ensure START_TIME and END_TIME are set from scheduler
+            job['START_TIME'] = job_start
             job['END_TIME'] = job_end
             job['BALANCE_HOUR'] = buffer_hours
             job['BUFFER_STATUS'] = get_buffer_status(buffer_hours)
@@ -106,7 +108,23 @@ def main():
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints:")
         for job in start_date_jobs:
             start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): Must start on or after {start_date}")
+            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): MUST start on or after {start_date}")
+        
+        # Ensure START_DATE constraints are strictly enforced
+        logger.info("Ensuring START_DATE constraints are enforced...")
+        
+        # Only keep START_DATE_EPOCH when it was actually provided in the input
+        # DO NOT set defaults for those without specified constraints
+        for job in jobs:
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None:
+                # Only enforce constraints that are in the future
+                if job['START_DATE_EPOCH'] > current_time:
+                    logger.info(f"ENFORCING START_DATE {datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')} for {job['PROCESS_CODE']}")
+            else:
+                # If START_DATE wasn't provided in input, remove it from job dictionary if present
+                if 'START_DATE_EPOCH' in job:
+                    del job['START_DATE_EPOCH']
+                    logger.debug(f"Removed empty START_DATE_EPOCH for {job['PROCESS_CODE']}")
 
     # Schedule jobs
     start_time = time.time()
@@ -125,6 +143,14 @@ def main():
     if not schedule or not any(schedule.values()):
         logger.info("Falling back to greedy scheduler...")
         try:
+            # Ensure START_DATE constraints are properly passed to the greedy scheduler
+            start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+            if start_date_jobs:
+                logger.info(f"Passing {len(start_date_jobs)} START_DATE constraints to greedy scheduler:")
+                for job in start_date_jobs:
+                    start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                    logger.info(f"  Constraint: {job['PROCESS_CODE']} must start on or after {start_date}")
+            
             schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=args.enforce_sequence)
         except Exception as e:
             logger.error(f"Greedy scheduler failed: {e}")
@@ -134,8 +160,8 @@ def main():
         logger.error("Failed to create a valid schedule.")
         return
 
-    # Calculate BALANCE_HOUR for each job
-    jobs = add_balance_hours(jobs, schedule)
+    # Add schedule times and calculate BALANCE_HOUR for each job
+    jobs = add_schedule_times_and_buffer(jobs, schedule)
     
     # Generate HTML view of the schedule
     try:
@@ -235,13 +261,16 @@ def main():
     print(f"Scheduling completed in {time.time() - start_time:.2f} seconds")
     
     # Check for START_DATE constraints and their impact
-    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None]
+    future_date_jobs = [job for job in start_date_jobs if job['START_DATE_EPOCH'] > current_time]
+    
     if start_date_jobs:
         print("\nSTART_DATE constraints:")
         for job in start_date_jobs:
             process = job['PROCESS_CODE']
             machine = job['MACHINE_ID']
             start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            is_future = job['START_DATE_EPOCH'] > current_time
             
             # Find the scheduled start time
             scheduled_start = None
@@ -253,8 +282,29 @@ def main():
             
             if scheduled_start:
                 scheduled_date = datetime.fromtimestamp(scheduled_start).strftime('%Y-%m-%d %H:%M')
-                impact = "RESPECTED" if scheduled_start >= job['START_DATE_EPOCH'] else "VIOLATED"
-                print(f"  {process} on {machine}: START_DATE={start_date}, Scheduled={scheduled_date} - {impact}")
+                if is_future:
+                    impact = "RESPECTED" if scheduled_start >= job['START_DATE_EPOCH'] else "VIOLATED"
+                    print(f"  {process} on {machine}: START_DATE={start_date}, Scheduled={scheduled_date} - {impact}")
+        
+        if future_date_jobs:
+            violated_constraints = []
+            for job in future_date_jobs:
+                process = job['PROCESS_CODE']
+                # Find the scheduled start time
+                for tasks in schedule.values():
+                    for proc_code, start, _, _ in tasks:
+                        if proc_code == process and start < job['START_DATE_EPOCH']:
+                            violated_constraints.append(job)
+                            break
+            
+            if violated_constraints:
+                logger.error(f"Found {len(violated_constraints)} violated START_DATE constraints!")
+                for job in violated_constraints:
+                    process = job['PROCESS_CODE']
+                    start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                    logger.error(f"  VIOLATED: {process} should start on or after {start_date}")
+            else:
+                logger.info("All future START_DATE constraints were respected by the scheduler")
 
     print(f"\nResults saved to:")
     print(f"- Gantt chart: {os.path.abspath(args.output)}")
