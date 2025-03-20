@@ -7,6 +7,9 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# This is the critical part in export_schedule_html that needs changing
+# Around line 82-90 in chart_two.py
+
 def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
     """
     Export the schedule to an interactive HTML file.
@@ -39,18 +42,15 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 job_end = end_times[process_code]
                 due_time = job.get('LCD_DATE_EPOCH', 0)
                 
-                # UPDATED: Handle START_DATE and START_TIME properly
+                # CRITICAL CHANGE: Always use START_DATE for START_TIME when provided
                 # If START_DATE_EPOCH exists, use it for display as START_DATE
                 user_start_date = ""
                 if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
                     user_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
                     
-                    # For START_TIME, use START_DATE_EPOCH if it exists and is in the future
-                    # This ensures START_TIME matches START_DATE for future dates
-                    if job['START_DATE_EPOCH'] > int(datetime.now().timestamp()):
-                        job_start = job['START_DATE_EPOCH']
-                    else:
-                        job_start = start_times[process_code]
+                    # MODIFIED: Always use START_DATE_EPOCH for job_start when available
+                    # This ensures START_TIME always matches START_DATE in output
+                    job_start = job['START_DATE_EPOCH']
                 else:
                     # No START_DATE specified, use the scheduled start time
                     job_start = start_times[process_code]
@@ -61,6 +61,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 due_date = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
                 
                 # Calculate duration and buffer
+                # MODIFIED: Calculate duration using START_DATE when available
                 duration_seconds = job_end - job_start
                 duration_hours = duration_seconds / 3600
                 buffer_seconds = max(0, due_time - job_end)
@@ -88,7 +89,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     'JOB_CODE': job_code,
                     'MACHINE_ID': job.get('MACHINE_ID', 'Unknown'),
                     'PRIORTY': job.get('PRIORITY', 3),
-                    'START_TIME': job_start_date,
+                    'START_TIME': job_start_date,  # This will now always match START_DATE when provided
                     'END_TIME': end_date,
                     'DURATION_HOURS': round(duration_hours, 1),
                     'BUFFER_HOURS': round(buffer_hours, 1),

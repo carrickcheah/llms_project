@@ -20,6 +20,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Modify the add_schedule_times_and_buffer function in main.py
+# Around line 45-49
+
 def add_schedule_times_and_buffer(jobs, schedule):
     """
     Add schedule times (START_TIME and END_TIME) to job dictionaries and
@@ -50,8 +53,17 @@ def add_schedule_times_and_buffer(jobs, schedule):
             buffer_seconds = max(0, due_time - job_end)
             buffer_hours = buffer_seconds / 3600
             
-            # Add to job data - ensure START_TIME and END_TIME are set from scheduler
-            job['START_TIME'] = job_start
+            # MODIFIED: Always use START_DATE_EPOCH for START_TIME when available
+            # regardless of whether it's in the past or future
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+                # Always use START_DATE as the display START_TIME 
+                job['START_TIME'] = job['START_DATE_EPOCH']
+                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"Setting START_TIME to match START_DATE ({start_date}) for job {process_code}")
+            else:
+                # No START_DATE specified, use the scheduled start time
+                job['START_TIME'] = job_start
+            
             job['END_TIME'] = job_end
             job['BALANCE_HOUR'] = buffer_hours
             job['BUFFER_STATUS'] = get_buffer_status(buffer_hours)
@@ -74,7 +86,8 @@ def main():
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Production Planning Scheduler")
-    parser.add_argument("--file", default="mydata.xlsx", help="Path to the Excel file with job data")
+    parser.add_argument("--file", default="/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx", 
+                       help="Path to the Excel file with job data")
     parser.add_argument("--max-jobs", type=int, default=100, help="Maximum number of jobs to schedule")
     parser.add_argument("--force-greedy", action="store_true", help="Force the use of the greedy scheduler")
     parser.add_argument("--output", default="interactive_schedule.html", help="Output file for the Gantt chart")
@@ -108,7 +121,7 @@ def main():
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints:")
         for job in start_date_jobs:
             start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): MUST start on or after {start_date}")
+            logger.info(f"  Job {job['PROCESS_CODE']} (Machine: {job['MACHINE_ID']}): MUST start EXACTLY at {start_date}")
         
         # Ensure START_DATE constraints are strictly enforced
         logger.info("Ensuring START_DATE constraints are enforced...")
@@ -149,7 +162,7 @@ def main():
                 logger.info(f"Passing {len(start_date_jobs)} START_DATE constraints to greedy scheduler:")
                 for job in start_date_jobs:
                     start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-                    logger.info(f"  Constraint: {job['PROCESS_CODE']} must start on or after {start_date}")
+                    logger.info(f"  Constraint: {job['PROCESS_CODE']} must start EXACTLY at {start_date}")
             
             schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=args.enforce_sequence)
         except Exception as e:
@@ -180,11 +193,16 @@ def main():
     for machine, tasks in schedule.items():
         for task in tasks:
             process_code, start, end, priority = task
+            
+            # Find the corresponding job to get accurate START_TIME (might differ from scheduled start)
+            job_entry = next((j for j in jobs if j['PROCESS_CODE'] == process_code), None)
+            start_time = job_entry['START_TIME'] if job_entry else start
+            
             flat_schedule.append({
                 'PROCESS_CODE': process_code,
                 'MACHINE_ID': machine,
-                'START_TIME': start,  # Computed by scheduler
-                'END_TIME': end,      # Computed by scheduler
+                'START_TIME': start_time,  # Use the job's START_TIME which may respect START_DATE
+                'END_TIME': end,          # Computed by scheduler
                 'PRIORITY': priority
             })
 
@@ -282,9 +300,20 @@ def main():
             
             if scheduled_start:
                 scheduled_date = datetime.fromtimestamp(scheduled_start).strftime('%Y-%m-%d %H:%M')
+                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                
                 if is_future:
-                    impact = "RESPECTED" if scheduled_start >= job['START_DATE_EPOCH'] else "VIOLATED"
+                    if scheduled_start >= job['START_DATE_EPOCH']:
+                        impact = "RESPECTED"
+                    else:
+                        impact = "VIOLATED"
+                    
+                    # Also check if START_TIME matches START_DATE for future jobs
+                    start_time_matches = job['START_TIME'] == job['START_DATE_EPOCH']
+                    
                     print(f"  {process} on {machine}: START_DATE={start_date}, Scheduled={scheduled_date} - {impact}")
+                    if not start_time_matches:
+                        print(f"    ⚠️ START_TIME doesn't match START_DATE for {process}")
         
         if future_date_jobs:
             violated_constraints = []
@@ -302,7 +331,7 @@ def main():
                 for job in violated_constraints:
                     process = job['PROCESS_CODE']
                     start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-                    logger.error(f"  VIOLATED: {process} should start on or after {start_date}")
+                    logger.error(f"  VIOLATED: {process} should start EXACTLY at {start_date}")
             else:
                 logger.info("All future START_DATE constraints were respected by the scheduler")
 

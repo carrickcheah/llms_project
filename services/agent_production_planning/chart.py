@@ -47,6 +47,9 @@ def get_buffer_status_color(buffer_hours):
     else:
         return "green"
 
+# Modify the create_interactive_gantt function in chart.py
+# Around line 94 (in the task processing loop)
+
 def create_interactive_gantt(schedule, jobs=None, output_file='interactive_schedule.html'):
     """
     Create an interactive Gantt chart from the schedule and save it as an HTML file.
@@ -90,6 +93,16 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     
                 process_code, start, end, priority = job_data
                 
+                # MODIFIED: Always respect START_DATE constraints for visualization
+                # If this job has a START_DATE_EPOCH, always use that for visualization
+                if job_lookup and process_code in job_lookup and 'START_DATE_EPOCH' in job_lookup[process_code] and job_lookup[process_code]['START_DATE_EPOCH']:
+                    job = job_lookup[process_code]
+                    # Always use START_DATE for visualization, regardless of when it is
+                    original_start = start
+                    start = job['START_DATE_EPOCH']
+                    logger.info(f"Job {process_code}: Using START_DATE={datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} "
+                               f"instead of scheduled start {datetime.fromtimestamp(original_start).strftime('%Y-%m-%d %H:%M')} for visualization")
+                
                 if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
                     logger.warning(f"Invalid timestamp for process {process_code} on machine {machine}: start={start}, end={end}")
                     continue
@@ -105,7 +118,6 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     
                 process_info[family].append((process_code, machine, start, end, priority, sequence))
                 logger.debug(f"Added {process_code} to family {family} with sequence {sequence}")
-
         logger.info(f"Organized jobs into {len(process_info)} job families")
         for family, processes in process_info.items():
             logger.debug(f"Family {family}: {len(processes)} processes")
@@ -150,9 +162,10 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     buffer_status = get_buffer_status_color(buffer_hours)
                     buffer_info = f"<br><b>Due Date:</b> {due_date.strftime('%Y-%m-%d %H:%M')}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
                     
+                    # Add START_DATE information if present 
                     if 'START_DATE_EPOCH' in job_data and job_data['START_DATE_EPOCH'] and job_data['START_DATE_EPOCH'] > current_time:
-                        earliest_start = datetime.fromtimestamp(job_data['START_DATE_EPOCH'])
-                        buffer_info += f"<br><b>Earliest Start:</b> {earliest_start.strftime('%Y-%m-%d %H:%M')}"
+                        start_date_info = datetime.fromtimestamp(job_data['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                        buffer_info += f"<br><b>START_DATE Constraint:</b> {start_date_info}"
                 
                 if 'NUMBER_OPERATOR' in job_data:
                     number_operator = f"<br><b>Number of Operators:</b> {job_data['NUMBER_OPERATOR']}"
@@ -270,12 +283,6 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 align="left",
                 xanchor="left"
             )
-
-        debug_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-        debug_output_file = output_file
-        if '.' in output_file:
-            name, ext = os.path.splitext(output_file)
-            debug_output_file = f"{name}_{debug_timestamp}{ext}"
 
         logger.info(f"Saving Gantt chart to: {os.path.abspath(output_file)}")
         pyo.plot(fig, filename=output_file, auto_open=False)

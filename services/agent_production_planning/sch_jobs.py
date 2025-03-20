@@ -15,13 +15,10 @@ def extract_process_number(process_code):
     """
     Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found.
     """
-    print(f"Extracting sequence from: {process_code}")
     match = re.search(r'P(\d{2})-\d+', str(process_code).upper())  # Match exactly two digits after P
     if match:
         seq = int(match.group(1))
-        print(f"Extracted sequence: {seq}")
         return seq
-    print("No match found, returning 999")
     return 999  # Default if parsing fails
 
 def extract_job_family(process_code):
@@ -48,9 +45,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     and process sequence dependencies.
 
     Args:
-        jobs (list): List of job dictionaries (e.g., {'PROCESS_CODE': '...', 'MACHINE_ID': '...', 'processing_time': ..., 'LCD_DATE_EPOCH': ..., 'PRIORITY': ...})
+        jobs (list): List of job dictionaries
         machines (list): List of machine IDs
-        setup_times (dict): Dictionary mapping (process_code1, process_code2) to setup duration (default: None)
+        setup_times (dict): Dictionary mapping (process_code1, process_code2) to setup duration
         enforce_sequence (bool): Whether to enforce process sequence dependencies
         time_limit_seconds (int): Maximum time limit for the solver in seconds
 
@@ -77,7 +74,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints for CP-SAT solver:")
         for job in start_date_jobs:
             start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} on {job['MACHINE_ID']}: MUST start on or after {start_date}")
+            logger.info(f"  Job {job['PROCESS_CODE']} on {job['MACHINE_ID']}: MUST start EXACTLY at {start_date}")
         logger.info("START_DATE constraints will be strictly enforced in the model")
 
     # Variables for each job
@@ -92,6 +89,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         priority = job['PRIORITY']
 
         # Get user-defined start date if exists
+        has_start_date = 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None
         user_start_time = job.get('START_DATE_EPOCH', current_time)
 
         # Validate duration
@@ -100,10 +98,19 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             raise ValueError(f"Invalid duration for job {job_id}")
 
         # Define start and end variables with proper domains
-        # Use max of current_time and user_start_time for earliest possible start
-        earliest_start = max(current_time, user_start_time)
-        start_var = model.NewIntVar(earliest_start, horizon_end, f'start_{machine_id}_{job_id}')
-        end_var = model.NewIntVar(earliest_start, horizon_end + duration, f'end_{machine_id}_{job_id}')
+        # MODIFIED: For future START_DATE jobs, set exact start time with narrow domain
+        if has_start_date and user_start_time > current_time:
+            # Fixed start time - must start EXACTLY at START_DATE
+            start_var = model.NewIntVar(user_start_time, user_start_time, f'start_{machine_id}_{job_id}')
+            logger.info(f"Job {job_id} must start EXACTLY at {datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')}")
+            # Store START_TIME equal to START_DATE for visualization
+            job['START_TIME'] = user_start_time
+        else:
+            # Regular job with flexible start time
+            earliest_start = max(current_time, user_start_time)
+            start_var = model.NewIntVar(earliest_start, horizon_end, f'start_{machine_id}_{job_id}')
+            
+        end_var = model.NewIntVar(current_time, horizon_end + duration, f'end_{machine_id}_{job_id}')
         interval_var = model.NewIntervalVar(start_var, duration, end_var, f'interval_{machine_id}_{job_id}')
 
         start_vars[(job_id, machine_id)] = start_var
@@ -112,11 +119,6 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
         # Constraint: end = start + duration
         model.Add(end_var == start_var + duration)
-        
-        # If there's a user-defined start date, add a constraint for it
-        if user_start_time > current_time:
-            model.Add(start_var >= user_start_time)
-            logger.info(f"Added START_DATE constraint for {job_id}: must start on or after {datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')}")
 
     # Add machine no-overlap constraints
     for machine in machines:
@@ -143,8 +145,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                 model.Add(end_vars[(job1['PROCESS_CODE'], job1['MACHINE_ID'])] <= 
                          start_vars[(job2['PROCESS_CODE'], job2['MACHINE_ID'])])
                 added_constraints += 1
-                logger.info(f"Added sequence constraint: {job1['PROCESS_CODE']} (seq {extract_process_number(job1['PROCESS_CODE'])}) "
-                           f"must finish before {job2['PROCESS_CODE']} (seq {extract_process_number(job2['PROCESS_CODE'])}) starts")
+                logger.info(f"Added sequence constraint: {job1['PROCESS_CODE']} must finish before {job2['PROCESS_CODE']} starts")
         logger.info(f"Added {added_constraints} explicit sequence constraints")
 
     # Objective: Minimize makespan and delays
@@ -198,9 +199,16 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         start = solver.Value(start_vars[(job_id, machine_id)])
         end = solver.Value(end_vars[(job_id, machine_id)])
         priority = job['PRIORITY']
-        duration_hours = (end - start) / 3600
         total_jobs += 1
 
+        # For jobs with START_DATE, verify that the schedule honors the constraint
+        if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and job['START_DATE_EPOCH'] > current_time:
+            if start != job['START_DATE_EPOCH']:
+                logger.warning(f"⚠️ Job {job_id} scheduled at {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} " 
+                             f"instead of requested START_DATE={datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')}")
+            else:
+                logger.info(f"✅ Job {job_id} scheduled exactly at requested START_DATE")
+        
         if machine_id not in schedule:
             schedule[machine_id] = []
         schedule[machine_id].append((job_id, start, end, priority))
@@ -216,12 +224,41 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     return schedule
 
 if __name__ == "__main__":
-    # Example usage for testing
-    jobs = [
-        {'PROCESS_CODE': 'CP08-231B-P01-06', 'MACHINE_ID': 'WS01', 'processing_time': 20000, 'LCD_DATE_EPOCH': 1744848000, 'PRIORITY': 2},
-        {'PROCESS_CODE': 'CP08-231B-P02-06', 'MACHINE_ID': 'PP23-060T', 'processing_time': 43636, 'LCD_DATE_EPOCH': 1744848000, 'PRIORITY': 2},
-        {'PROCESS_CODE': 'CP08-231B-P03-06', 'MACHINE_ID': 'JIG-HAND BEND', 'processing_time': 60000, 'LCD_DATE_EPOCH': 1744848000, 'PRIORITY': 2},
-    ]
-    machines = ['WS01', 'PP23-060T', 'JIG-HAND BEND']
-    schedule = schedule_jobs(jobs, machines, enforce_sequence=True)
-    print(schedule)
+    from ingest_data import load_jobs_planning_data
+    
+    # Use real data path instead of hardcoded examples
+    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
+    try:
+        # Load real data
+        jobs, machines, setup_times = load_jobs_planning_data(file_path)
+        logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines from {file_path}")
+        
+        # Create schedule using real data
+        schedule = schedule_jobs(jobs, machines, setup_times, enforce_sequence=True)
+        
+        # Output statistics about the schedule
+        if schedule:
+            total_jobs = sum(len(jobs_list) for jobs_list in schedule.values())
+            logger.info(f"Generated schedule with {total_jobs} tasks across {len(schedule)} machines")
+            
+            # Count jobs with START_DATE that were scheduled exactly as requested
+            start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and job['START_DATE_EPOCH'] > int(datetime.now().timestamp())]
+            if start_date_jobs:
+                logger.info(f"Summary of {len(start_date_jobs)} jobs with START_DATE constraints:")
+                for job in start_date_jobs:
+                    job_id = job['PROCESS_CODE']
+                    machine_id = job['MACHINE_ID']
+                    for task in schedule.get(machine_id, []):
+                        if task[0] == job_id:
+                            start_time = task[1]
+                            requested_time = job['START_DATE_EPOCH']
+                            if start_time == requested_time:
+                                logger.info(f"  ✅ Job {job_id} scheduled exactly at START_DATE={datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
+                            else:
+                                logger.warning(f"  ❌ Job {job_id} scheduled at {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M')} " 
+                                             f"instead of requested {datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
+                            break
+        else:
+            logger.error("Failed to generate valid schedule")
+    except Exception as e:
+        logger.error(f"Error testing scheduler with real data: {e}")
