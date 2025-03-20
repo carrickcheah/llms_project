@@ -77,6 +77,35 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             logger.info(f"  Job {job['PROCESS_CODE']} on {job['MACHINE_ID']}: MUST start EXACTLY at {start_date}")
         logger.info("START_DATE constraints will be strictly enforced in the model")
 
+    # Step 1: Organize jobs by families and process numbers
+    family_jobs = {}
+    for job in jobs:
+        family = extract_job_family(job['PROCESS_CODE'])
+        if family not in family_jobs:
+            family_jobs[family] = []
+        family_jobs[family].append(job)
+
+    # Sort processes within each family by sequence number
+    for family in family_jobs:
+        family_jobs[family].sort(key=lambda x: extract_process_number(x['PROCESS_CODE']))
+
+    # Step 2: Find families with START_DATE constraints and calculate time shifts
+    family_constraints = {}
+    for family, family_job_list in family_jobs.items():
+        for job in family_job_list:
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time:
+                # Record the family as having a time constraint
+                if family not in family_constraints:
+                    family_constraints[family] = []
+                family_constraints[family].append(job)
+
+    # Log family constraints
+    for family, constrained_jobs in family_constraints.items():
+        logger.info(f"Family {family} has {len(constrained_jobs)} jobs with START_DATE constraints")
+        for job in constrained_jobs:
+            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            logger.info(f"  Job {job['PROCESS_CODE']} must start at {start_date}")
+
     # Variables for each job
     start_vars = {}
     end_vars = {}
@@ -129,16 +158,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     # Add sequence constraints if enforced
     if enforce_sequence:
         logger.info("Enforcing process sequence dependencies (P01->P02->P03)...")
-        family_jobs = {}
-        for job in jobs:
-            family = extract_job_family(job['PROCESS_CODE'])
-            if family not in family_jobs:
-                family_jobs[family] = []
-            family_jobs[family].append(job)
-
         added_constraints = 0
-        for family, family_jobs_list in family_jobs.items():
-            sorted_jobs = sorted(family_jobs_list, key=lambda x: extract_process_number(x['PROCESS_CODE']))
+        for family, family_job_list in family_jobs.items():
+            sorted_jobs = sorted(family_job_list, key=lambda x: extract_process_number(x['PROCESS_CODE']))
             for i in range(len(sorted_jobs) - 1):
                 job1 = sorted_jobs[i]
                 job2 = sorted_jobs[i + 1]
@@ -220,6 +242,40 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     # Log statistics
     logger.info(f"Scheduled {sum(len(jobs) for jobs in schedule.values())} jobs on {len(schedule)} machines")
     logger.info(f"Total jobs scheduled: {total_jobs}")
+
+    # Step 3: Calculate family time shifts based on scheduled vs. requested times
+    family_time_shifts = {}
+    scheduled_times = {}
+    
+    # First collect all scheduled times
+    for machine, tasks in schedule.items():
+        for job_id, start, end, _ in tasks:
+            scheduled_times[job_id] = (start, end)
+    
+    # Calculate time shifts needed for each family
+    for family, constrained_jobs in family_constraints.items():
+        time_shifts = []
+        for job in constrained_jobs:
+            job_id = job['PROCESS_CODE']
+            if job_id in scheduled_times:
+                scheduled_start = scheduled_times[job_id][0]
+                requested_start = job['START_DATE_EPOCH']
+                time_shift = scheduled_start - requested_start
+                time_shifts.append(time_shift)
+        
+        if time_shifts:
+            # Use the maximum time shift for consistent family adjustment
+            family_time_shifts[family] = max(time_shifts, key=abs)
+            logger.info(f"Family {family} needs time shift of {family_time_shifts[family]/3600:.1f} hours")
+    
+    # Step 4: Store time shifts in job dictionaries for visualization
+    for family, time_shift in family_time_shifts.items():
+        if abs(time_shift) < 60:  # Skip shifts less than a minute
+            continue
+            
+        for job in family_jobs[family]:
+            job['family_time_shift'] = time_shift
+            logger.info(f"Added time shift of {time_shift/3600:.1f} hours to job {job['PROCESS_CODE']}")
 
     return schedule
 

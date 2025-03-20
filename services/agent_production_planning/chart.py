@@ -7,32 +7,11 @@ import pandas as pd
 import plotly.graph_objects as go
 import logging
 from ingest_data import load_jobs_planning_data
-from greedy import greedy_schedule
+from greedy import greedy_schedule, extract_job_family, extract_process_number
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-def extract_job_family(process_code):
-    """Extract the job family (e.g., 'CP08-231B') from the process code."""
-    process_code = str(process_code).upper()
-    match = re.search(r'(.*?)-P\d+', process_code)
-    if match:
-        family = match.group(1)
-        return family
-    parts = process_code.split("-P")
-    if len(parts) >= 2:
-        return parts[0]
-    return process_code
-
-def extract_process_number(process_code):
-    """Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found."""
-    process_code = str(process_code).upper()
-    match = re.search(r'P(\d{2})', process_code)  # Match exactly two digits after P
-    if match:
-        seq = int(match.group(1))
-        return seq
-    return 999  # Default if parsing fails
 
 def get_buffer_status_color(buffer_hours):
     """
@@ -46,9 +25,6 @@ def get_buffer_status_color(buffer_hours):
         return "yellow"
     else:
         return "green"
-
-# Modify the create_interactive_gantt function in chart.py
-# Around line 94 (in the task processing loop)
 
 def create_interactive_gantt(schedule, jobs=None, output_file='interactive_schedule.html'):
     """
@@ -84,7 +60,11 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             Description="No tasks were scheduled. Please check your input data."
         ))
     else:
-        process_info = {}
+        # Step 1: Create a mapping of job families and their processes in sequence
+        family_processes = {}
+        process_durations = {}
+        
+        # First pass - collect all process data and organize by family
         for machine, jobs in schedule.items():
             for job_data in jobs:
                 if len(job_data) < 4:
@@ -93,43 +73,77 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     
                 process_code, start, end, priority = job_data
                 
-                # MODIFIED: Always respect START_DATE constraints for visualization
-                # If this job has a START_DATE_EPOCH, always use that for visualization
-                if job_lookup and process_code in job_lookup and 'START_DATE_EPOCH' in job_lookup[process_code] and job_lookup[process_code]['START_DATE_EPOCH']:
-                    job = job_lookup[process_code]
-                    # Always use START_DATE for visualization, regardless of when it is
-                    original_start = start
-                    start = job['START_DATE_EPOCH']
-                    logger.info(f"Job {process_code}: Using START_DATE={datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} "
-                               f"instead of scheduled start {datetime.fromtimestamp(original_start).strftime('%Y-%m-%d %H:%M')} for visualization")
+                # Calculate duration
+                duration = end - start
+                process_durations[process_code] = duration
                 
-                if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
-                    logger.warning(f"Invalid timestamp for process {process_code} on machine {machine}: start={start}, end={end}")
-                    continue
-                if end <= start:
-                    logger.warning(f"Invalid time range for process {process_code} on machine {machine}: {start} to {end}")
-                    continue
-                    
+                # Group by family
                 family = extract_job_family(process_code)
-                sequence = extract_process_number(process_code)
+                seq_num = extract_process_number(process_code)
+                
+                if family not in family_processes:
+                    family_processes[family] = []
+                
+                # Use original schedule times first
+                family_processes[family].append((seq_num, process_code, machine, start, end, priority))
+        
+        # Sort processes within each family by sequence number
+        for family in family_processes:
+            family_processes[family].sort(key=lambda x: x[0])
+        
+        # Step 2: Identify families that need time adjustment due to START_DATE constraints
+        family_time_shifts = {}
+        for family, processes in family_processes.items():
+            # Check if any process in this family has START_DATE
+            for seq_num, process_code, machine, start, end, priority in processes:
+                if process_code in job_lookup and 'START_DATE_EPOCH' in job_lookup[process_code] and job_lookup[process_code]['START_DATE_EPOCH']:
+                    # Calculate the time shift needed
+                    requested_start = job_lookup[process_code]['START_DATE_EPOCH']
+                    time_shift = start - requested_start
+                    
+                    # Store the time shift for this family
+                    if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
+                        family_time_shifts[family] = time_shift
+                    
+                    logger.info(f"Family {family} has START_DATE constraint: shift={time_shift/3600:.1f} hours")
+        
+        # Step 3: Apply time shifts to generate adjusted task data for visualization
+        process_info = {}
+        for family in family_processes:
+            time_shift = family_time_shifts.get(family, 0)
+            
+            # Only apply significant shifts
+            if abs(time_shift) < 60:  # Skip shifts less than a minute
+                for seq_num, process_code, machine, start, end, priority in family_processes[family]:
+                    if family not in process_info:
+                        process_info[family] = []
+                    process_info[family].append((process_code, machine, start, end, priority, seq_num))
+                continue
+            
+            logger.info(f"Applying time shift of {time_shift/3600:.1f} hours to family {family} for visualization")
+            
+            for seq_num, process_code, machine, start, end, priority in family_processes[family]:
+                # Adjust the times by the time shift
+                adjusted_start = start - time_shift
+                adjusted_end = end - time_shift
                 
                 if family not in process_info:
                     process_info[family] = []
-                    
-                process_info[family].append((process_code, machine, start, end, priority, sequence))
-                logger.debug(f"Added {process_code} to family {family} with sequence {sequence}")
-        logger.info(f"Organized jobs into {len(process_info)} job families")
-        for family, processes in process_info.items():
-            logger.debug(f"Family {family}: {len(processes)} processes")
-
+                process_info[family].append((process_code, machine, adjusted_start, adjusted_end, priority, seq_num))
+                
+                logger.info(f"  Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
+                           f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+        
+        # Step 4: Create task list for visualization from the adjusted data
         sorted_tasks = []
         for family in sorted(process_info.keys()):
             processes = process_info[family]
-            sorted_processes = sorted(processes, key=lambda x: x[5])
+            sorted_processes = sorted(processes, key=lambda x: x[5])  # Sort by sequence within family
             sorted_tasks.extend(sorted_processes)
             
         logger.info(f"Sorted task list contains {len(sorted_tasks)} tasks")
 
+        # Process the sorted tasks for visualization
         for task_data in sorted_tasks:
             process_code, machine, start, end, priority, _ = task_data
             
@@ -162,8 +176,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     buffer_status = get_buffer_status_color(buffer_hours)
                     buffer_info = f"<br><b>Due Date:</b> {due_date.strftime('%Y-%m-%d %H:%M')}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
                     
-                    # Add START_DATE information if present 
-                    if 'START_DATE_EPOCH' in job_data and job_data['START_DATE_EPOCH'] and job_data['START_DATE_EPOCH'] > current_time:
+                    # Add START_DATE information if present
+                    if 'START_DATE_EPOCH' in job_data and job_data['START_DATE_EPOCH']:
                         start_date_info = datetime.fromtimestamp(job_data['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
                         buffer_info += f"<br><b>START_DATE Constraint:</b> {start_date_info}"
                 

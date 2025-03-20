@@ -4,9 +4,10 @@ import argparse
 import os
 from datetime import datetime
 import pandas as pd
+import re
 from ingest_data import load_jobs_planning_data
 from sch_jobs import schedule_jobs
-from greedy import greedy_schedule
+from greedy import greedy_schedule, extract_job_family, extract_process_number
 from chart import create_interactive_gantt
 from chart_two import export_schedule_html
 
@@ -20,13 +21,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Modify the add_schedule_times_and_buffer function in main.py
-# Around line 45-49
-
 def add_schedule_times_and_buffer(jobs, schedule):
     """
     Add schedule times (START_TIME and END_TIME) to job dictionaries and
     calculate the buffer time (BALANCE_HOUR) between job completion and deadline.
+    Also adjusts times for dependent processes to maintain proper sequence.
     
     Args:
         jobs (list): List of job dictionaries
@@ -42,29 +41,100 @@ def add_schedule_times_and_buffer(jobs, schedule):
             process_code, start, end, _ = task
             times[process_code] = (start, end)
     
-    # Add schedule times and BALANCE_HOUR to each job
+    # Step 1: Create a mapping of job families and their processes in sequence
+    family_processes = {}
+    for job in jobs:
+        process_code = job['PROCESS_CODE']
+        family = extract_job_family(process_code)
+        seq_num = extract_process_number(process_code)
+        
+        if family not in family_processes:
+            family_processes[family] = []
+        
+        family_processes[family].append((seq_num, process_code, job))
+    
+    # Sort processes within each family by sequence number
+    for family in family_processes:
+        family_processes[family].sort(key=lambda x: x[0])
+    
+    # Step 2: Identify families that have START_DATE constraints and calculate time shifts
+    family_time_shifts = {}
+    for family, processes in family_processes.items():
+        # Check if any process in this family has a START_DATE
+        for seq_num, process_code, job in processes:
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] and process_code in times:
+                # Calculate the time shift (positive for earlier, negative for later)
+                scheduled_start = times[process_code][0]
+                requested_start = job['START_DATE_EPOCH']
+                time_shift = scheduled_start - requested_start
+                
+                # Store the time shift for this family
+                if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
+                    family_time_shifts[family] = time_shift
+                
+                logger.info(f"Family {family} has START_DATE constraint for {process_code}: " 
+                          f"shift={time_shift/3600:.1f} hours")
+    
+    # Step 3: Apply time shifts to all processes in affected families
+    job_adjustments = {}  # Store adjusted times for each job
+    
+    for family, time_shift in family_time_shifts.items():
+        if abs(time_shift) < 60:  # Skip tiny shifts (less than a minute)
+            continue
+            
+        logger.info(f"Applying time shift of {time_shift/3600:.1f} hours to all processes in family {family}")
+        
+        for seq_num, process_code, job in family_processes[family]:
+            if process_code in times:
+                original_start, original_end = times[process_code]
+                
+                # Apply the time shift
+                adjusted_start = original_start - time_shift
+                adjusted_end = original_end - time_shift
+                
+                # Store the adjusted times
+                job_adjustments[process_code] = (adjusted_start, adjusted_end)
+                
+                logger.info(f"  Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
+                          f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+    
+    # Step 4: Update job dictionaries with adjusted times
     for job in jobs:
         process_code = job['PROCESS_CODE']
         if process_code in times:
-            job_start, job_end = times[process_code]
+            original_start, original_end = times[process_code]
             due_time = job.get('LCD_DATE_EPOCH', 0)
+            
+            # Use adjusted times if available, otherwise use original times
+            if process_code in job_adjustments:
+                job_start, job_end = job_adjustments[process_code]
+            else:
+                job_start = original_start
+                job_end = original_end
+            
+            # Override with exact START_DATE if specified for first process in family
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+                # Get family and sequence
+                family = extract_job_family(process_code)
+                seq_num = extract_process_number(process_code)
+                
+                # Check if this is the first process in the family
+                is_first_process = False
+                if family in family_processes and len(family_processes[family]) > 0:
+                    is_first_process = (family_processes[family][0][1] == process_code)
+                
+                # For logging
+                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"Setting START_TIME to match START_DATE ({start_date}) for job {process_code}")
+            
+            # Update job with adjusted times
+            job['START_TIME'] = job_start
+            job['END_TIME'] = job_end
             
             # Calculate buffer in hours
             buffer_seconds = max(0, due_time - job_end)
             buffer_hours = buffer_seconds / 3600
             
-            # MODIFIED: Always use START_DATE_EPOCH for START_TIME when available
-            # regardless of whether it's in the past or future
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
-                # Always use START_DATE as the display START_TIME 
-                job['START_TIME'] = job['START_DATE_EPOCH']
-                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-                logger.info(f"Setting START_TIME to match START_DATE ({start_date}) for job {process_code}")
-            else:
-                # No START_DATE specified, use the scheduled start time
-                job['START_TIME'] = job_start
-            
-            job['END_TIME'] = job_end
             job['BALANCE_HOUR'] = buffer_hours
             job['BUFFER_STATUS'] = get_buffer_status(buffer_hours)
     
@@ -194,15 +264,16 @@ def main():
         for task in tasks:
             process_code, start, end, priority = task
             
-            # Find the corresponding job to get accurate START_TIME (might differ from scheduled start)
+            # Find the corresponding job to get accurate START_TIME and END_TIME (might differ from scheduled times)
             job_entry = next((j for j in jobs if j['PROCESS_CODE'] == process_code), None)
-            start_time = job_entry['START_TIME'] if job_entry else start
+            start_time = job_entry['START_TIME'] if job_entry and 'START_TIME' in job_entry else start
+            end_time = job_entry['END_TIME'] if job_entry and 'END_TIME' in job_entry else end
             
             flat_schedule.append({
                 'PROCESS_CODE': process_code,
                 'MACHINE_ID': machine,
-                'START_TIME': start_time,  # Use the job's START_TIME which may respect START_DATE
-                'END_TIME': end,          # Computed by scheduler
+                'START_TIME': start_time,
+                'END_TIME': end_time,
                 'PRIORITY': priority
             })
 
@@ -309,7 +380,7 @@ def main():
                         impact = "VIOLATED"
                     
                     # Also check if START_TIME matches START_DATE for future jobs
-                    start_time_matches = job['START_TIME'] == job['START_DATE_EPOCH']
+                    start_time_matches = job.get('START_TIME', 0) == job['START_DATE_EPOCH']
                     
                     print(f"  {process} on {machine}: START_DATE={start_date}, Scheduled={scheduled_date} - {impact}")
                     if not start_time_matches:

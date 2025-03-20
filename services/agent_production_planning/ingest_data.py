@@ -4,10 +4,32 @@ import numpy as np
 from datetime import datetime, timedelta
 import os
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def extract_job_family(process_code):
+    """Extract the job family (e.g., 'CP08-231B') from the process code."""
+    process_code = str(process_code).upper()
+    match = re.search(r'(.*?)-P\d+', process_code)
+    if match:
+        family = match.group(1)
+        return family
+    parts = process_code.split("-P")
+    if len(parts) >= 2:
+        return parts[0]
+    return process_code
+
+def extract_process_number(process_code):
+    """Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found."""
+    process_code = str(process_code).upper()
+    match = re.search(r'P(\d{2})', process_code)  # Match exactly two digits after P
+    if match:
+        seq = int(match.group(1))
+        return seq
+    return 999  # Default if parsing fails
 
 def clean_excel_data(df):
     """Clean and prepare Excel data for scheduling."""
@@ -336,9 +358,27 @@ def load_job_data(file_path):
     if 'START_DATE_EPOCH' in data.columns and data['START_DATE_EPOCH'].notna().any():
         earliest_dates = data[data['START_DATE_EPOCH'].notna()]
         logger.info(f"Found {len(earliest_dates)} rows with START_DATE constraints:")
+        
+        # Group jobs with START_DATE by family to check for consistency
+        family_data = {}
         for idx, row in earliest_dates.iterrows():
-            date_str = datetime.fromtimestamp(row['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Process {row['PROCESS_CODE']} on {row['MACHINE_ID']}: Will start on or after {date_str}")
+            if pd.notna(row['PROCESS_CODE']):
+                family = extract_job_family(row['PROCESS_CODE'])
+                if family not in family_data:
+                    family_data[family] = []
+                
+                proc_num = extract_process_number(row['PROCESS_CODE'])
+                date_str = datetime.fromtimestamp(row['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                family_data[family].append((proc_num, row['PROCESS_CODE'], row['START_DATE_EPOCH'], date_str))
+                
+                logger.info(f"  Process {row['PROCESS_CODE']} (Seq {proc_num}) on {row['MACHINE_ID']}: Will start at {date_str}")
+        
+        # Log families with multiple START_DATE constraints
+        for family, processes in family_data.items():
+            if len(processes) > 1:
+                logger.info(f"Family {family} has {len(processes)} processes with START_DATE constraints:")
+                for proc_num, process_code, _, date_str in sorted(processes, key=lambda x: x[0]):
+                    logger.info(f"    Process {process_code} (Seq {proc_num}): {date_str}")
     else:
         logger.warning("No START_DATE constraints were found or parsed correctly")
     
@@ -386,6 +426,21 @@ def load_jobs_planning_data(file_path):
     """
     # Load and process the data into a DataFrame
     df = load_job_data(file_path)
+    
+    # Group jobs by family to prepare for dependency-aware processing
+    family_jobs = {}
+    for _, row in df.iterrows():
+        if pd.notna(row['PROCESS_CODE']):
+            family = extract_job_family(row['PROCESS_CODE'])
+            if family not in family_jobs:
+                family_jobs[family] = []
+            
+            family_jobs[family].append({
+                'PROCESS_CODE': row['PROCESS_CODE'],
+                'seq_num': extract_process_number(row['PROCESS_CODE']),
+                'START_DATE_EPOCH': row.get('START_DATE_EPOCH'),
+                'row': row
+            })
     
     # Convert DataFrame to list of job dictionaries
     jobs = []
@@ -450,13 +505,27 @@ def load_jobs_planning_data(file_path):
     process_codes = [p for p in df['PROCESS_CODE'].dropna().unique()]
     setup_times = {p1: {p2: 0 for p2 in process_codes} for p1 in process_codes}  # No setup times for now
     
-    # Count jobs with START_DATE constraints
-    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time]
-    if start_date_jobs:
-        logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints")
-        for job in start_date_jobs:
-            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} will start on or after {start_date}")
+    # Log jobs with START_DATE constraints by family
+    current_time = int(datetime.now().timestamp())
+    future_start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time]
+    
+    if future_start_date_jobs:
+        logger.info(f"Found {len(future_start_date_jobs)} jobs with future START_DATE constraints")
+        
+        # Group by family for dependency analysis
+        family_constraints = {}
+        for job in future_start_date_jobs:
+            family = extract_job_family(job['PROCESS_CODE'])
+            if family not in family_constraints:
+                family_constraints[family] = []
+            family_constraints[family].append(job)
+        
+        # Log constraints by family
+        for family, constrained_jobs in family_constraints.items():
+            logger.info(f"Family {family} has {len(constrained_jobs)} jobs with START_DATE constraints:")
+            for job in sorted(constrained_jobs, key=lambda x: extract_process_number(x['PROCESS_CODE'])):
+                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"  Job {job['PROCESS_CODE']} must start at {start_date}")
     
     logger.info(f"Generated {len(jobs)} valid jobs, {len(machines)} machines, and setup times for {len(process_codes)} processes")
     return jobs, machines, setup_times
@@ -465,7 +534,30 @@ if __name__ == "__main__":
     # Test the function
     file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
     jobs, machines, setup_times = load_jobs_planning_data(file_path)
-    print("Jobs:", jobs)
-    print("Machines:", machines)
-    print("Setup Times:", setup_times)
-
+    
+    # Print summary information
+    print(f"Loaded {len(jobs)} jobs and {len(machines)} machines")
+    
+    # Count jobs with START_DATE constraints
+    current_time = int(datetime.now().timestamp())
+    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None]
+    future_start_date_jobs = [job for job in start_date_jobs if job['START_DATE_EPOCH'] > current_time]
+    
+    print(f"Total jobs with START_DATE: {len(start_date_jobs)}")
+    print(f"Jobs with future START_DATE: {len(future_start_date_jobs)}")
+    
+    # Group by family to show dependencies
+    if future_start_date_jobs:
+        family_jobs = {}
+        for job in future_start_date_jobs:
+            family = extract_job_family(job['PROCESS_CODE'])
+            if family not in family_jobs:
+                family_jobs[family] = []
+            family_jobs[family].append(job)
+        
+        print("\nJobs with START_DATE constraints by family:")
+        for family, jobs_list in family_jobs.items():
+            print(f"\nFamily: {family}")
+            for job in sorted(jobs_list, key=lambda x: extract_process_number(x['PROCESS_CODE'])):
+                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                print(f"  {job['PROCESS_CODE']} (Seq {extract_process_number(job['PROCESS_CODE'])}): {start_date}")

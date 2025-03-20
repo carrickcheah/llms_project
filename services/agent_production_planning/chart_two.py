@@ -2,13 +2,32 @@ import os
 import pandas as pd
 from datetime import datetime
 import logging
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# This is the critical part in export_schedule_html that needs changing
-# Around line 82-90 in chart_two.py
+def extract_job_family(process_code):
+    """Extract the job family (e.g., 'CP08-231B') from the process code."""
+    process_code = str(process_code).upper()
+    match = re.search(r'(.*?)-P\d+', process_code)
+    if match:
+        family = match.group(1)
+        return family
+    parts = process_code.split("-P")
+    if len(parts) >= 2:
+        return parts[0]
+    return process_code
+
+def extract_process_number(process_code):
+    """Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found."""
+    process_code = str(process_code).upper()
+    match = re.search(r'P(\d{2})', process_code)  # Match exactly two digits after P
+    if match:
+        seq = int(match.group(1))
+        return seq
+    return 999  # Default if parsing fails
 
 def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
     """
@@ -23,10 +42,23 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         bool: True if successful, False otherwise
     """
     try:
-        # Create a flattened list of schedule entries
-        schedule_data = []
+        # Step 1: Create a mapping of job families and their processes in sequence
+        family_processes = {}
+        for job in jobs:
+            process_code = job['PROCESS_CODE']
+            family = extract_job_family(process_code)
+            seq_num = extract_process_number(process_code)
+            
+            if family not in family_processes:
+                family_processes[family] = []
+            
+            family_processes[family].append((seq_num, process_code, job))
         
-        # Create a lookup of end times from the schedule
+        # Sort processes within each family by sequence number
+        for family in family_processes:
+            family_processes[family].sort(key=lambda x: x[0])
+        
+        # Create a lookup of original end and start times from the schedule
         end_times = {}
         start_times = {}
         for machine, tasks in schedule.items():
@@ -35,33 +67,85 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 end_times[process_code] = end
                 start_times[process_code] = start
         
-        # Process each job with buffer information
+        # Step 2: Apply time shifts from jobs to their visualization times
+        adjusted_times = {}
+        current_time = int(datetime.now().timestamp())
+        
+        for family, processes in family_processes.items():
+            # Check if any job in this family has a time shift
+            family_time_shift = 0
+            for seq_num, process_code, job in processes:
+                if 'family_time_shift' in job and abs(job['family_time_shift']) > 60:  # More than a minute
+                    family_time_shift = job['family_time_shift']
+                    break
+            
+            # If family has time shift, apply to all processes in family
+            if family_time_shift != 0:
+                logger.info(f"Applying time shift of {family_time_shift/3600:.1f} hours to family {family} for visualization")
+                for seq_num, process_code, job in processes:
+                    if process_code in start_times and process_code in end_times:
+                        original_start = start_times[process_code]
+                        original_end = end_times[process_code]
+                        
+                        # Apply the time shift
+                        adjusted_start = original_start - family_time_shift
+                        adjusted_end = original_end - family_time_shift
+                        
+                        # Store the adjusted times
+                        adjusted_times[process_code] = (adjusted_start, adjusted_end)
+                        
+                        logger.info(f"Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
+                                  f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+        
+        # Step 3: Process each job and create schedule data
+        schedule_data = []
+        
         for job in jobs:
             process_code = job['PROCESS_CODE']
             if process_code in end_times:
-                job_end = end_times[process_code]
+                # Get original scheduled times
+                original_start = start_times[process_code]
+                original_end = end_times[process_code]
                 due_time = job.get('LCD_DATE_EPOCH', 0)
                 
-                # CRITICAL CHANGE: Always use START_DATE for START_TIME when provided
-                # If START_DATE_EPOCH exists, use it for display as START_DATE
-                user_start_date = ""
+                # Use adjusted times if available, otherwise use original times
+                if process_code in adjusted_times:
+                    job_start, job_end = adjusted_times[process_code]
+                else:
+                    job_start, job_end = original_start, original_end
+                
+                # Override with exact START_DATE if specified
                 if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+                    # For display purposes
                     user_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
                     
-                    # MODIFIED: Always use START_DATE_EPOCH for job_start when available
-                    # This ensures START_TIME always matches START_DATE in output
-                    job_start = job['START_DATE_EPOCH']
-                else:
-                    # No START_DATE specified, use the scheduled start time
-                    job_start = start_times[process_code]
+                    # Find the family this process belongs to
+                    family = extract_job_family(process_code)
+                    seq_num = extract_process_number(process_code)
+                    
+                    # Check if this is the first process in the family
+                    is_first_process = False
+                    if family in family_processes and len(family_processes[family]) > 0:
+                        is_first_process = (family_processes[family][0][1] == process_code)
+                    
+                    # If this is the first process with START_DATE, use the exact date
+                    if is_first_process:
+                        job_start = job['START_DATE_EPOCH']
+                        # Adjust end time to maintain the same duration
+                        original_duration = original_end - original_start
+                        job_end = job_start + original_duration
                 
-                # Format the start and end dates for display
+                # Format the dates for display
                 job_start_date = datetime.fromtimestamp(job_start).strftime('%Y-%m-%d %H:%M')
                 end_date = datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')
                 due_date = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
                 
+                # Get START_DATE for display
+                user_start_date = ""
+                if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+                    user_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                
                 # Calculate duration and buffer
-                # MODIFIED: Calculate duration using START_DATE when available
                 duration_seconds = job_end - job_start
                 duration_hours = duration_seconds / 3600
                 buffer_seconds = max(0, due_time - job_end)
@@ -89,7 +173,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     'JOB_CODE': job_code,
                     'MACHINE_ID': job.get('MACHINE_ID', 'Unknown'),
                     'PRIORTY': job.get('PRIORITY', 3),
-                    'START_TIME': job_start_date,  # This will now always match START_DATE when provided
+                    'START_TIME': job_start_date,
                     'END_TIME': end_date,
                     'DURATION_HOURS': round(duration_hours, 1),
                     'BUFFER_HOURS': round(buffer_hours, 1),
