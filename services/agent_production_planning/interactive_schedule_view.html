@@ -5,36 +5,130 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Production Schedule</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.10.25/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.2.9/css/responsive.bootstrap5.min.css">
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        .dashboard { margin-bottom: 30px; padding: 15px; border-radius: 5px; background: #f8f9fa; }
-        .dashboard h2 { margin-top: 0; }
-        .status-critical { background-color: rgba(255, 0, 0, 0.1); }
-        .status-warning { background-color: rgba(255, 165, 0, 0.1); }
-        .status-caution { background-color: rgba(255, 255, 0, 0.1); }
-        .status-ok { background-color: rgba(0, 128, 0, 0.1); }
-        .table-container { margin-top: 30px; }
-        .filter-section { margin-bottom: 20px; }
+        body { 
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container-fluid {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .dashboard {
+            margin-bottom: 30px; 
+            padding: 20px; 
+            border-radius: 8px; 
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #eaeaea;
+        }
+        .dashboard h3 {
+            margin-top: 0;
+            font-weight: 600;
+            color: #3a3a3a;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        table.dataTable {
+            border-collapse: separate !important;
+            border-spacing: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .status-critical { background-color: rgba(255, 0, 0, 0.15); }
+        .status-warning { background-color: rgba(255, 190, 0, 0.15); }
+        .status-caution { background-color: rgba(128, 0, 128, 0.15); }
+        .status-ok { background-color: rgba(0, 128, 0, 0.15); }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-align: center;
+            width: 100%;
+        }
+        .badge-critical { background-color: #ffcccc; color: #cc0000; border: 1px solid #ff8080; }
+        .badge-warning { background-color: #fff2cc; color: #b38600; border: 1px solid #ffdb4d; }
+        .badge-caution { background-color: #f0d6f0; color: #800080; border: 1px solid #d699d6; }
+        .badge-ok { background-color: #d6f0d6; color: #006600; border: 1px solid #99d699; }
     </style>
 </head>
 <body>
     <div class="container-fluid">
-        <h1 class="mb-4">Production Schedule</h1>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Production Schedule</h1>
+            <div>
+                <button class="btn btn-primary" onclick="window.print()">
+                    <i class="bi bi-printer me-1"></i> Print
+                </button>
+                <button class="btn btn-outline-secondary ms-2" onclick="exportTableToCSV('production_schedule.csv')">
+                    <i class="bi bi-download me-1"></i> Export
+                </button>
+            </div>
+        </div>
         
         <div class="dashboard row">
             <div class="col-md-6">
                 <h3>Schedule Overview</h3>
                 <p><strong>Total Jobs:</strong> 35</p>
-                <p><strong>Date Range:</strong> 2025-03-15 08:00 to 2025-03-26 01:01</p>
-                <p><strong>Total Duration:</strong> 772.4999999999998 hours</p>
+                <p><strong>Date Range:</strong> 2025-03-15 08:00 to 2025-03-26 01:42</p>
+                <p><strong>Total Duration:</strong> 231.90000000000003 hours</p>
             </div>
             <div class="col-md-6">
                 <h3>Buffer Status</h3>
-                <p><strong>Critical (&lt;8h):</strong> 0 jobs</p>
-                <p><strong>Warning (&lt;24h):</strong> 0 jobs</p>
-                <p><strong>Caution (&lt;72h):</strong> 0 jobs</p>
-                <p><strong>OK (&gt;72h):</strong> 35 jobs</p>
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-critical me-2" style="width: 120px;">Critical</div>
+                        <div class="progress flex-grow-1" style="height: 20px;">
+                            <div class="progress-bar bg-danger" role="progressbar" 
+                                style="width: 0.0%;" 
+                                aria-valuenow="0" 
+                                aria-valuemin="0" aria-valuemax="35">
+                                0 jobs
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-warning me-2" style="width: 120px;">Warning</div>
+                        <div class="progress flex-grow-1" style="height: 20px;">
+                            <div class="progress-bar bg-warning text-dark" role="progressbar" 
+                                style="width: 0.0%;" 
+                                aria-valuenow="0" 
+                                aria-valuemin="0" aria-valuemax="35">
+                                0 jobs
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-caution me-2" style="width: 120px;">Caution</div>
+                        <div class="progress flex-grow-1" style="height: 20px;">
+                            <div class="progress-bar" role="progressbar" style="background-color: purple; width: 0.0%;" 
+                                aria-valuenow="0" 
+                                aria-valuemin="0" aria-valuemax="35">
+                                0 jobs
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-ok me-2" style="width: 120px;">OK</div>
+                        <div class="progress flex-grow-1" style="height: 20px;">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                style="width: 100.0%;" 
+                                aria-valuenow="35" 
+                                aria-valuemin="0" aria-valuemax="35">
+                                35 jobs
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -66,10 +160,10 @@
                         <td>ST-3</td>
                         <td>2</td>
                         <td>2025-03-15 08:00</td>
-                        <td>2025-03-22 05:21</td>
-                        <td>165.4</td>
-                        <td>242.6</td>
-                        <td>OK</td>
+                        <td>2025-03-16 00:40</td>
+                        <td>16.7</td>
+                        <td>391.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-01 08:00</td>
@@ -78,11 +172,11 @@
                         <td>JOST25010030</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-22 05:21</td>
-                        <td>2025-03-22 22:01</td>
+                        <td>2025-03-22 06:02</td>
+                        <td>2025-03-22 22:42</td>
                         <td>16.7</td>
-                        <td>226.0</td>
-                        <td>OK</td>
+                        <td>225.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-01 08:00</td>
@@ -91,11 +185,11 @@
                         <td>JOST25010030</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-22 22:01</td>
-                        <td>2025-03-23 14:41</td>
+                        <td>2025-03-22 22:42</td>
+                        <td>2025-03-23 15:22</td>
                         <td>16.7</td>
-                        <td>209.3</td>
-                        <td>OK</td>
+                        <td>208.6</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-01 08:00</td>
@@ -104,11 +198,11 @@
                         <td>JOST25010030</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-23 14:41</td>
-                        <td>2025-03-24 07:21</td>
+                        <td>2025-03-23 15:22</td>
+                        <td>2025-03-24 08:02</td>
                         <td>16.7</td>
-                        <td>192.6</td>
-                        <td>OK</td>
+                        <td>192.0</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-01 08:00</td>
@@ -117,11 +211,11 @@
                         <td>JOST25010030</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-24 07:21</td>
-                        <td>2025-03-25 00:01</td>
+                        <td>2025-03-24 08:02</td>
+                        <td>2025-03-25 00:42</td>
                         <td>16.7</td>
-                        <td>176.0</td>
-                        <td>OK</td>
+                        <td>175.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-05 08:00</td>
@@ -130,11 +224,11 @@
                         <td>JOST24120308</td>
                         <td>SM</td>
                         <td>2</td>
-                        <td>2025-03-20 18:48</td>
-                        <td>2025-03-20 18:56</td>
+                        <td>2025-03-20 19:29</td>
+                        <td>2025-03-20 19:37</td>
                         <td>0.1</td>
-                        <td>373.1</td>
-                        <td>OK</td>
+                        <td>372.4</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-05 08:00</td>
@@ -143,11 +237,11 @@
                         <td>JOST24120308</td>
                         <td>ST-4</td>
                         <td>2</td>
-                        <td>2025-03-15 08:00</td>
-                        <td>2025-03-20 23:48</td>
-                        <td>135.8</td>
-                        <td>368.2</td>
-                        <td>OK</td>
+                        <td>2025-03-20 19:37</td>
+                        <td>2025-03-21 00:29</td>
+                        <td>4.9</td>
+                        <td>367.5</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-05 08:00</td>
@@ -156,11 +250,11 @@
                         <td>JOST24120308</td>
                         <td>ST-4</td>
                         <td>2</td>
-                        <td>2025-03-20 23:48</td>
-                        <td>2025-03-21 09:31</td>
+                        <td>2025-03-21 00:29</td>
+                        <td>2025-03-21 10:12</td>
                         <td>9.7</td>
-                        <td>358.5</td>
-                        <td>OK</td>
+                        <td>357.8</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-17 08:00</td>
@@ -170,10 +264,10 @@
                         <td>TP</td>
                         <td>2</td>
                         <td>2025-03-15 08:00</td>
-                        <td>2025-03-20 23:01</td>
-                        <td>135.0</td>
-                        <td>657.0</td>
-                        <td>OK</td>
+                        <td>2025-03-15 12:30</td>
+                        <td>4.5</td>
+                        <td>787.5</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-17 08:00</td>
@@ -182,11 +276,11 @@
                         <td>JOTP25010228</td>
                         <td>TP</td>
                         <td>2</td>
-                        <td>2025-03-20 23:01</td>
-                        <td>2025-03-21 00:49</td>
+                        <td>2025-03-20 23:41</td>
+                        <td>2025-03-21 01:29</td>
                         <td>1.8</td>
-                        <td>655.2</td>
-                        <td>OK</td>
+                        <td>654.5</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-17 08:00</td>
@@ -195,11 +289,11 @@
                         <td>JOTP25010228</td>
                         <td>TP</td>
                         <td>2</td>
-                        <td>2025-03-21 00:49</td>
-                        <td>2025-03-21 04:25</td>
+                        <td>2025-03-21 01:29</td>
+                        <td>2025-03-21 05:05</td>
                         <td>3.6</td>
-                        <td>651.6</td>
-                        <td>OK</td>
+                        <td>650.9</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-17 08:00</td>
@@ -208,11 +302,11 @@
                         <td>JOTP25010228</td>
                         <td>TP</td>
                         <td>2</td>
-                        <td>2025-03-21 04:25</td>
-                        <td>2025-03-21 08:01</td>
+                        <td>2025-03-21 05:05</td>
+                        <td>2025-03-21 08:41</td>
                         <td>3.6</td>
-                        <td>648.0</td>
-                        <td>OK</td>
+                        <td>647.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-17 08:00</td>
@@ -221,11 +315,11 @@
                         <td>JOTP25010228</td>
                         <td>TP</td>
                         <td>2</td>
-                        <td>2025-03-21 08:01</td>
-                        <td>2025-03-21 11:37</td>
+                        <td>2025-03-21 08:41</td>
+                        <td>2025-03-21 12:17</td>
                         <td>3.6</td>
-                        <td>644.4</td>
-                        <td>OK</td>
+                        <td>643.7</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-17 08:00</td>
@@ -234,11 +328,11 @@
                         <td>JOTP25010228</td>
                         <td>TP</td>
                         <td>2</td>
-                        <td>2025-03-21 11:37</td>
-                        <td>2025-03-21 14:01</td>
+                        <td>2025-03-21 12:17</td>
+                        <td>2025-03-21 14:41</td>
                         <td>2.4</td>
-                        <td>642.0</td>
-                        <td>OK</td>
+                        <td>641.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-18 08:00</td>
@@ -247,11 +341,11 @@
                         <td>JOST24120261</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-21 00:03</td>
-                        <td>2025-03-21 01:22</td>
+                        <td>2025-03-21 00:44</td>
+                        <td>2025-03-21 02:02</td>
                         <td>1.3</td>
-                        <td>678.6</td>
-                        <td>OK</td>
+                        <td>678.0</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-18 08:00</td>
@@ -260,11 +354,11 @@
                         <td>JOST24120261</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-20 22:44</td>
-                        <td>2025-03-21 00:03</td>
+                        <td>2025-03-20 23:25</td>
+                        <td>2025-03-21 00:44</td>
                         <td>1.3</td>
-                        <td>679.9</td>
-                        <td>OK</td>
+                        <td>679.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-18 08:00</td>
@@ -273,11 +367,11 @@
                         <td>JOST24120261</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-20 21:26</td>
-                        <td>2025-03-20 22:44</td>
+                        <td>2025-03-20 22:06</td>
+                        <td>2025-03-20 23:25</td>
                         <td>1.3</td>
-                        <td>681.3</td>
-                        <td>OK</td>
+                        <td>680.6</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-18 08:00</td>
@@ -286,11 +380,11 @@
                         <td>JOST24120261</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-20 18:48</td>
-                        <td>2025-03-20 20:07</td>
+                        <td>2025-03-20 19:29</td>
+                        <td>2025-03-20 20:47</td>
                         <td>1.3</td>
-                        <td>683.9</td>
-                        <td>OK</td>
+                        <td>683.2</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-18 08:00</td>
@@ -299,11 +393,11 @@
                         <td>JOST24120261</td>
                         <td>SM</td>
                         <td>2</td>
-                        <td>2025-03-20 18:31</td>
-                        <td>2025-03-20 18:48</td>
+                        <td>2025-03-20 19:11</td>
+                        <td>2025-03-20 19:29</td>
                         <td>0.3</td>
-                        <td>685.2</td>
-                        <td>OK</td>
+                        <td>684.5</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-18 08:00</td>
@@ -312,11 +406,11 @@
                         <td>JOST24120261</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-20 20:07</td>
-                        <td>2025-03-20 21:26</td>
+                        <td>2025-03-20 20:47</td>
+                        <td>2025-03-20 22:06</td>
                         <td>1.3</td>
-                        <td>682.6</td>
-                        <td>OK</td>
+                        <td>681.9</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-27 08:00</td>
@@ -325,11 +419,11 @@
                         <td>JOST25010288</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-25 20:51</td>
-                        <td>2025-03-26 01:01</td>
+                        <td>2025-03-25 21:32</td>
+                        <td>2025-03-26 01:42</td>
                         <td>4.2</td>
-                        <td>775.0</td>
-                        <td>OK</td>
+                        <td>774.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-27 08:00</td>
@@ -338,11 +432,11 @@
                         <td>JOST25010288</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-25 00:01</td>
-                        <td>2025-03-25 04:11</td>
+                        <td>2025-03-25 00:42</td>
+                        <td>2025-03-25 04:52</td>
                         <td>4.2</td>
-                        <td>795.8</td>
-                        <td>OK</td>
+                        <td>795.1</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-27 08:00</td>
@@ -351,11 +445,11 @@
                         <td>JOST25010288</td>
                         <td>ST-3</td>
                         <td>1</td>
-                        <td>2025-03-25 04:11</td>
-                        <td>2025-03-25 08:21</td>
+                        <td>2025-03-25 04:52</td>
+                        <td>2025-03-25 09:02</td>
                         <td>4.2</td>
-                        <td>791.6</td>
-                        <td>OK</td>
+                        <td>791.0</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-27 08:00</td>
@@ -364,11 +458,11 @@
                         <td>JOST25010288</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-25 08:21</td>
-                        <td>2025-03-25 12:31</td>
+                        <td>2025-03-25 09:02</td>
+                        <td>2025-03-25 13:12</td>
                         <td>4.2</td>
-                        <td>787.5</td>
-                        <td>OK</td>
+                        <td>786.8</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-27 08:00</td>
@@ -377,11 +471,11 @@
                         <td>JOST25010288</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-25 12:31</td>
-                        <td>2025-03-25 16:41</td>
+                        <td>2025-03-25 13:12</td>
+                        <td>2025-03-25 17:22</td>
                         <td>4.2</td>
-                        <td>783.3</td>
-                        <td>OK</td>
+                        <td>782.6</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-27 08:00</td>
@@ -390,11 +484,11 @@
                         <td>JOST25010288</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-25 16:41</td>
-                        <td>2025-03-25 20:51</td>
+                        <td>2025-03-25 17:22</td>
+                        <td>2025-03-25 21:32</td>
                         <td>4.2</td>
-                        <td>779.1</td>
-                        <td>OK</td>
+                        <td>778.5</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-28 08:00</td>
@@ -403,11 +497,11 @@
                         <td>JOST25020010</td>
                         <td>ST</td>
                         <td>2</td>
-                        <td>2025-03-20 18:31</td>
-                        <td>2025-03-20 18:53</td>
+                        <td>2025-03-20 19:11</td>
+                        <td>2025-03-20 19:34</td>
                         <td>0.4</td>
-                        <td>925.1</td>
-                        <td>OK</td>
+                        <td>924.4</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-28 08:00</td>
@@ -416,11 +510,11 @@
                         <td>JOST25020010</td>
                         <td>ST</td>
                         <td>2</td>
-                        <td>2025-03-20 18:53</td>
-                        <td>2025-03-20 19:16</td>
+                        <td>2025-03-20 19:34</td>
+                        <td>2025-03-20 19:56</td>
                         <td>0.4</td>
-                        <td>924.7</td>
-                        <td>OK</td>
+                        <td>924.1</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-28 08:00</td>
@@ -429,11 +523,11 @@
                         <td>JOST25020010</td>
                         <td>ST</td>
                         <td>2</td>
-                        <td>2025-03-20 19:16</td>
-                        <td>2025-03-20 19:38</td>
+                        <td>2025-03-20 19:56</td>
+                        <td>2025-03-20 20:19</td>
                         <td>0.4</td>
-                        <td>924.4</td>
-                        <td>OK</td>
+                        <td>923.7</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-29 08:00</td>
@@ -443,10 +537,10 @@
                         <td>AL</td>
                         <td>2</td>
                         <td>2025-03-15 08:00</td>
-                        <td>2025-03-23 05:32</td>
-                        <td>189.5</td>
-                        <td>890.5</td>
-                        <td>OK</td>
+                        <td>2025-03-17 19:01</td>
+                        <td>59.0</td>
+                        <td>1021.0</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-29 08:00</td>
@@ -455,11 +549,11 @@
                         <td>JOAW25020099</td>
                         <td>AL</td>
                         <td>2</td>
-                        <td>2025-03-23 05:32</td>
-                        <td>2025-03-23 12:37</td>
+                        <td>2025-03-23 06:13</td>
+                        <td>2025-03-23 13:18</td>
                         <td>7.1</td>
-                        <td>883.4</td>
-                        <td>OK</td>
+                        <td>882.7</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-29 08:00</td>
@@ -468,11 +562,11 @@
                         <td>JOAW25020099</td>
                         <td>AL</td>
                         <td>2</td>
-                        <td>2025-03-23 12:37</td>
-                        <td>2025-03-23 16:10</td>
+                        <td>2025-03-23 13:18</td>
+                        <td>2025-03-23 16:50</td>
                         <td>3.5</td>
-                        <td>879.8</td>
-                        <td>OK</td>
+                        <td>879.2</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-30 08:00</td>
@@ -481,11 +575,11 @@
                         <td>JOST25020167</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-21 05:08</td>
-                        <td>2025-03-21 08:55</td>
+                        <td>2025-03-21 05:49</td>
+                        <td>2025-03-21 09:35</td>
                         <td>3.8</td>
-                        <td>959.1</td>
-                        <td>OK</td>
+                        <td>958.4</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-30 08:00</td>
@@ -494,11 +588,11 @@
                         <td>JOST25020167</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-21 01:22</td>
-                        <td>2025-03-21 05:08</td>
+                        <td>2025-03-21 02:02</td>
+                        <td>2025-03-21 05:49</td>
                         <td>3.8</td>
-                        <td>962.9</td>
-                        <td>OK</td>
+                        <td>962.2</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
                         <td>2025-04-30 08:00</td>
@@ -507,11 +601,11 @@
                         <td>JOST25020167</td>
                         <td>ST-3</td>
                         <td>2</td>
-                        <td>2025-03-21 08:55</td>
-                        <td>2025-03-21 12:41</td>
+                        <td>2025-03-21 09:35</td>
+                        <td>2025-03-21 13:22</td>
                         <td>3.8</td>
-                        <td>955.3</td>
-                        <td>OK</td>
+                        <td>954.6</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                 </tbody>
             </table>
@@ -522,15 +616,110 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.datatables.net/1.10.25/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.10.25/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.2.9/js/dataTables.responsive.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
     <script>
         $(document).ready(function() {
             $('#scheduleTable').DataTable({
                 order: [[0, 'asc']], // Sort by LCD_DATE by default
                 pageLength: 25,
                 lengthMenu: [10, 25, 50, 100, 200],
-                responsive: true
+                responsive: true,
+                dom: 'Bfrtip',
+                buttons: [
+                    {
+                        extend: 'excel',
+                        text: '<i class="bi bi-file-earmark-excel me-1"></i> Excel',
+                        className: 'btn btn-sm btn-success',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+                    {
+                        extend: 'csv',
+                        text: '<i class="bi bi-file-earmark-text me-1"></i> CSV',
+                        className: 'btn btn-sm btn-info',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+                    {
+                        extend: 'pdf',
+                        text: '<i class="bi bi-file-earmark-pdf me-1"></i> PDF',
+                        className: 'btn btn-sm btn-danger',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+                    {
+                        extend: 'colvis',
+                        text: '<i class="bi bi-eye me-1"></i> Columns',
+                        className: 'btn btn-sm btn-secondary'
+                    }
+                ],
+                initComplete: function () {
+                    // Add a legend at the top
+                    var legendHtml = '<div class="mb-3 p-3 bg-white rounded shadow-sm">' +
+                        '<h5 class="border-bottom pb-2 mb-3"><i class="bi bi-info-circle me-2"></i>Buffer Status Legend:</h5>' +
+                        '<div class="d-flex flex-wrap gap-3">' +
+                        '<div class="status-badge badge-critical">Critical (&lt;8h)</div>' +
+                        '<div class="status-badge badge-warning">Warning (&lt;24h)</div>' +
+                        '<div class="status-badge badge-caution">Caution (&lt;72h)</div>' +
+                        '<div class="status-badge badge-ok">OK (&gt;72h)</div>' +
+                        '</div></div>';
+                    $('.dataTables_wrapper').prepend(legendHtml);
+                }
             });
         });
+        
+        function exportTableToCSV(filename) {
+            var csv = [];
+            var rows = document.querySelectorAll("table tr");
+            
+            for (var i = 0; i < rows.length; i++) {
+                var row = [], cols = rows[i].querySelectorAll("td, th");
+                
+                for (var j = 0; j < cols.length; j++) {
+                    // Get the text content, handling the case of the status badge
+                    var text = cols[j].innerText;
+                    if (cols[j].querySelector('.status-badge')) {
+                        text = cols[j].querySelector('.status-badge').innerText;
+                    }
+                    row.push('"' + text.replace(/"/g, '""') + '"');
+                }
+                
+                csv.push(row.join(","));
+            }
+            
+            // Download CSV file
+            downloadCSV(csv.join("\n"), filename);
+        }
+        
+        function downloadCSV(csv, filename) {
+            var csvFile = new Blob([csv], {type: "text/csv"});
+            var downloadLink = document.createElement("a");
+            
+            // File name
+            downloadLink.download = filename;
+            
+            // Create a link to the file
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            
+            // Hide download link
+            downloadLink.style.display = "none";
+            
+            // Add the link to DOM
+            document.body.appendChild(downloadLink);
+            
+            // Click download link
+            downloadLink.click();
+            
+            // Remove the link
+            document.body.removeChild(downloadLink);
+        }
     </script>
 </body>
 </html>
