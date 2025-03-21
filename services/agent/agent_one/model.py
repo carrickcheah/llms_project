@@ -3,10 +3,11 @@
 #    Initialization utilities for database, LLM, and vector store connections            #
 ##########################################################################################
 #   Contents of table                                                                    #                                               #
-#   1. Initialize OPENAI GPT-4o-mini                                                     #       
+#   1. Initialize OPENAI GPT-4o                                                    #       
 #   2. Initialize Deepseek V3/ R1 model                                                  #
 #   3. Init Lanchain format Deepseek                                                     #
-#   4. Initialize Anthropic Claude 3.5 Haiku                                             #
+#   4. Initialize Anthropic Claude 3.5 Haiku     
+#  5. Nvidia deepseek                                        #
 ##########################################################################################
 import os
 from loguru import logger

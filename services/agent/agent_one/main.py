@@ -178,3 +178,8 @@ def run_interactive():
 
 if __name__ == "__main__":
     run_interactive()
+
+
+# "Who is our top customer for Cycling Gloves in 2023?",
+# "Who is our top customer for Yoga Mat in 2023?",
+# "Who is our top customer for Skateboard all time?",

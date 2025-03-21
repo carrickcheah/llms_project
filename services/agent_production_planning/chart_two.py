@@ -1,3 +1,4 @@
+# chart_two.py | dont edit this line
 import os
 import pandas as pd
 from datetime import datetime
@@ -199,7 +200,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Production Schedule</title>
+    <title>Production Scheduler</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.10.25/css/dataTables.bootstrap5.min.css">
@@ -260,7 +261,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
 <body>
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Production Schedule</h1>
+            <h1 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Production Scheduler</h1>
             <div>
                 <button class="btn btn-primary" onclick="window.print()">
                     <i class="bi bi-printer me-1"></i> Print

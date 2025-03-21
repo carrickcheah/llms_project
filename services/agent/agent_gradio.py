@@ -15,7 +15,7 @@ logger.add("sql_agent.log", rotation="500 MB", retention="10 days", level="DEBUG
 logger.add(lambda msg: print(msg, end=""), colorize=True, level="INFO")
 
 # Custom utility imports
-from utils.llm import initialize_openai, initialize_embeddings
+from utils.llm import initialize_openai, initialize_embeddings, initialize_nvidia_deep
 from utils.maria import initialize_database
 from utils.vector_database import qdrant_on_prem
 from utils.tools import load_sql_examples, is_database_question
@@ -27,7 +27,7 @@ from utils.task import (
 
 # Global initialization (matches your log output)
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-llm = initialize_openai(os.getenv("OPENAI_API_KEY"))
+llm = initialize_nvidia_deep(os.getenv("NVIDIA_API_KEY"))
 embeddings = initialize_embeddings(os.getenv("HUGGINGFACE_MODEL"))
 db = initialize_database(os.getenv("DATABASE_URI"))
 qdrant_store = qdrant_on_prem(embeddings, os.getenv("COLLECTION_NAME"))

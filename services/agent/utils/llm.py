@@ -194,7 +194,45 @@ def initialize_embeddings(model_name: str = "carrick113/autotrain-wsucv-dqrgc") 
 #####################################################################################
 
 
+def initialize_nvidia_deep(api_key: Optional[str] = None) -> ChatOpenAI:
+    """
+    Initialize and validate the language model using OpenAI client with DeepSeek API.
+    
+    Args:
+        api_key: DeepSeek API key. If None, uses DEEPSEEK_API_KEY env var.
+        
+    Returns:
+        ChatOpenAI: Initialized language model configured for DeepSeek
+        
+    Raises:
+        ValueError: If DEEPSEEK_API_KEY is not set
+        ConnectionError: If initialization of the language model fails
+    """
+    # Use provided API key or get from environment variable
+    base_url = "https://integrate.api.nvidia.com/v1"  # Remove the trailing comma to make it a string
+    model_name = "deepseek-ai/deepseek-r1"  # Remove the trailing comma to make it a string
 
+    if not api_key:
+        raise ValueError("DEEPSEEK_API_KEY is not set.")
+    
+    if not base_url:
+        raise ValueError("DEEPSEEK_URL is not set.")
+   
+    try:
+        model = ChatOpenAI(
+            api_key=api_key,
+            model=model_name,
+            temperature=0,
+            max_retries=3,
+            request_timeout=30,
+            max_tokens=4096,
+            base_url=base_url,
+            # stream=True
+        )
+        logger.success(f"NVIDIA model '{model.model_name}' initialized successfully!")
+        return model
+    except Exception as e:
+        raise ConnectionError(f"Failed to initialize language model: {str(e)}")
 
 
 
