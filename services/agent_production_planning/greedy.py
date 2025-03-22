@@ -75,18 +75,24 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
 
     # Identify families with START_DATE constraints
     start_date_families = set()
-    future_start_date_jobs = []
+    start_date_jobs = []
     
     for job in jobs:
         if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and job['START_DATE_EPOCH'] > current_time:
             family = extract_job_family(job['PROCESS_CODE'])
             start_date_families.add(family)
-            future_start_date_jobs.append(job)
+            start_date_jobs.append(job)
             job_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
             logger.info(f"Job {job['PROCESS_CODE']} must start exactly at START_DATE={job_start_date}")
     
-    if future_start_date_jobs:
-        logger.info(f"Found {len(future_start_date_jobs)} jobs with future START_DATE constraints in {len(start_date_families)} families")
+    if start_date_jobs:
+        logger.info(f"Found {len(start_date_jobs)} jobs with future START_DATE constraints in {len(start_date_families)} families")
+    
+    # Create a mapping of process codes to process sequence numbers
+    process_to_seq = {}
+    for job in jobs:
+        process_code = job['PROCESS_CODE']
+        process_to_seq[process_code] = extract_process_number(process_code)
     
     # Sort families - prioritize families with START_DATE constraints first
     sorted_families = sorted(family_groups.keys(), key=lambda f: (0 if f in start_date_families else 1, f))
@@ -132,14 +138,17 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
                 
                 # For jobs with START_DATE constraint, force the exact start time
                 if machine_constraint > start_date_constraint:
-                    # Check if we need to delay to respect sequence constraints
-                    if sequence_constraint > start_date_constraint:
-                        logger.info(f"⚠️ Cannot start {job_id} at exactly START_DATE={start_date_str} due to sequence constraints")
-                        # In this case, we use sequence_constraint as our start time
-                    else:
-                        # Make machine available exactly at START_DATE
-                        logger.info(f"🔄 Adjusting machine availability for {job_id} to ensure START_DATE={start_date_str}")
-                        machine_constraint = start_date_constraint
+                    # Make machine available exactly at START_DATE
+                    logger.info(f"🔄 Adjusting machine availability for {job_id} to ensure START_DATE={start_date_str}")
+                    machine_constraint = start_date_constraint
+                
+                # FIX: Prioritize START_DATE over sequence constraints
+                # Even if sequence constraint would delay the start time, we'll use the exact START_DATE
+                if sequence_constraint > start_date_constraint:
+                    logger.info(f"⚠️ START_DATE for {job_id} conflicts with sequence constraints")
+                    logger.info(f"🔄 Prioritizing START_DATE over sequence constraint as requested")
+                    # We'll still record the sequence violation for reporting
+                    job['sequence_violation'] = True
         
         # Find the most restrictive constraint
         constraints = {
@@ -149,17 +158,11 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             "START_DATE (User-defined)": start_date_constraint if has_start_date else current_time
         }
         
-        # MODIFIED: If we have a START_DATE constraint, prefer using it exactly
-        # unless sequence constraints make that impossible
+        # MODIFIED: If we have a START_DATE constraint, ALWAYS use it exactly
+        # even if it conflicts with sequence constraints
         if has_start_date and start_date_constraint > current_time:
-            # If sequence allows, use the exact START_DATE
-            if sequence_constraint <= start_date_constraint:
-                earliest_start = start_date_constraint
-                active_constraint = "START_DATE (User-defined)"
-            else:
-                # We can't respect START_DATE due to sequence constraints
-                earliest_start = sequence_constraint
-                active_constraint = "Sequence Dependency"
+            earliest_start = start_date_constraint
+            active_constraint = "START_DATE (User-defined)"
         else:
             # Standard constraint resolution for jobs without START_DATE
             earliest_start = max(constraints.values())
@@ -169,10 +172,6 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         if earliest_start > current_time:
             active_date = datetime.fromtimestamp(earliest_start).strftime('%Y-%m-%d %H:%M')
             logger.info(f"Job {job_id} start time ({active_date}) determined by: {active_constraint}")
-            
-            if has_start_date and active_constraint != "START_DATE (User-defined)":
-                original_date = datetime.fromtimestamp(start_date_constraint).strftime('%Y-%m-%d %H:%M')
-                logger.info(f"⚠️ Job {job_id} START_DATE={original_date} couldn't be honored exactly")
         
         # Schedule the job
         start = earliest_start
@@ -199,8 +198,15 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         # Schedule the job
         schedule[machine_id].append((job_id, start, end, job['PRIORITY']))
         machine_availability[machine_id] = end
+        
+        # Handle sequence dependencies differently for jobs with START_DATE constraints
         if enforce_sequence:
-            family_end_times[family] = end
+            if has_start_date and start_date_constraint > current_time and job.get('sequence_violation', False):
+                # Don't update family_end_times for jobs with START_DATE that violated sequence
+                # This prevents cascading violations - only this one job will have its exact time honored
+                logger.info(f"Not updating family end time for {job_id} due to sequence violation")
+            else:
+                family_end_times[family] = end
         
         # Log the final scheduling decision
         job_name = job.get('JOB', job.get('JOB_CODE', job_id))
@@ -216,20 +222,48 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         for job_id, start, end, _ in tasks:
             scheduled_times[job_id] = (start, end)
     
+    # After all jobs are scheduled, calculate time shifts to represent the logical view of the schedule
+    # This will show what the schedule would look like if all sequence dependencies were respected
+    for family in start_date_families:
+        family_has_violation = False
+        for job in family_groups.get(family, []):
+            if job.get('sequence_violation', False):
+                family_has_violation = True
+                break
+        
+        if family_has_violation:
+            # Calculate appropriate time shift for visualization
+            # This makes the visualization reflect the logical schedule with dependencies
+            # even though the actual execution schedule honors the START_DATE constraints
+            logger.info(f"Family {family} has sequence violations due to START_DATE constraints")
+            
+            # Find the process with START_DATE constraint
+            for job in family_groups.get(family, []):
+                job_id = job['PROCESS_CODE']
+                if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and job_id in scheduled_times:
+                    # Using 0 for time shift ensures the START_TIME shown to user matches START_DATE
+                    # This visually represents our honoring of the START_DATE constraint
+                    family_time_shifts[family] = 0
+                    job['family_time_shift'] = 0
+                    job['START_TIME'] = job['START_DATE_EPOCH']
+                    
+                    logger.info(f"Setting START_TIME to equal START_DATE for {job_id} for visualization")
+    
     # Identify time shifts for each family with START_DATE constraints
     for family in start_date_families:
-        for job in family_groups.get(family, []):
-            job_id = job['PROCESS_CODE']
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time and job_id in scheduled_times:
-                scheduled_start = scheduled_times[job_id][0]
-                requested_start = job['START_DATE_EPOCH']
-                time_shift = scheduled_start - requested_start
-                
-                # If significant time shift, record it
-                if abs(time_shift) > 60:  # More than a minute
-                    if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
-                        family_time_shifts[family] = time_shift
-                        logger.info(f"Family {family} has time shift of {time_shift/3600:.1f} hours based on {job_id}")
+        if family not in family_time_shifts:  # Skip if already processed due to violations
+            for job in family_groups.get(family, []):
+                job_id = job['PROCESS_CODE']
+                if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time and job_id in scheduled_times:
+                    scheduled_start = scheduled_times[job_id][0]
+                    requested_start = job['START_DATE_EPOCH']
+                    time_shift = scheduled_start - requested_start
+                    
+                    # If significant time shift, record it
+                    if abs(time_shift) > 60:  # More than a minute
+                        if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
+                            family_time_shifts[family] = time_shift
+                            logger.info(f"Family {family} has time shift of {time_shift/3600:.1f} hours based on {job_id}")
     
     # Store time shifts in job dictionaries for visualization
     for family, time_shift in family_time_shifts.items():
@@ -237,10 +271,10 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         for job in family_groups.get(family, []):
             job['family_time_shift'] = time_shift
     
-    # For jobs with START_DATE, store START_TIME = START_DATE_EPOCH for visualization
+    # For jobs with START_DATE, make sure START_TIME = START_DATE_EPOCH for visualization
     for job in jobs:
         if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None:
-            # Store START_TIME for visualization
+            # Always set START_TIME equal to START_DATE_EPOCH for jobs with this constraint
             job['START_TIME'] = job['START_DATE_EPOCH']
     
     logger.info(f"Enhanced greedy schedule created with {sum(len(tasks) for tasks in schedule.values())} jobs")

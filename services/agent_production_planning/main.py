@@ -114,16 +114,13 @@ def add_schedule_times_and_buffer(jobs, schedule):
                 job_start = original_start
                 job_end = original_end
             
-            # Override with exact START_DATE if specified for first process in family
+            # Override with exact START_DATE if specified for any job with this constraint
             if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
-                # Get family and sequence
-                family = extract_job_family(process_code)
-                seq_num = extract_process_number(process_code)
-                
-                # Check if this is the first process in the family
-                is_first_process = False
-                if family in family_processes and len(family_processes[family]) > 0:
-                    is_first_process = (family_processes[family][0][1] == process_code)
+                # CRITICAL FIX: Always prioritize START_DATE
+                job_start = job['START_DATE_EPOCH']
+                # Adjust end time to maintain the same duration
+                duration = original_end - original_start
+                job_end = job_start + duration
                 
                 # For logging
                 start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')

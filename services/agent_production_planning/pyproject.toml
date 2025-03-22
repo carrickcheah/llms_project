@@ -7,10 +7,11 @@ requires-python = ">=3.11"
 dependencies = [
     "flask>=3.1.0",
     "matplotlib>=3.10.1",
+    "networkx>=3.4.2",
     "openpyxl>=3.1.5",
     "ortools>=9.12.4544",
     "pandas>=2.2.3",
     "plotly>=6.0.0",
-    "pyqt5>=5.15.11",
     "python-dotenv>=1.0.1",
+    "streamlit>=1.43.2",
 ]

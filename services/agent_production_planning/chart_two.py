@@ -73,6 +73,27 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         adjusted_times = {}
         current_time = int(datetime.now().timestamp())
         
+        # FIRST PRIORITY: EXPLICIT START_DATE OVERRIDES
+        for job in jobs:
+            process_code = job['PROCESS_CODE']
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] and process_code in start_times:
+                # For START_DATE jobs, always use exactly the requested START_DATE for visualization
+                original_start = start_times[process_code]
+                original_end = end_times[process_code]
+                duration = original_end - original_start
+                
+                # Set the visualization start time exactly to START_DATE
+                requested_start = job['START_DATE_EPOCH']
+                adjusted_start = requested_start  # Use exactly the START_DATE
+                adjusted_end = adjusted_start + duration
+                
+                # Store the adjusted times
+                adjusted_times[process_code] = (adjusted_start, adjusted_end)
+                
+                start_date_str = datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"Job {process_code} visualization using exact START_DATE: {start_date_str}")
+        
+        # SECOND PRIORITY: FAMILY-WIDE TIME SHIFTS        
         for family, processes in family_processes.items():
             # Check if any job in this family has a time shift
             family_time_shift = 0
@@ -85,6 +106,10 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             if family_time_shift != 0:
                 logger.info(f"Applying time shift of {family_time_shift/3600:.1f} hours to family {family} for visualization")
                 for seq_num, process_code, job in processes:
+                    # Skip if already processed by START_DATE override
+                    if process_code in adjusted_times:
+                        continue
+                        
                     if process_code in start_times and process_code in end_times:
                         original_start = start_times[process_code]
                         original_end = end_times[process_code]
@@ -130,12 +155,13 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     if family in family_processes and len(family_processes[family]) > 0:
                         is_first_process = (family_processes[family][0][1] == process_code)
                     
-                    # If this is the first process with START_DATE, use the exact date
-                    if is_first_process:
+                    # For jobs with START_DATE constraints, prioritize using the exact date
+                    if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time:
                         job_start = job['START_DATE_EPOCH']
                         # Adjust end time to maintain the same duration
                         original_duration = original_end - original_start
                         job_end = job_start + original_duration
+                        logger.info(f"Using START_DATE={user_start_date} for {process_code} in visualization")
                 
                 # Format the dates for display
                 job_start_date = datetime.fromtimestamp(job_start).strftime('%Y-%m-%d %H:%M')

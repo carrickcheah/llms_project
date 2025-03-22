@@ -93,23 +93,39 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         for family in family_processes:
             family_processes[family].sort(key=lambda x: x[0])
         
-        # Step 2: Identify families that need time adjustment due to START_DATE constraints
-        family_time_shifts = {}
+        # Step 2: Apply START_DATE visualization adjustments first
+        start_date_processes = {}
         for family, processes in family_processes.items():
-            # Check if any process in this family has START_DATE
             for seq_num, process_code, machine, start, end, priority in processes:
                 if process_code in job_lookup and 'START_DATE_EPOCH' in job_lookup[process_code] and job_lookup[process_code]['START_DATE_EPOCH']:
-                    # Calculate the time shift needed
-                    requested_start = job_lookup[process_code]['START_DATE_EPOCH']
-                    time_shift = start - requested_start
-                    
-                    # Store the time shift for this family
-                    if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
-                        family_time_shifts[family] = time_shift
-                    
-                    logger.info(f"Family {family} has START_DATE constraint: shift={time_shift/3600:.1f} hours")
+                    start_date = job_lookup[process_code]['START_DATE_EPOCH']
+                    # For visualization, always use START_DATE
+                    if start_date > current_time:
+                        # Calculate adjusted start and end based on START_DATE
+                        duration = end - start
+                        adjusted_start = start_date
+                        adjusted_end = adjusted_start + duration
+                        
+                        if process_code not in start_date_processes:
+                            start_date_processes[process_code] = (adjusted_start, adjusted_end)
+                        
+                        logger.info(f"Visualizing {process_code} at START_DATE: {datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}")
         
-        # Step 3: Apply time shifts to generate adjusted task data for visualization
+        # Step 3: Calculate time shifts for visualization
+        family_time_shifts = {}
+        
+        # Apply time shifts from family_time_shift property if present in jobs
+        if jobs:
+            for family, processes in family_processes.items():
+                for seq_num, process_code, machine, start, end, priority in processes:
+                    if process_code in job_lookup and 'family_time_shift' in job_lookup[process_code]:
+                        time_shift = job_lookup[process_code]['family_time_shift']
+                        if abs(time_shift) > 60:  # More than a minute
+                            family_time_shifts[family] = time_shift
+                            logger.info(f"Using job-provided time shift for family {family}: {time_shift/3600:.1f} hours")
+                            break
+        
+        # Step 4: Apply time shifts to generate adjusted task data for visualization
         process_info = {}
         for family in family_processes:
             time_shift = family_time_shifts.get(family, 0)
@@ -125,9 +141,13 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             logger.info(f"Applying time shift of {time_shift/3600:.1f} hours to family {family} for visualization")
             
             for seq_num, process_code, machine, start, end, priority in family_processes[family]:
-                # Adjust the times by the time shift
-                adjusted_start = start - time_shift
-                adjusted_end = end - time_shift
+                # Skip if this process has START_DATE override
+                if process_code in start_date_processes:
+                    adjusted_start, adjusted_end = start_date_processes[process_code]
+                else:
+                    # Adjust the times by the time shift
+                    adjusted_start = start - time_shift
+                    adjusted_end = end - time_shift
                 
                 if family not in process_info:
                     process_info[family] = []
@@ -136,7 +156,18 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 logger.info(f"  Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
                            f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
         
-        # Step 4: Create task list for visualization from the adjusted data
+        # Step 5: Override for START_DATE processes that were missed
+        for process_code, (adjusted_start, adjusted_end) in start_date_processes.items():
+            # Find the process in process_info
+            for family in process_info:
+                for i, (proc, machine, _, _, priority, seq_num) in enumerate(process_info[family]):
+                    if proc == process_code:
+                        # Replace with START_DATE version
+                        process_info[family][i] = (process_code, machine, adjusted_start, adjusted_end, priority, seq_num)
+                        logger.info(f"Overrode {process_code} with START_DATE version for visualization")
+                        break
+        
+        # Step 6: Create task list for visualization from the adjusted data
         sorted_tasks = []
         for family in sorted(process_info.keys()):
             processes = process_info[family]
