@@ -7,6 +7,7 @@ import plotly.offline as pyo
 import pandas as pd
 import plotly.graph_objects as go
 import logging
+from dotenv import load_dotenv
 from ingest_data import load_jobs_planning_data
 from greedy import greedy_schedule, extract_job_family, extract_process_number
 
@@ -184,13 +185,26 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 
                 if 'NUMBER_OPERATOR' in job_data:
                     number_operator = f"<br><b>Number of Operators:</b> {job_data['NUMBER_OPERATOR']}"
+                    
+                # Add new information from updated column fields
+                job_info = ""
+                if 'JOB' in job_data and job_data['JOB']:
+                    job_info += f"<br><b>Job:</b> {job_data['JOB']}"
+                if 'JOB_QUANTITY' in job_data and job_data['JOB_QUANTITY']:
+                    job_info += f"<br><b>Job Quantity:</b> {job_data['JOB_QUANTITY']}"
+                if 'EXPECT_OUTPUT_PER_HOUR' in job_data and job_data['EXPECT_OUTPUT_PER_HOUR']:
+                    job_info += f"<br><b>Expected Output/Hour:</b> {job_data['EXPECT_OUTPUT_PER_HOUR']}"
+                if 'ACCUMULATED_DAILY_OUTPUT' in job_data and job_data['ACCUMULATED_DAILY_OUTPUT']:
+                    job_info += f"<br><b>Accumulated Output:</b> {job_data['ACCUMULATED_DAILY_OUTPUT']}"
+                if 'BALANCE_QUANTITY' in job_data and job_data['BALANCE_QUANTITY']:
+                    job_info += f"<br><b>Balance Quantity:</b> {job_data['BALANCE_QUANTITY']}"
 
             description = (f"<b>Process:</b> {process_code}<br>"
                           f"<b>Machine:</b> {machine}<br>"
                           f"<b>Priority:</b> {job_priority}<br>"
                           f"<b>Start:</b> {start_date.strftime('%Y-%m-%d %H:%M')}<br>"
                           f"<b>End:</b> {end_date.strftime('%Y-%m-%d %H:%M')}<br>"
-                          f"<b>Duration:</b> {duration_hours:.1f} hours{buffer_info}{number_operator}")
+                          f"<b>Duration:</b> {duration_hours:.1f} hours{buffer_info}{number_operator}{job_info if 'job_info' in locals() else ''}")
 
             df_list.append(dict(
                 Task=task_label,
@@ -320,7 +334,14 @@ def flatten_schedule_to_list(schedule):
     return flat_schedule
 
 if __name__ == "__main__":
-    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
+    # Load environment variables
+    load_dotenv()
+    file_path = os.getenv('file_path')
+    
+    if not file_path:
+        logger.error("No file_path found in environment variables.")
+        exit(1)
+        
     try:
         jobs, machines, setup_times = load_jobs_planning_data(file_path)
         logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines for visualization")

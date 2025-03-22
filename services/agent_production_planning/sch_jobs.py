@@ -6,6 +6,8 @@ from datetime import datetime
 import logging
 import time
 import re
+from dotenv import load_dotenv
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -74,7 +76,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints for CP-SAT solver:")
         for job in start_date_jobs:
             start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['PROCESS_CODE']} on {job['MACHINE_ID']}: MUST start EXACTLY at {start_date}")
+            # Get resource location (try both old and new column names)
+            resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
+            logger.info(f"  Job {job['PROCESS_CODE']} on {resource_location}: MUST start EXACTLY at {start_date}")
         logger.info("START_DATE constraints will be strictly enforced in the model")
 
     # Step 1: Organize jobs by families and process numbers
@@ -112,7 +116,8 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     intervals = {}
     for job in jobs:
         job_id = job['PROCESS_CODE']
-        machine_id = job['MACHINE_ID']
+        # Get resource location (try both old and new column names)
+        machine_id = job.get('RSC_LOCATION', job.get('MACHINE_ID'))
         duration = job['processing_time']
         due_time = job.get('LCD_DATE_EPOCH', horizon_end - duration)
         priority = job['PRIORITY']
@@ -151,7 +156,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
     # Add machine no-overlap constraints
     for machine in machines:
-        machine_intervals = [intervals[(job['PROCESS_CODE'], job['MACHINE_ID'])] for job in jobs if job['MACHINE_ID'] == machine]
+        machine_intervals = [intervals[(job['PROCESS_CODE'], job.get('RSC_LOCATION', job.get('MACHINE_ID')))] 
+                           for job in jobs 
+                           if job.get('RSC_LOCATION') == machine or job.get('MACHINE_ID') == machine]
         if machine_intervals:
             model.AddNoOverlap(machine_intervals)
 
@@ -164,8 +171,10 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             for i in range(len(sorted_jobs) - 1):
                 job1 = sorted_jobs[i]
                 job2 = sorted_jobs[i + 1]
-                model.Add(end_vars[(job1['PROCESS_CODE'], job1['MACHINE_ID'])] <= 
-                         start_vars[(job2['PROCESS_CODE'], job2['MACHINE_ID'])])
+                machine_id1 = job1.get('RSC_LOCATION', job1.get('MACHINE_ID'))
+                machine_id2 = job2.get('RSC_LOCATION', job2.get('MACHINE_ID'))
+                model.Add(end_vars[(job1['PROCESS_CODE'], machine_id1)] <= 
+                         start_vars[(job2['PROCESS_CODE'], machine_id2)])
                 added_constraints += 1
                 logger.info(f"Added sequence constraint: {job1['PROCESS_CODE']} must finish before {job2['PROCESS_CODE']} starts")
         logger.info(f"Added {added_constraints} explicit sequence constraints")
@@ -173,7 +182,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     # Objective: Minimize makespan and delays
     makespan = model.NewIntVar(current_time, horizon_end, 'makespan')
     for machine in machines:
-        machine_ends = [end_vars[(job['PROCESS_CODE'], job['MACHINE_ID'])] for job in jobs if job['MACHINE_ID'] == machine]
+        machine_ends = [end_vars[(job['PROCESS_CODE'], job.get('RSC_LOCATION', job.get('MACHINE_ID')))] 
+                      for job in jobs 
+                      if job.get('RSC_LOCATION') == machine or job.get('MACHINE_ID') == machine]
         if machine_ends:
             model.AddMaxEquality(makespan, machine_ends)
 
@@ -181,7 +192,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     objective_terms = [makespan]  # Start with makespan
     for job in jobs:
         job_id = job['PROCESS_CODE']
-        machine_id = job['MACHINE_ID']
+        machine_id = job.get('RSC_LOCATION', job.get('MACHINE_ID'))
         due_time = job.get('LCD_DATE_EPOCH', 0)
         priority = job['PRIORITY']
         if due_time > 0:
@@ -217,7 +228,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     total_jobs = 0
     for job in jobs:
         job_id = job['PROCESS_CODE']
-        machine_id = job['MACHINE_ID']
+        machine_id = job.get('RSC_LOCATION', job.get('MACHINE_ID'))
         start = solver.Value(start_vars[(job_id, machine_id)])
         end = solver.Value(end_vars[(job_id, machine_id)])
         priority = job['PRIORITY']
@@ -282,8 +293,14 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 if __name__ == "__main__":
     from ingest_data import load_jobs_planning_data
     
-    # Use real data path instead of hardcoded examples
-    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
+    # Load environment variables
+    load_dotenv()
+    file_path = os.getenv('file_path')
+    
+    if not file_path:
+        logger.error("No file_path found in environment variables.")
+        exit(1)
+        
     try:
         # Load real data
         jobs, machines, setup_times = load_jobs_planning_data(file_path)
@@ -303,17 +320,18 @@ if __name__ == "__main__":
                 logger.info(f"Summary of {len(start_date_jobs)} jobs with START_DATE constraints:")
                 for job in start_date_jobs:
                     job_id = job['PROCESS_CODE']
-                    machine_id = job['MACHINE_ID']
-                    for task in schedule.get(machine_id, []):
-                        if task[0] == job_id:
-                            start_time = task[1]
-                            requested_time = job['START_DATE_EPOCH']
-                            if start_time == requested_time:
-                                logger.info(f"  ✅ Job {job_id} scheduled exactly at START_DATE={datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
-                            else:
-                                logger.warning(f"  ❌ Job {job_id} scheduled at {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M')} " 
-                                             f"instead of requested {datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
-                            break
+                    resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
+                    for machine, tasks in schedule.items():
+                        for task_id, start, _, _ in tasks:
+                            if task_id == job_id:
+                                start_time = start
+                                requested_time = job['START_DATE_EPOCH']
+                                if start_time == requested_time:
+                                    logger.info(f"  ✅ Job {job_id} scheduled exactly at START_DATE={datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
+                                else:
+                                    logger.warning(f"  ❌ Job {job_id} scheduled at {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M')} " 
+                                                 f"instead of requested {datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
+                                break
         else:
             logger.error("Failed to generate valid schedule")
     except Exception as e:

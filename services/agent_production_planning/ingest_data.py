@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import os
 import logging
 import re
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -46,26 +47,60 @@ def clean_excel_data(df):
         df[col] = df[col].astype(str).str.strip().replace({'nan': np.nan, 'None': np.nan, '': np.nan})
         df[col] = df[col].str.replace(r'[^\w\s-]', '', regex=True).str.replace(r'\s+', ' ', regex=True)
     
-    # Define rules for numeric columns
+    # Define rules for numeric columns - updated with new column names
     numeric_cols = {
         'NUMBER_OPERATOR': {'min': 1, 'max': 10, 'default': 1},
-        'HOURS_NEED': {'min': 0.1, 'max': 720, 'default': None},
-        'SETTING_HOUR': {'min': 0, 'max': 48, 'default': 0},  # Setup/changeover time
-        'NO_PRODUCTION_HOUR': {'min': 0, 'max': 48, 'default': 0},  # Downtime
-        'PRIORTY': {'min': 1, 'max': 5, 'default': 3}  # Updated: Changed to PRIORTY with default 3
+        'HOURS_NEED': {'min': 0.1, 'max': 720, 'default': 1},
+        'SETTING_HOUR': {'min': 0, 'max': 48, 'default': 0},  # Old name for setup time
+        'SETTING_HOURS': {'min': 0, 'max': 48, 'default': 0},  # Setup/changeover time
+        'BREAK_HOURS': {'min': 0, 'max': 24, 'default': 0},  # Break time
+        'NO_PRODUCTION_HOUR': {'min': 0, 'max': 48, 'default': 0},  # Old name for downtime
+        'NO_PROD': {'min': 0, 'max': 48, 'default': 0},  # Renamed from NO_PRODUCTION_HOUR
+        'PRIORITY': {'min': 1, 'max': 5, 'default': 3},  # Priority
+        'JOB_QUANTITY': {'min': 1, 'max': 1000000, 'default': 1000},  # New column
+        'EXPECT_OUTPUT_PER_HOUR': {'min': 0.1, 'max': 10000, 'default': 100},  # New column
+        'ACCUMULATED_DAILY_OUTPUT': {'min': 0, 'max': 1000000, 'default': 0},  # New column
+        'BALANCE_QUANTITY': {'min': 0, 'max': 1000000, 'default': 0},  # New column
+        'BAL_HR': {'min': 0, 'max': 1000, 'default': 0}  # Buffer hours
     }
     
     # Process numeric columns with validation
     for col, rules in numeric_cols.items():
         if col in df.columns:
+            # First convert to numeric, coercing errors to NaN
             df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+            # Fill NaN values with default
+            df[col] = df[col].fillna(rules['default'])
+            
+            # Apply min/max constraints
             df.loc[df[col] < rules['min'], col] = rules['default'] if rules['default'] is not None else rules['min']
             df.loc[df[col] > rules['max'], col] = rules['max']
+            
             logger.info(f"Processed {col}: {df[col].notna().sum()} valid values")
     
+    # Ensure PRIORITY has a valid value (since we saw 0 valid values in the logs)
+    if 'PRIORITY' in df.columns:
+        df['PRIORITY'] = df['PRIORITY'].fillna(3).astype(int)
+        logger.info(f"Ensured PRIORITY is set with default value 3: {df['PRIORITY'].value_counts().to_dict()}")
+    
+    # Calculate HOURS_NEED if not provided but JOB_QUANTITY and EXPECT_OUTPUT_PER_HOUR are available
+    if 'HOURS_NEED' in df.columns and 'JOB_QUANTITY' in df.columns and 'EXPECT_OUTPUT_PER_HOUR' in df.columns:
+        mask = (df['JOB_QUANTITY'].notna() & df['EXPECT_OUTPUT_PER_HOUR'].notna() & (df['EXPECT_OUTPUT_PER_HOUR'] > 0) & df['HOURS_NEED'].isna())
+        if mask.any():
+            df.loc[mask, 'HOURS_NEED'] = df.loc[mask, 'JOB_QUANTITY'] / df.loc[mask, 'EXPECT_OUTPUT_PER_HOUR']
+            logger.info(f"Calculated HOURS_NEED for {mask.sum()} rows from JOB_QUANTITY/EXPECT_OUTPUT_PER_HOUR")
+    
+    # Calculate BALANCE_QUANTITY if not provided
+    if 'BALANCE_QUANTITY' in df.columns and 'JOB_QUANTITY' in df.columns and 'ACCUMULATED_DAILY_OUTPUT' in df.columns:
+        mask = (df['JOB_QUANTITY'].notna() & df['ACCUMULATED_DAILY_OUTPUT'].notna() & df['BALANCE_QUANTITY'].isna())
+        if mask.any():
+            df.loc[mask, 'BALANCE_QUANTITY'] = df.loc[mask, 'JOB_QUANTITY'] - df.loc[mask, 'ACCUMULATED_DAILY_OUTPUT']
+            logger.info(f"Calculated BALANCE_QUANTITY for {mask.sum()} rows")
+    
     # Enforce required fields
-    if 'JOBCODE' in df.columns:
-        df = df[df['JOBCODE'].notna() & (df['JOBCODE'].str.len() > 0)]
+    if 'JOB' in df.columns:
+        df = df[df['JOB'].notna() & (df['JOB'].str.len() > 0)]
     if 'PROCESS_CODE' in df.columns:
         df = df[df['PROCESS_CODE'].notna() & (df['PROCESS_CODE'].str.len() > 0)]
     
@@ -94,35 +129,48 @@ def clean_excel_data(df):
             except:
                 continue
     
-    # Remove duplicates on key columns
-    key_cols = [col for col in ['JOBCODE', 'PROCESS_CODE', 'MACHINE_ID'] if col in df.columns]
+    # Remove duplicates on key columns - updated with new column names
+    key_cols = [col for col in ['JOB', 'PROCESS_CODE', 'RSC_LOCATION'] if col in df.columns]
     if key_cols:
         pre_dedup = len(df)
         df = df.drop_duplicates(subset=key_cols)
         logger.info(f"Removed {pre_dedup - len(df)} duplicate rows based on {key_cols}")
     
-    # Ensure machine ID exists
-    if 'MACHINE_ID' in df.columns:
+    # Ensure machine location exists
+    if 'RSC_LOCATION' in df.columns:
+        df = df[df['RSC_LOCATION'].notna() & (df['RSC_LOCATION'].str.len() > 0)]
+    elif 'MACHINE_ID' in df.columns:  # Backward compatibility
         df = df[df['MACHINE_ID'].notna() & (df['MACHINE_ID'].str.len() > 0)]
     
     # Calculate processing time from hours directly
     if 'HOURS_NEED' in df.columns:
         df['processing_time'] = (df['HOURS_NEED'] * 3600).astype(int)
+        logger.info(f"Calculated processing_time from HOURS_NEED: {df['processing_time'].mean():.2f} seconds average")
     
-    # Add setup time if available
-    if 'SETTING_HOUR' in df.columns:
+    # Add setup time if available - check both old and new column names
+    if 'SETTING_HOURS' in df.columns:  # New column name
+        df['setup_time'] = (df['SETTING_HOURS'] * 3600).astype(int)
+    elif 'SETTING_HOUR' in df.columns:  # Old column name
         df['setup_time'] = (df['SETTING_HOUR'] * 3600).astype(int)
     else:
         df['setup_time'] = 0
     
-    # Add downtime if available
-    if 'NO_PRODUCTION_HOUR' in df.columns:
+    # Add downtime if available - check both old and new column names
+    if 'NO_PROD' in df.columns:  # New column name
+        df['downtime'] = (df['NO_PROD'] * 3600).astype(int)
+    elif 'NO_PRODUCTION_HOUR' in df.columns:  # Old column name
         df['downtime'] = (df['NO_PRODUCTION_HOUR'] * 3600).astype(int)
     else:
         df['downtime'] = 0
+    
+    # Add break time if available
+    if 'BREAK_HOURS' in df.columns:
+        df['break_time'] = (df['BREAK_HOURS'] * 3600).astype(int)
+    else:
+        df['break_time'] = 0
         
-    # Total time is processing + setup + downtime
-    df['total_time'] = df['processing_time'] + df['setup_time'] + df['downtime']
+    # Total time is processing + setup + downtime + break time
+    df['total_time'] = df['processing_time'] + df['setup_time'] + df['downtime'] + df['break_time']
     
     removed_rows = initial_rows - len(df)
     logger.info(f"Data cleaning: {len(df)} rows after cleaning (removed {removed_rows} invalid rows)")
@@ -130,7 +178,7 @@ def clean_excel_data(df):
         logger.info("Reasons for removal:")
         logger.info("- Missing or invalid job/process codes")
         logger.info("- Zero or negative processing times")
-        logger.info("- Missing machine IDs")
+        logger.info("- Missing machine locations")
         logger.info("- Invalid dates")
     
     return df
@@ -170,6 +218,7 @@ def convert_to_epoch(df, columns, base_date=None):
             
             # Try with multiple date formats
             date_formats = ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y']
+            success = False
             for fmt in date_formats:
                 try:
                     df[epoch_col] = pd.to_datetime(df[col], format=fmt, errors='coerce').apply(
@@ -178,9 +227,15 @@ def convert_to_epoch(df, columns, base_date=None):
                     valid_count = df[epoch_col].notna().sum()
                     logger.info(f"LCD_DATE with format {fmt}: {valid_count} valid dates")
                     if valid_count > 0:
+                        success = True
                         break
                 except Exception as e:
                     logger.warning(f"Error with format {fmt}: {e}")
+            
+            # If we couldn't parse any dates, set default
+            if not success or df[epoch_col].isna().all():
+                logger.warning(f"No valid dates in LCD_DATE - using default (30 days from now)")
+                df[epoch_col] = default_due_date
         
         # Special handling for START_DATE
         elif base_col == 'START_DATE':
@@ -189,6 +244,7 @@ def convert_to_epoch(df, columns, base_date=None):
             
             # Try with multiple date formats
             date_formats = ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y']
+            success = False
             for fmt in date_formats:
                 try:
                     # Convert to datetime first
@@ -198,6 +254,7 @@ def convert_to_epoch(df, columns, base_date=None):
                     valid_count = df[epoch_col].notna().sum()
                     logger.info(f"START_DATE with format {fmt}: {valid_count} valid dates")
                     if valid_count > 0:
+                        success = True
                         # Log each START_DATE for debugging
                         for idx, timestamp in df[df[epoch_col].notna()][epoch_col].items():
                             date_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M')
@@ -283,7 +340,17 @@ def load_job_data(file_path):
                 for header_row in [4, 0, 1, 2, 3]:
                     try:
                         df = pd.read_excel(file_path, sheet_name=sheet, header=header_row)
-                        if len(df.columns) >= 5 and set(['JOBCODE', 'PROCESS_CODE', 'MACHINE_ID']).issubset(df.columns):
+                        # Check for necessary columns - updated to include new column names
+                        required_columns = ['PROCESS_CODE']
+                        location_columns = ['RSC_LOCATION', 'MACHINE_ID']  # Try both old and new names
+                        job_columns = ['JOB', 'JOBCODE', 'RSC_CODE']       # Try all possible job column names
+                        
+                        # Check if we have at least process code and one location column and one job column
+                        has_process = 'PROCESS_CODE' in df.columns
+                        has_location = any(col in df.columns for col in location_columns)
+                        has_job = any(col in df.columns for col in job_columns)
+                        
+                        if has_process and has_location and has_job and len(df.columns) >= 5:
                             logger.info(f"Found data in sheet '{sheet}' with header at row {header_row}")
                             break
                     except:
@@ -306,53 +373,145 @@ def load_job_data(file_path):
     df = convert_to_epoch(df, date_columns)
     
     # Find START_DATE column with or without trailing space
-    start_date_col = next((col for col in df.columns if col.strip() == 'START_DATE'), None)
+    start_date_columns = [col for col in df.columns if col.strip() == 'START_DATE']
+    start_date_col = start_date_columns[0] if start_date_columns else None
     if start_date_col:
         logger.info(f"Found START_DATE column: '{start_date_col}'")
     else:
         logger.warning("No START_DATE column found in the data")
     
     # Find PLANNED_START column with or without trailing space
-    planned_start_col = next((col for col in df.columns if col.strip() == 'PLANNED_START'), None)
+    planned_start_columns = [col for col in df.columns if col.strip() == 'PLANNED_START']
+    planned_start_col = planned_start_columns[0] if planned_start_columns else None
     if planned_start_col:
         logger.info(f"Found PLANNED_START column: '{planned_start_col}'")
     
-    # Define column mapping to standardize column names
+    # Define column mapping to standardize column names - following exact mydata.xlsx sequence
     column_mapping = {
-        'LCD_DATE_EPOCH': 'LCD_DATE_EPOCH',  # Keep original name
-        'START_DATE_EPOCH': 'START_DATE_EPOCH',  # Keep original name
-        'JOB_CODE': 'JOBCODE',
+        'LCD_DATE': 'LCD_DATE',
+        'JOB': 'JOB',
         'PROCESS_CODE': 'PROCESS_CODE',
-        'MACHINE_ID': 'MACHINE_ID',
+        'RSC_LOCATION': 'RSC_LOCATION',  # Previously MACHINE_ID
+        'RSC_CODE': 'RSC_CODE',  # Previously JOB_CODE
         'NUMBER_OPERATOR': 'NUMBER_OPERATOR',
-        'DURATION_IN_HOUR': 'HOURS_NEED',
-        'SETUP_TIME': 'SETTING_HOUR',
-        'DOWNTIME': 'NO_PRODUCTION_HOUR',
-        'PRIORITY': 'PRIORITY',  # Map to PRIORITY
-        'PLANNED_START': planned_start_col if planned_start_col else 'PLANNED_START',
-        'PLANNED_END': 'PLANNED_END',
-        'LATEST_COMPLETION_DATE': 'LATEST_COMPLETION_DATE'
+        'JOB_QUANTITY': 'JOB_QUANTITY',
+        'EXPECT_OUTPUT_PER_HOUR': 'EXPECT_OUTPUT_PER_HOUR',
+        'PRIORITY': 'PRIORITY',
+        'HOURS_NEED': 'HOURS_NEED',
+        'SETTING_HOURS': 'SETTING_HOURS',  # Previously SETTING_HOUR
+        'BREAK_HOURS': 'BREAK_HOURS',
+        'NO_PROD': 'NO_PROD',  # Previously NO_PRODUCTION_HOUR
+        'START_DATE': start_date_col if start_date_col else 'START_DATE',
+        'ACCUMULATED_DAILY_OUTPUT': 'ACCUMULATED_DAILY_OUTPUT',
+        'BALANCE_QUANTITY': 'BALANCE_QUANTITY',
+        'START_TIME': 'START_TIME',  # Output field - calculated after scheduling
+        'END_TIME': 'END_TIME',      # Output field - calculated after scheduling
+        'BAL_HR': 'BAL_HR',          # Output field - calculated after scheduling (BALANCE_HOUR)
+        'BUFFER_STATUS': 'BUFFER_STATUS'  # Output field - calculated after scheduling
     }
     
-    # Check for missing columns
-    missing_columns = [f"{expected_col} (looking for '{actual_col}')" 
-                      for expected_col, actual_col in column_mapping.items() 
-                      if actual_col not in df.columns]
+    # Add epoch date mappings
+    column_mapping.update({
+        'LCD_DATE_EPOCH': 'LCD_DATE_EPOCH',
+        'START_DATE_EPOCH': 'START_DATE_EPOCH'
+    })
+    
+    # Check for missing columns and handle column name compatibility
+    missing_columns = []
+    for standard_col, actual_col in column_mapping.items():
+        # Skip if this is an output field (not needed in input)
+        if standard_col in ['START_TIME', 'END_TIME', 'BAL_HR', 'BUFFER_STATUS']:
+            continue
+            
+        # Skip epoch fields (handled separately)
+        if standard_col.endswith('_EPOCH'):
+            continue
+            
+        # First try the new column name
+        if actual_col in df.columns:
+            continue
+            
+        # For updated column names, try the old name as fallback
+        if standard_col == 'RSC_LOCATION' and 'MACHINE_ID' in df.columns:
+            column_mapping[standard_col] = 'MACHINE_ID'
+            continue
+        elif standard_col == 'RSC_CODE' and 'JOB_CODE' in df.columns:
+            column_mapping[standard_col] = 'JOB_CODE'
+            continue
+        elif standard_col == 'RSC_CODE' and 'JOBCODE' in df.columns:
+            column_mapping[standard_col] = 'JOBCODE'
+            continue
+        elif standard_col == 'SETTING_HOURS' and 'SETTING_HOUR' in df.columns:
+            column_mapping[standard_col] = 'SETTING_HOUR'
+            continue
+        elif standard_col == 'NO_PROD' and 'NO_PRODUCTION_HOUR' in df.columns:
+            column_mapping[standard_col] = 'NO_PRODUCTION_HOUR'
+            continue
+        elif standard_col == 'START_DATE' and any(col.strip() == 'START_DATE' for col in df.columns):
+            # Handle START_DATE with spaces
+            column_mapping[standard_col] = next(col for col in df.columns if col.strip() == 'START_DATE')
+            continue
+            
+        # If column is truly missing and not an optional column, add to missing list
+        if actual_col not in df.columns and standard_col not in ['PRIORITY', 'BREAK_HOURS', 'ACCUMULATED_DAILY_OUTPUT', 'BALANCE_QUANTITY']:
+            missing_columns.append(f"{standard_col} (looking for '{actual_col}')")
+    
     if missing_columns:
         logger.warning(f"Missing columns: {missing_columns}")
     
     # Create standardized DataFrame
     data = pd.DataFrame()
+    
+    # First, add all required columns, handling missing values properly
     for standard_col, source_col in column_mapping.items():
-        data[standard_col] = df[source_col] if source_col in df.columns else pd.Series()
+        # Skip if source column doesn't exist
+        if source_col not in df.columns:
+            continue
+            
+        # Copy the values
+        data[standard_col] = df[source_col].copy()
+    
+    # Ensure epoch fields are copied
+    if 'LCD_DATE_EPOCH' in df.columns and 'LCD_DATE_EPOCH' not in data.columns:
+        data['LCD_DATE_EPOCH'] = df['LCD_DATE_EPOCH']
+    if 'START_DATE_EPOCH' in df.columns and 'START_DATE_EPOCH' not in data.columns:
+        data['START_DATE_EPOCH'] = df['START_DATE_EPOCH']
     
     # Ensure required columns have default values
-    data['NUMBER_OPERATOR'] = data['NUMBER_OPERATOR'].fillna(1).astype(int)
-    data['DURATION_IN_HOUR'] = data['DURATION_IN_HOUR'].fillna(0).astype(float)
-    data['SETUP_TIME'] = data.get('SETUP_TIME', pd.Series()).fillna(0).astype(float)
-    data['DOWNTIME'] = data.get('DOWNTIME', pd.Series()).fillna(0).astype(float)
-    data['PRIORITY'] = data['PRIORITY'].fillna(3).astype(int)
-    data['LCD_DATE_EPOCH'] = data['LCD_DATE_EPOCH'].fillna(int((datetime.now() + pd.Timedelta(days=30)).timestamp())).astype(int)
+    data['NUMBER_OPERATOR'] = data.get('NUMBER_OPERATOR', pd.Series()).fillna(1).astype(int)
+    
+    # Check if HOURS_NEED exists, and is any value is nan, fill with calculated values from JOB_QUANTITY/EXPECT_OUTPUT_PER_HOUR
+    if 'HOURS_NEED' in data.columns:
+        if 'JOB_QUANTITY' in data.columns and 'EXPECT_OUTPUT_PER_HOUR' in data.columns:
+            mask = data['HOURS_NEED'].isna() & data['JOB_QUANTITY'].notna() & data['EXPECT_OUTPUT_PER_HOUR'].notna() & (data['EXPECT_OUTPUT_PER_HOUR'] > 0)
+            if mask.any():
+                data.loc[mask, 'HOURS_NEED'] = data.loc[mask, 'JOB_QUANTITY'] / data.loc[mask, 'EXPECT_OUTPUT_PER_HOUR']
+        data['HOURS_NEED'] = data['HOURS_NEED'].fillna(1.0).astype(float)
+    else:
+        data['HOURS_NEED'] = 1.0
+    
+    # Ensure other columns have valid values
+    data['SETTING_HOURS'] = data.get('SETTING_HOURS', data.get('SETUP_TIME', pd.Series())).fillna(0).astype(float)
+    data['BREAK_HOURS'] = data.get('BREAK_HOURS', pd.Series()).fillna(0).astype(float)
+    data['NO_PROD'] = data.get('NO_PROD', data.get('NO_PRODUCTION_HOUR', pd.Series())).fillna(0).astype(float)
+    
+    # Ensure PRIORITY has a valid value
+    data['PRIORITY'] = data.get('PRIORITY', pd.Series()).fillna(3).astype(int)
+    
+    # Ensure quantity fields have valid values
+    data['JOB_QUANTITY'] = data.get('JOB_QUANTITY', pd.Series()).fillna(1000).astype(int)
+    data['EXPECT_OUTPUT_PER_HOUR'] = data.get('EXPECT_OUTPUT_PER_HOUR', pd.Series()).fillna(100).astype(float)
+    data['ACCUMULATED_DAILY_OUTPUT'] = data.get('ACCUMULATED_DAILY_OUTPUT', pd.Series()).fillna(0).astype(int)
+    
+    # Calculate BALANCE_QUANTITY if not provided
+    if 'BALANCE_QUANTITY' not in data.columns or data['BALANCE_QUANTITY'].isna().any():
+        data['BALANCE_QUANTITY'] = data['JOB_QUANTITY'] - data['ACCUMULATED_DAILY_OUTPUT']
+    data['BALANCE_QUANTITY'] = data['BALANCE_QUANTITY'].fillna(data['JOB_QUANTITY']).astype(int)
+    
+    # Ensure LCD_DATE_EPOCH is valid
+    if 'LCD_DATE_EPOCH' not in data.columns or data['LCD_DATE_EPOCH'].isna().any():
+        default_due_date = int((datetime.now() + pd.Timedelta(days=30)).timestamp())
+        data['LCD_DATE_EPOCH'] = data.get('LCD_DATE_EPOCH', pd.Series()).fillna(default_due_date).astype(int)
     
     # Check if START_DATE_EPOCH has been set
     if 'START_DATE_EPOCH' in data.columns and data['START_DATE_EPOCH'].notna().any():
@@ -369,9 +528,10 @@ def load_job_data(file_path):
                 
                 proc_num = extract_process_number(row['PROCESS_CODE'])
                 date_str = datetime.fromtimestamp(row['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                machine_id = row.get('RSC_LOCATION', row.get('MACHINE_ID', 'Unknown'))  # Try both old and new column names
                 family_data[family].append((proc_num, row['PROCESS_CODE'], row['START_DATE_EPOCH'], date_str))
                 
-                logger.info(f"  Process {row['PROCESS_CODE']} (Seq {proc_num}) on {row['MACHINE_ID']}: Will start at {date_str}")
+                logger.info(f"  Process {row['PROCESS_CODE']} (Seq {proc_num}) on {machine_id}: Will start at {date_str}")
         
         # Log families with multiple START_DATE constraints
         for family, processes in family_data.items():
@@ -388,21 +548,17 @@ def load_job_data(file_path):
     data['LATEST_COMPLETION_DATE'] = data.get('LATEST_COMPLETION_DATE', pd.Series(dtype='object'))
     
     # Calculate processing time in seconds directly from HOURS_NEED
-    data['processing_time'] = (pd.to_numeric(data['DURATION_IN_HOUR'], errors='coerce').fillna(0) * 3600).astype(int)
+    # Ensure HOURS_NEED is not NaN and is positive
+    valid_hours = data['HOURS_NEED'].fillna(0).clip(lower=0.1)
+    data['processing_time'] = (valid_hours * 3600).astype(int)
     
-    # Include setup time and downtime in total processing time if available
-    if 'SETUP_TIME' in data.columns:
-        data['setup_time'] = (pd.to_numeric(data['SETUP_TIME'], errors='coerce').fillna(0) * 3600).astype(int)
-    else:
-        data['setup_time'] = 0
-        
-    if 'DOWNTIME' in data.columns:
-        data['downtime'] = (pd.to_numeric(data['DOWNTIME'], errors='coerce').fillna(0) * 3600).astype(int)
-    else:
-        data['downtime'] = 0
+    # Include setup time, break time, and downtime in calculation
+    data['setup_time'] = (data['SETTING_HOURS'].fillna(0) * 3600).astype(int)
+    data['break_time'] = (data['BREAK_HOURS'].fillna(0) * 3600).astype(int)
+    data['downtime'] = (data['NO_PROD'].fillna(0) * 3600).astype(int)
     
-    # Total time includes processing, setup, and downtime
-    data['total_time'] = data['processing_time'] + data['setup_time'] + data['downtime']
+    # Total time includes processing, setup, break time, and downtime
+    data['total_time'] = data['processing_time'] + data['setup_time'] + data['break_time'] + data['downtime']
     
     # Log DataFrame details
     logger.info(f"DataFrame shape: {data.shape}")
@@ -411,12 +567,13 @@ def load_job_data(file_path):
     
     return data
 
-def load_jobs_planning_data(file_path):
+def load_jobs_planning_data(file_path=None):
     """
     Load and process job planning data from Excel file.
 
     Args:
-        file_path (str): Path to Excel file containing job data
+        file_path (str, optional): Path to Excel file containing job data. 
+                                  If None, will try to load from environment variable.
 
     Returns:
         tuple: (jobs, machines, setup_times)
@@ -424,6 +581,18 @@ def load_jobs_planning_data(file_path):
             - machines: List of machine IDs
             - setup_times: Dictionary of setup times between processes
     """
+    # Use environment variable if file_path not provided
+    if file_path is None:
+        # Load environment variables
+        load_dotenv()
+        file_path = os.getenv('file_path')
+        if not file_path:
+            logger.error("No file path provided and no 'file_path' found in environment variables")
+            raise ValueError("No file path provided and no 'file_path' found in environment variables")
+    
+    # Log the file path being used
+    logger.info(f"Loading job data from: {file_path}")
+    
     # Load and process the data into a DataFrame
     df = load_job_data(file_path)
     
@@ -446,20 +615,55 @@ def load_jobs_planning_data(file_path):
     jobs = []
     current_time = int(datetime.now().timestamp())
     for _, row in df.iterrows():
-        if pd.isna(row['PROCESS_CODE']) or pd.isna(row['MACHINE_ID']):
-            logger.warning(f"Skipping row: PROCESS_CODE={row.get('PROCESS_CODE', 'NaN')}, MACHINE_ID={row.get('MACHINE_ID', 'NaN')}")
+        if pd.isna(row['PROCESS_CODE']):
+            logger.warning(f"Skipping row: PROCESS_CODE={row.get('PROCESS_CODE', 'NaN')}")
+            continue
+            
+        # Check for machine ID in both old and new column names
+        machine_id = None
+        if 'RSC_LOCATION' in row and pd.notna(row['RSC_LOCATION']):
+            machine_id = row['RSC_LOCATION']
+        elif 'MACHINE_ID' in row and pd.notna(row['MACHINE_ID']):
+            machine_id = row['MACHINE_ID']
+            
+        if machine_id is None:
+            logger.warning(f"Skipping row: Missing machine ID for PROCESS_CODE={row.get('PROCESS_CODE', 'NaN')}")
             continue
         
-        # Derive job code from process code if missing
-        job_code = row['JOB_CODE'] if pd.notna(row['JOB_CODE']) else row['PROCESS_CODE'].split('-P')[0] if '-P' in row['PROCESS_CODE'] else row['PROCESS_CODE']
+        # Derive job code from process code if missing, using the appropriate column names
+        job_code = None
+        if 'RSC_CODE' in row and pd.notna(row['RSC_CODE']):
+            job_code = row['RSC_CODE']
+        elif 'JOB_CODE' in row and pd.notna(row['JOB_CODE']):
+            job_code = row['JOB_CODE']
+        elif 'JOBCODE' in row and pd.notna(row['JOBCODE']):
+            job_code = row['JOBCODE']
+        else:
+            # Extract from PROCESS_CODE if all else fails
+            job_code = row['PROCESS_CODE'].split('-P')[0] if '-P' in row['PROCESS_CODE'] else row['PROCESS_CODE']
         
-        # Handle due date
-        due_seconds = row['LCD_DATE_EPOCH']
-        proc_time = row['processing_time']
-        due_seconds = max(current_time + proc_time, int(due_seconds))
+        # Get the job name if available
+        job_name = row['JOB'] if 'JOB' in row and pd.notna(row['JOB']) else job_code
         
-        # Calculate priority
-        base_priority = int(row['PRIORITY'])
+        # Handle due date - ensure it's a valid integer
+        due_seconds = row.get('LCD_DATE_EPOCH', 0)
+        if pd.isna(due_seconds) or due_seconds == 0:
+            due_seconds = int((datetime.now() + pd.Timedelta(days=30)).timestamp())
+        else:
+            due_seconds = int(due_seconds)
+            
+        # Ensure processing time is valid
+        proc_time = max(int(row.get('processing_time', 3600)), 1)  # Minimum 1 second
+        due_seconds = max(current_time + proc_time, due_seconds)
+        
+        # Calculate priority - ensure it's a valid integer
+        base_priority = 3  # Default
+        if 'PRIORITY' in row and pd.notna(row['PRIORITY']):
+            try:
+                base_priority = int(row['PRIORITY'])
+            except:
+                logger.warning(f"Invalid PRIORITY value {row['PRIORITY']} for {row['PROCESS_CODE']}, using default 3")
+                
         base_priority = max(1, min(5, base_priority))
         days_remaining = (due_seconds - current_time) / (24 * 3600)
         if days_remaining <= 5 and base_priority > 1:
@@ -469,27 +673,57 @@ def load_jobs_planning_data(file_path):
         # Get user-defined start date if it exists
         user_start_time = None
         if 'START_DATE_EPOCH' in row and pd.notna(row['START_DATE_EPOCH']):
-            user_start_time = int(row['START_DATE_EPOCH'])
-            start_date = datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"Job {row['PROCESS_CODE']} has user-defined start date: {start_date}")
+            try:
+                user_start_time = int(row['START_DATE_EPOCH'])
+                start_date = datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"Job {row['PROCESS_CODE']} has user-defined start date: {start_date}")
+            except:
+                logger.warning(f"Invalid START_DATE_EPOCH value for {row['PROCESS_CODE']}")
         
-        # Create job dictionary
+        # Process numerical fields - ensure they're valid numbers
+        def safe_int(value, default=0):
+            try:
+                if pd.isna(value):
+                    return default
+                return int(value)
+            except:
+                return default
+                
+        def safe_float(value, default=0.0):
+            try:
+                if pd.isna(value):
+                    return default
+                return float(value)
+            except:
+                return default
+        
+        # Create job dictionary with all available fields - updated with new column names
         job = {
+            'JOB': job_name,
             'JOB_CODE': job_code,
+            'RSC_CODE': job_code,  # Store in both fields for compatibility
             'PROCESS_CODE': row['PROCESS_CODE'],
-            'MACHINE_ID': row['MACHINE_ID'],
+            'MACHINE_ID': machine_id,
+            'RSC_LOCATION': machine_id,  # Store in both fields for compatibility
             'processing_time': proc_time,
-            'LCD_DATE_EPOCH': due_seconds,  # Use LCD_DATE_EPOCH instead of DUE_DATE_TIME
-            'PRIORITY': final_priority,  # Keep as simple numeric value
-            'NUMBER_OPERATOR': int(row['NUMBER_OPERATOR']),
+            'LCD_DATE_EPOCH': due_seconds,
+            'PRIORITY': final_priority,
+            'NUMBER_OPERATOR': safe_int(row.get('NUMBER_OPERATOR'), 1),
+            # Add new columns with safe conversion
+            'JOB_QUANTITY': safe_int(row.get('JOB_QUANTITY'), 1000),
+            'EXPECT_OUTPUT_PER_HOUR': safe_float(row.get('EXPECT_OUTPUT_PER_HOUR'), 100.0),
+            'ACCUMULATED_DAILY_OUTPUT': safe_int(row.get('ACCUMULATED_DAILY_OUTPUT'), 0),
+            'BALANCE_QUANTITY': safe_int(row.get('BALANCE_QUANTITY'), 
+                safe_int(row.get('JOB_QUANTITY', 1000)) - safe_int(row.get('ACCUMULATED_DAILY_OUTPUT', 0))),
             # Add scheduling fields that might be populated from the Excel
             'PLANNED_START': row.get('PLANNED_START'),
             'PLANNED_END': row.get('PLANNED_END'),
             'LATEST_COMPLETION_DATE': row.get('LATEST_COMPLETION_DATE'),
-            # Add setup time and downtime if available
-            'setup_time': row.get('setup_time', 0),
-            'downtime': row.get('downtime', 0),
-            'total_time': row.get('total_time', proc_time)
+            # Add setup time, break time, and downtime with safe conversion
+            'setup_time': safe_int(row.get('setup_time'), 0),
+            'break_time': safe_int(row.get('break_time'), 0),
+            'downtime': safe_int(row.get('downtime'), 0),
+            'total_time': safe_int(row.get('total_time'), proc_time)
         }
         
         # Add user-defined start date if it exists
@@ -498,8 +732,13 @@ def load_jobs_planning_data(file_path):
         
         jobs.append(job)
     
-    # Extract unique machines
-    machines = sorted(df['MACHINE_ID'].dropna().unique())
+    # Extract unique machines - check both old and new column names
+    machines = []
+    if 'MACHINE_ID' in df.columns:
+        machines.extend(df['MACHINE_ID'].dropna().unique())
+    if 'RSC_LOCATION' in df.columns:
+        machines.extend(df['RSC_LOCATION'].dropna().unique())
+    machines = sorted(list(set([m for m in machines if pd.notna(m) and str(m).strip()])))  # Remove duplicates and empty values
     
     # Generate setup times (placeholder, adjust as needed)
     process_codes = [p for p in df['PROCESS_CODE'].dropna().unique()]
@@ -531,9 +770,16 @@ def load_jobs_planning_data(file_path):
     return jobs, machines, setup_times
 
 if __name__ == "__main__":
-    # Test the function
-    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
-    jobs, machines, setup_times = load_jobs_planning_data(file_path)
+    # Test the function using environment variable for file path
+    load_dotenv()
+    file_path = os.getenv('file_path')
+    
+    if not file_path:
+        print("Error: No 'file_path' found in environment variables.")
+        exit(1)
+        
+    print(f"Using file path from environment: {file_path}")
+    jobs, machines, setup_times = load_jobs_planning_data()
     
     # Print summary information
     print(f"Loaded {len(jobs)} jobs and {len(machines)} machines")

@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import logging
 import re
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -153,7 +154,15 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 buffer_hours = buffer_seconds / 3600
                 
                 # Job family and sequence
-                job_code = job.get('JOB_CODE', process_code.split('-P')[0] if '-P' in process_code else process_code)
+                # Use RSC_CODE if available, fall back to legacy ways of determining job code
+                job_code = job.get('RSC_CODE', job.get('JOB_CODE', 
+                           process_code.split('-P')[0] if '-P' in process_code else process_code))
+                
+                # Get resource location
+                resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
+                
+                # Get job name
+                job_name = job.get('JOB', job_code)
                 
                 # Get buffer status
                 buffer_status = ""
@@ -166,18 +175,33 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 else:
                     buffer_status = "OK"
                 
+                # Get quantity information
+                job_quantity = job.get('JOB_QUANTITY', 0)
+                expect_output = job.get('EXPECT_OUTPUT_PER_HOUR', 0)
+                accumulated_output = job.get('ACCUMULATED_DAILY_OUTPUT', 0)
+                balance_quantity = job.get('BALANCE_QUANTITY', job_quantity - accumulated_output)
+                
                 # Add to schedule data
                 schedule_data.append({
                     'LCD_DATE': due_date,
-                    'START_DATE': user_start_date,
+                    'JOB': job_name,
                     'PROCESS_CODE': process_code,
-                    'JOB_CODE': job_code,
-                    'MACHINE_ID': job.get('MACHINE_ID', 'Unknown'),
-                    'PRIORTY': job.get('PRIORITY', 3),
+                    'RSC_LOCATION': resource_location,
+                    'RSC_CODE': job_code,
+                    'NUMBER_OPERATOR': job.get('NUMBER_OPERATOR', 1),
+                    'JOB_QUANTITY': job_quantity,
+                    'EXPECT_OUTPUT_PER_HOUR': expect_output,
+                    'PRIORITY': job.get('PRIORITY', 3),
+                    'HOURS_NEED': duration_hours,  # Using the calculated duration
+                    'SETTING_HOURS': job.get('setup_time', 0) / 3600,
+                    'BREAK_HOURS': job.get('break_time', 0) / 3600 if 'break_time' in job else 0,
+                    'NO_PROD': job.get('downtime', 0) / 3600,
+                    'START_DATE': user_start_date,
+                    'ACCUMULATED_DAILY_OUTPUT': accumulated_output,
+                    'BALANCE_QUANTITY': balance_quantity,
                     'START_TIME': job_start_date,
                     'END_TIME': end_date,
-                    'DURATION_HOURS': round(duration_hours, 1),
-                    'BUFFER_HOURS': round(buffer_hours, 1),
+                    'BAL_HR': round(buffer_hours, 1),
                     'BUFFER_STATUS': buffer_status,
                 })
         
@@ -277,7 +301,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 <h3>Schedule Overview</h3>
                 <p><strong>Total Jobs:</strong> {len(df)}</p>
                 <p><strong>Date Range:</strong> {df['START_TIME'].min() if not df.empty else 'N/A'} to {df['END_TIME'].max() if not df.empty else 'N/A'}</p>
-                <p><strong>Total Duration:</strong> {df['DURATION_HOURS'].sum() if not df.empty else 0} hours</p>
+                <p><strong>Total Duration:</strong> {df['HOURS_NEED'].sum() if not df.empty else 0} hours</p>
             </div>
             <div class="col-md-6">
                 <h3>Buffer Status</h3>
@@ -335,15 +359,24 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 <thead>
                     <tr>
                         <th>LCD_DATE</th>
-                        <th>START_DATE</th>
+                        <th>JOB</th>
                         <th>PROCESS_CODE</th>
-                        <th>JOB_CODE</th>
-                        <th>MACHINE_ID</th>
-                        <th>PRIORTY</th>
+                        <th>RSC_LOCATION</th>
+                        <th>RSC_CODE</th>
+                        <th>NUMBER_OPERATOR</th>
+                        <th>JOB_QUANTITY</th>
+                        <th>EXPECT_OUTPUT_PER_HOUR</th>
+                        <th>PRIORITY</th>
+                        <th>HOURS_NEED</th>
+                        <th>SETTING_HOURS</th>
+                        <th>BREAK_HOURS</th>
+                        <th>NO_PROD</th>
+                        <th>START_DATE</th>
+                        <th>ACCUMULATED_DAILY_OUTPUT</th>
+                        <th>BALANCE_QUANTITY</th>
                         <th>START_TIME</th>
                         <th>END_TIME</th>
-                        <th>DURATION (h)</th>
-                        <th>BUFFER (h)</th>
+                        <th>BAL_HR</th>
                         <th>BUFFER_STATUS</th>
                     </tr>
                 </thead>
@@ -375,15 +408,24 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             html_content += f"""
                     <tr class="{buffer_class}">
                         <td>{row['LCD_DATE']}</td>
-                        <td>{row['START_DATE']}</td>
+                        <td>{row['JOB']}</td>
                         <td>{row['PROCESS_CODE']}</td>
-                        <td>{row['JOB_CODE']}</td>
-                        <td>{row['MACHINE_ID']}</td>
-                        <td>{row['PRIORTY']}</td>
+                        <td>{row['RSC_LOCATION']}</td>
+                        <td>{row['RSC_CODE']}</td>
+                        <td>{row['NUMBER_OPERATOR']}</td>
+                        <td>{row['JOB_QUANTITY']}</td>
+                        <td>{row['EXPECT_OUTPUT_PER_HOUR']}</td>
+                        <td>{row['PRIORITY']}</td>
+                        <td>{row['HOURS_NEED']:.1f}</td>
+                        <td>{row['SETTING_HOURS']:.1f}</td>
+                        <td>{row['BREAK_HOURS']:.1f}</td>
+                        <td>{row['NO_PROD']:.1f}</td>
+                        <td>{row['START_DATE']}</td>
+                        <td>{row['ACCUMULATED_DAILY_OUTPUT']}</td>
+                        <td>{row['BALANCE_QUANTITY']}</td>
                         <td>{row['START_TIME']}</td>
                         <td>{row['END_TIME']}</td>
-                        <td>{row['DURATION_HOURS']}</td>
-                        <td>{row['BUFFER_HOURS']}</td>
+                        <td>{row['BAL_HR']:.1f}</td>
                         <td><div class="status-badge {buffer_badge_class}">{row['BUFFER_STATUS']}</div></td>
                     </tr>"""
         
@@ -522,12 +564,18 @@ if __name__ == "__main__":
     from ingest_data import load_jobs_planning_data
     from greedy import greedy_schedule
     
-    # Use real data path
-    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
+    # Load environment variables
+    load_dotenv()
+    file_path = os.getenv('file_path')
+    
+    if not file_path:
+        logger.error("No file_path found in environment variables.")
+        exit(1)
+        
     output_file = "schedule_view.html"
     
     try:
-        # Load job data from real data path
+        # Load job data from environment variable path
         jobs, machines, setup_times = load_jobs_planning_data(file_path)
         logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines from {file_path}")
         

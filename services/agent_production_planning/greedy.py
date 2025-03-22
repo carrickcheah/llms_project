@@ -2,6 +2,8 @@
 import logging
 from datetime import datetime
 import re
+from dotenv import load_dotenv
+import os
 
 # Configure logging (standalone or align with project setup)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -11,7 +13,7 @@ def extract_process_number(process_code):
     """
     Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found.
     """
-    match = re.search(r'P(\d{2})-\d+', str(process_code).upper())  # Match exactly two digits after P
+    match = re.search(r'P(\d{2})', str(process_code).upper())  # Match exactly two digits after P
     if match:
         seq = int(match.group(1))
         return seq
@@ -100,7 +102,8 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
     # Process each job in the sorted order
     for job in sorted_jobs:
         job_id = job['PROCESS_CODE']
-        machine_id = job['MACHINE_ID']
+        # Use RSC_LOCATION if available, fall back to MACHINE_ID for compatibility
+        machine_id = job.get('RSC_LOCATION', job.get('MACHINE_ID'))
         duration = job['processing_time']
         due_time = job.get('LCD_DATE_EPOCH', current_time + 30 * 24 * 3600)
         family = extract_job_family(job_id)
@@ -200,7 +203,8 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             family_end_times[family] = end
         
         # Log the final scheduling decision
-        logger.info(f"✅ Scheduled job {job.get('JOB_CODE', job_id)} ({job_id}) on {machine_id}: "
+        job_name = job.get('JOB', job.get('JOB_CODE', job_id))
+        logger.info(f"✅ Scheduled job {job_name} ({job_id}) on {machine_id}: "
                    f"{datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} to {datetime.fromtimestamp(end).strftime('%Y-%m-%d %H:%M')}")
 
     # Calculate time shifts needed for families with START_DATE constraints
@@ -247,7 +251,14 @@ if __name__ == "__main__":
     # Use real data from file_path
     from ingest_data import load_jobs_planning_data
     
-    file_path = "/Users/carrickcheah/llms_project/services/agent_production_planning/mydata.xlsx"
+    # Load environment variables
+    load_dotenv()
+    file_path = os.getenv('file_path')
+    
+    if not file_path:
+        logger.error("No file_path found in environment variables.")
+        exit(1)
+        
     try:
         jobs, machines, setup_times = load_jobs_planning_data(file_path)
         logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines from {file_path}")
