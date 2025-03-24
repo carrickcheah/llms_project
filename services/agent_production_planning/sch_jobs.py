@@ -173,6 +173,20 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                 job2 = sorted_jobs[i + 1]
                 machine_id1 = job1.get('RSC_LOCATION', job1.get('MACHINE_ID'))
                 machine_id2 = job2.get('RSC_LOCATION', job2.get('MACHINE_ID'))
+                
+                # Check for START_DATE constraints that might conflict with sequence
+                job1_start_time = job1.get('START_DATE_EPOCH', 0)
+                job2_start_time = job2.get('START_DATE_EPOCH', 0)
+                
+                # If both jobs have fixed start times and they'd create an infeasibility
+                if job1_start_time > 0 and job2_start_time > 0 and job1_start_time >= job2_start_time:
+                    logger.warning(f"Potential sequence conflict: {job1['PROCESS_CODE']} (starts {datetime.fromtimestamp(job1_start_time).strftime('%Y-%m-%d %H:%M')}) " 
+                                  f"should finish before {job2['PROCESS_CODE']} (starts {datetime.fromtimestamp(job2_start_time).strftime('%Y-%m-%d %H:%M')})")
+                    # Skip this constraint to prevent infeasibility
+                    logger.warning(f"Skipping sequence constraint to avoid infeasibility")
+                    continue
+                
+                # Add the constraint normally
                 model.Add(end_vars[(job1['PROCESS_CODE'], machine_id1)] <= 
                          start_vars[(job2['PROCESS_CODE'], machine_id2)])
                 added_constraints += 1

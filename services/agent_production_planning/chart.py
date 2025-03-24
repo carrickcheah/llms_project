@@ -15,10 +15,10 @@ from greedy import greedy_schedule, extract_job_family, extract_process_number
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def format_date_correctly(epoch_timestamp):
+def format_date_correctly(epoch_timestamp, is_lcd_date=False):
     """
     Format an epoch timestamp into a consistent date string format.
-    Ensures dates from mydata.xlsx are correctly displayed.
+    For LCD_DATE values, always display as 08:00 AM to match Excel data.
     """
     # Default fallback date in case of issues
     default_date = "N/A"
@@ -27,8 +27,15 @@ def format_date_correctly(epoch_timestamp):
         if not epoch_timestamp or epoch_timestamp <= 0:
             return default_date
         
-        # Convert to datetime and format
+        # Create a datetime object from timestamp
         date_obj = datetime.fromtimestamp(epoch_timestamp)
+        
+        # For LCD_DATE always force 08:00 time to match Excel display
+        if is_lcd_date:
+            formatted = f"{date_obj.strftime('%Y-%m-%d')} 08:00"
+            return formatted
+        
+        # For other timestamps, preserve the original time
         return date_obj.strftime('%Y-%m-%d %H:%M')
     except Exception as e:
         logger.error(f"Error formatting timestamp {epoch_timestamp}: {e}")
@@ -74,8 +81,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         logger.warning("Empty schedule received, creating placeholder task")
         df_list.append(dict(
             Task="No tasks scheduled",
-            Start=datetime.fromtimestamp(current_time),
-            Finish=datetime.fromtimestamp(current_time + 3600),
+            Start=datetime.utcfromtimestamp(current_time),
+            Finish=datetime.utcfromtimestamp(current_time + 3600),
             Resource="None",
             Priority="Priority 3 (Medium)",
             Description="No tasks were scheduled. Please check your input data."
@@ -202,8 +209,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             logger.debug(f"Processing task: {process_code} on {machine} from {start} to {end}")
             
             try:
-                start_date = datetime.fromtimestamp(start)
-                end_date = datetime.fromtimestamp(end)
+                start_date = datetime.utcfromtimestamp(start)
+                end_date = datetime.utcfromtimestamp(end)
                 duration_hours = (end - start) / 3600
             except Exception as e:
                 logger.error(f"Error converting timestamps for {process_code}: {e}")
@@ -223,7 +230,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 due_date_field = next((f for f in ['LCD_DATE_EPOCH', 'DUE_DATE_TIME'] if f in job_data), None)
                 
                 if due_date_field and job_data[due_date_field]:
-                    due_date_str = format_date_correctly(job_data[due_date_field])
+                    # Pass is_lcd_date=True for LCD_DATE_EPOCH field
+                    due_date_str = format_date_correctly(job_data[due_date_field], is_lcd_date=True)
                     buffer_hours = (job_data[due_date_field] - end) / 3600
                     buffer_status = get_buffer_status_color(buffer_hours)
                     buffer_info = f"<br><b>Due Date:</b> {due_date_str}<br><b>Buffer:</b> {buffer_hours:.1f} hours"

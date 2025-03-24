@@ -349,7 +349,11 @@ def main():
                 process = job['PROCESS_CODE']
                 resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
                 buffer = job['BAL_HR']
-                due_date = datetime.fromtimestamp(job.get('LCD_DATE_EPOCH', 0)).strftime('%Y-%m-%d %H:%M')
+                lcd_epoch = job.get('LCD_DATE_EPOCH', 0)
+                # Force display with 08:00 time
+                dt = datetime.fromtimestamp(lcd_epoch)
+                due_date = f"{dt.strftime('%Y-%m-%d')} 08:00"
+                print(f"  Debug - Job {process}: LCD_DATE_EPOCH={lcd_epoch}, formatted={due_date}")
                 print(f"  {process} on {resource_location}: {buffer:.1f} hours buffer, due {due_date}")
 
     print("\nSchedule statistics:")
@@ -398,7 +402,7 @@ def main():
                     
                     print(f"  {process} on {resource_location}: START_DATE={start_date}, Scheduled={scheduled_date} - {impact}")
                     if not start_time_matches:
-                        print(f"    ⚠️ START_TIME doesn't match START_DATE for {process}")
+                        print(f"    START_TIME doesn't match START_DATE for {process}")
         
         if future_date_jobs:
             violated_constraints = []

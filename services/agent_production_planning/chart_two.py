@@ -15,8 +15,8 @@ from greedy import greedy_schedule, extract_job_family, extract_process_number
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def format_date_correctly(epoch_timestamp):
-    """Format an epoch timestamp maintaining exact time values."""
+def format_date_correctly(epoch_timestamp, is_lcd_date=False):
+    """Format an epoch timestamp maintaining exact time values from Excel (8:00 AM for LCD_DATE)."""
     default_date = "N/A"
     
     try:
@@ -24,14 +24,15 @@ def format_date_correctly(epoch_timestamp):
             return default_date
         
         # Create a datetime object from timestamp
-        # Use the same method consistently - this preserves the exact time
         date_obj = datetime.fromtimestamp(epoch_timestamp)
-        formatted = date_obj.strftime('%Y-%m-%d %H:%M')
         
-        # Special handling for midnight (00:00) to ensure it's preserved
-        if date_obj.hour == 0 and date_obj.minute == 0:
-            logger.info(f"Preserving midnight time for timestamp {epoch_timestamp}")
-            formatted = date_obj.strftime('%Y-%m-%d 00:00')
+        # For LCD_DATE always force 08:00 time to match Excel display
+        if is_lcd_date:
+            formatted = f"{date_obj.strftime('%Y-%m-%d')} 08:00"
+            return formatted
+        
+        # For other timestamps, preserve the original time
+        formatted = date_obj.strftime('%Y-%m-%d %H:%M')
         
         return formatted
     except Exception as e:
@@ -207,7 +208,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 # Format the dates for display
                 job_start_date = format_date_correctly(job_start)
                 end_date = format_date_correctly(job_end)
-                due_date = format_date_correctly(due_time)
+                due_date = format_date_correctly(due_time, is_lcd_date=True)
                 
                 # Get START_DATE for display
                 user_start_date = ""

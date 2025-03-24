@@ -127,6 +127,19 @@ def clean_excel_data(df):
         elif base_col in df.columns:
             date_cols.append(base_col)
             col_mapping[base_col] = base_col
+            
+    # Make sure all critical date columns have some default values
+    # Even if parsing fails later, we'll have at least created the _EPOCH versions
+    for base_col in ['PLANNED_END', 'LATEST_COMPLETION_DATE']:
+        if base_col in col_mapping:
+            col = col_mapping[base_col]
+            epoch_col = f"{base_col}_EPOCH"
+            
+            # If column exists but all values are NaN or empty strings
+            if df[col].isna().all() or (df[col].astype(str).str.strip() == '').all():
+                logger.warning(f"All values in {base_col} column are empty - will use calculated values")
+                # Just create the empty column for now to avoid errors later
+                df[epoch_col] = None
     
     logger.info(f"Date columns found in Excel: {date_cols}")
     logger.info(f"Column mapping: {col_mapping}")
@@ -253,6 +266,13 @@ def convert_to_epoch(df, columns, base_date=None):
     # Default due date (30 days from now)
     default_due_date = int((datetime.now() + pd.Timedelta(days=30)).timestamp())
     
+    # Define default time configurations for key date columns if not already defined
+    global DATE_COLUMNS_CONFIG
+    if 'PLANNED_END' not in DATE_COLUMNS_CONFIG:
+        DATE_COLUMNS_CONFIG['PLANNED_END'] = (16, 0)  # 4:00 PM 
+    if 'LATEST_COMPLETION_DATE' not in DATE_COLUMNS_CONFIG:
+        DATE_COLUMNS_CONFIG['LATEST_COMPLETION_DATE'] = (16, 0)  # 4:00 PM
+    
     # Find the actual column names that match the base names (handling trailing spaces)
     actual_columns = {}
     col_mapping = {}  # Create a column mapping for use within this function
@@ -268,34 +288,84 @@ def convert_to_epoch(df, columns, base_date=None):
     for base_col, col in actual_columns.items():
         epoch_col = f"epoch_{base_col.lower().replace(' ', '_').replace('-', '_')}"
         
-        # Special handling for LCD_DATE - prioritize this as the first column
+        # Special handling for LCD_DATE - prioritize this as the first column and critical date
         if base_col == 'LCD_DATE':
             logger.info(f"Processing LCD_DATE column ('{col}') with special attention")
             epoch_col = 'LCD_DATE_EPOCH'  # Renamed to match expectation
             
-            # Try with multiple date formats
-            date_formats = ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y']
+            # Log raw values for debugging
+            sample_values = df[col].dropna().head(5).astype(str).tolist()
+            logger.info(f"Sample raw LCD_DATE values: {sample_values}")
+            
+            # Try with expanded date formats including time components
+            date_formats = [
+                '%d/%m/%y %H:%M',     # DD/MM/YY HH:MM
+                '%d/%m/%Y %H:%M',     # DD/MM/YYYY HH:MM
+                '%Y-%m-%d %H:%M',     # YYYY-MM-DD HH:MM
+                '%m/%d/%Y %H:%M',     # MM/DD/YYYY HH:MM
+                '%Y-%m-%dT%H:%M:%S',  # ISO format
+                '%d/%m/%y',           # DD/MM/YY (without time)
+                '%d/%m/%Y',           # DD/MM/YYYY (without time)
+                '%Y-%m-%d',           # YYYY-MM-DD (without time)
+                '%m/%d/%Y',           # MM/DD/YYYY (without time)
+                '%d-%m-%Y'            # DD-MM-YYYY (without time)
+            ]
+            
             success = False
             for fmt in date_formats:
                 try:
-                    df[epoch_col] = pd.to_datetime(df[col], format=fmt, errors='coerce').apply(
-                        lambda x: int(x.timestamp()) if pd.notna(x) else None
-                    )
-                    valid_count = df[epoch_col].notna().sum()
-                    logger.info(f"LCD_DATE with format {fmt}: {valid_count} valid dates")
-                    if valid_count > 0:
+                    temp_dates = pd.to_datetime(df[col], format=fmt, errors='coerce')
+                    mask = temp_dates.notna()
+                    if mask.any():
+                        # Always set LCD_DATE to 8:00 AM regardless of original time
+                        for idx, date_val in temp_dates[mask].items():
+                            new_date = datetime(date_val.year, date_val.month, date_val.day, 8, 0, 0)
+                            df.loc[idx, epoch_col] = int(new_date.timestamp())
+                        valid_count = mask.sum()
+                        logger.info(f"Converted {valid_count} LCD_DATE values using format {fmt}")
+                        
+                        # Log sample of the parsed dates
+                        sample_dates = temp_dates[mask].head(3)
+                        for idx, date_val in sample_dates.items():
+                            logger.info(f"  Sample LCD_DATE: {date_val.strftime('%Y-%m-%d %H:%M:%S')}")
+                            process = df.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else f"Row {idx}"
+                            logger.info(f"  Process: {process}")
+                        
                         success = True
                         break
                 except Exception as e:
-                    logger.warning(f"Error with format {fmt}: {e}")
+                    logger.debug(f"Error with format {fmt} for LCD_DATE: {e}")
+            
+            # If standard formats fail, try flexible parser as last resort
+            if not success:
+                try:
+                    temp_dates = pd.to_datetime(df[col], errors='coerce')
+                    mask = temp_dates.notna()
+                    if mask.any():
+                        # Preserve original time from Excel, or default to 8:00 AM if none exists
+                        # This matches the time shown in the Excel file (8:00 AM)
+                        
+                        # Apply time setting for each date
+                        for idx, date_val in temp_dates[mask].items():
+                            # ALWAYS set to 8:00 AM to match Excel display requirement regardless of original time
+                            new_date = datetime(date_val.year, date_val.month, date_val.day, 8, 0, 0)
+                            df.loc[idx, epoch_col] = int(new_date.timestamp())
+                        
+                        valid_count = mask.sum()
+                        logger.info(f"Parsed {valid_count} LCD_DATE values using flexible parser")
+                        success = True
+                    else:
+                        logger.warning(f"Flexible parsing yielded no valid LCD_DATE values")
+                except Exception as e:
+                    logger.error(f"Failed to parse LCD_DATE with flexible parser: {e}")
             
             # If we couldn't parse any dates, set default
             if not success or df[epoch_col].isna().all():
                 logger.warning(f"No valid dates in LCD_DATE - using default (30 days from now)")
                 df[epoch_col] = default_due_date
         
-        # Special handling for date columns with time configuration
-        elif base_col in DATE_COLUMNS_CONFIG:
+        # Special handling for START_DATE, PLANNED_END, and LATEST_COMPLETION_DATE with time configuration
+        elif base_col in DATE_COLUMNS_CONFIG or base_col in ['PLANNED_END', 'LATEST_COMPLETION_DATE']:
             actual_col = col_mapping.get(base_col, col)  # Get the actual column name with spaces
             hour, minute = DATE_COLUMNS_CONFIG[base_col]
             logger.info(f"Processing {base_col} column ('{actual_col}') with time set to {hour:02d}:{minute:02d}")
@@ -697,7 +767,29 @@ def load_job_data(file_path):
     # Ensure LCD_DATE_EPOCH is valid
     if 'LCD_DATE_EPOCH' not in data.columns or data['LCD_DATE_EPOCH'].isna().any():
         default_due_date = int((datetime.now() + pd.Timedelta(days=30)).timestamp())
+        logger.info(f"Setting default LCD_DATE_EPOCH for {data['LCD_DATE_EPOCH'].isna().sum()} missing values")
         data['LCD_DATE_EPOCH'] = data.get('LCD_DATE_EPOCH', pd.Series()).fillna(default_due_date).astype(int)
+    
+    # Ensure all LCD_DATE values have the 08:00 time component
+    if 'LCD_DATE_EPOCH' in data.columns:
+        # Force all LCD_DATE values to use 8:00 AM
+        for idx in data.index:
+            if pd.notna(data.loc[idx, 'LCD_DATE_EPOCH']):
+                # Get the date portion with no time
+                date_val = datetime.fromtimestamp(data.loc[idx, 'LCD_DATE_EPOCH'])
+                # Create new datetime with 08:00 time
+                new_date = datetime(date_val.year, date_val.month, date_val.day, 8, 0, 0)
+                # Store back as epoch
+                data.loc[idx, 'LCD_DATE_EPOCH'] = int(new_date.timestamp())
+        
+        # Debug log to verify
+        sample_indices = data.head(5).index
+        logger.info("LCD_DATE sample timestamps after final processing:")
+        for idx in sample_indices:
+            if idx in data.index:
+                lcd_timestamp = data.loc[idx, 'LCD_DATE_EPOCH']
+                formatted_time = datetime.fromtimestamp(lcd_timestamp).strftime('%Y-%m-%d %H:%M')
+                logger.info(f"  Process {data.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in data.columns else f'Row {idx}'}: LCD_DATE = {formatted_time}")
     
     # Check if START_DATE_EPOCH has been set
     if 'START_DATE_EPOCH' in data.columns and data['START_DATE_EPOCH'].notna().any():
@@ -935,7 +1027,11 @@ def load_jobs_planning_data(file_path=None):
             'ACCUMULATED_DAILY_OUTPUT': safe_int(row.get('ACCUMULATED_DAILY_OUTPUT'), 0),
             'BALANCE_QUANTITY': safe_int(row.get('BALANCE_QUANTITY'), 
                 safe_int(row.get('JOB_QUANTITY', 1000)) - safe_int(row.get('ACCUMULATED_DAILY_OUTPUT', 0))),
-            # Add scheduling fields that might be populated from the Excel
+            # Add scheduling fields from Excel - using epoch timestamps for solver compatibility
+            'PLANNED_START_EPOCH': row.get('PLANNED_START_EPOCH'),
+            'PLANNED_END_EPOCH': row.get('PLANNED_END_EPOCH'),
+            'LATEST_COMPLETION_DATE_EPOCH': row.get('LATEST_COMPLETION_DATE_EPOCH'),
+            # Keep original datetime objects for display/reference purposes
             'PLANNED_START': row.get('PLANNED_START'),
             'PLANNED_END': row.get('PLANNED_END'),
             'LATEST_COMPLETION_DATE': row.get('LATEST_COMPLETION_DATE'),
