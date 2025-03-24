@@ -114,7 +114,3 @@ The scheduler generates an interactive HTML Gantt chart with:
 - Machine timeline visualization
 - Detailed tooltips with job information
 - Interactive zooming and panning
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.

@@ -1,14 +1,55 @@
 # chart_two.py | dont edit this line
 import os
-import pandas as pd
-from datetime import datetime
-import logging
 import re
+from datetime import datetime, timedelta
+import plotly.figure_factory as ff
+import plotly.offline as pyo
+import pandas as pd
+import plotly.graph_objects as go
+import logging
 from dotenv import load_dotenv
+from ingest_data import load_jobs_planning_data
+from greedy import greedy_schedule, extract_job_family, extract_process_number
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+def format_date_correctly(epoch_timestamp):
+    """Format an epoch timestamp maintaining exact time values."""
+    default_date = "N/A"
+    
+    try:
+        if not epoch_timestamp or epoch_timestamp <= 0:
+            return default_date
+        
+        # Create a datetime object from timestamp
+        # Use the same method consistently - this preserves the exact time
+        date_obj = datetime.fromtimestamp(epoch_timestamp)
+        formatted = date_obj.strftime('%Y-%m-%d %H:%M')
+        
+        # Special handling for midnight (00:00) to ensure it's preserved
+        if date_obj.hour == 0 and date_obj.minute == 0:
+            logger.info(f"Preserving midnight time for timestamp {epoch_timestamp}")
+            formatted = date_obj.strftime('%Y-%m-%d 00:00')
+        
+        return formatted
+    except Exception as e:
+        logger.error(f"Error formatting timestamp {epoch_timestamp}: {e}")
+        return default_date
+
+def get_buffer_status_color(buffer_hours):
+    """
+    Get color for buffer status based on hours remaining.
+    """
+    if buffer_hours < 8:
+        return "red"
+    elif buffer_hours < 24:
+        return "orange"
+    elif buffer_hours < 72:
+        return "yellow"
+    else:
+        return "green"
 
 def extract_job_family(process_code):
     """Extract the job family (e.g., 'CP08-231B') from the process code."""
@@ -90,7 +131,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 # Store the adjusted times
                 adjusted_times[process_code] = (adjusted_start, adjusted_end)
                 
-                start_date_str = datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')
+                start_date_str = format_date_correctly(adjusted_start)
                 logger.info(f"Job {process_code} visualization using exact START_DATE: {start_date_str}")
         
         # SECOND PRIORITY: FAMILY-WIDE TIME SHIFTS        
@@ -121,8 +162,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         # Store the adjusted times
                         adjusted_times[process_code] = (adjusted_start, adjusted_end)
                         
-                        logger.info(f"Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
-                                  f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+                        logger.info(f"Adjusted {process_code}: START={format_date_correctly(adjusted_start)}, "
+                                  f"END={format_date_correctly(adjusted_end)}")
         
         # Step 3: Process each job and create schedule data
         schedule_data = []
@@ -144,7 +185,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 # Override with exact START_DATE if specified
                 if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
                     # For display purposes
-                    user_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                    user_start_date = format_date_correctly(job['START_DATE_EPOCH'])
                     
                     # Find the family this process belongs to
                     family = extract_job_family(process_code)
@@ -164,14 +205,14 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         logger.info(f"Using START_DATE={user_start_date} for {process_code} in visualization")
                 
                 # Format the dates for display
-                job_start_date = datetime.fromtimestamp(job_start).strftime('%Y-%m-%d %H:%M')
-                end_date = datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')
-                due_date = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
+                job_start_date = format_date_correctly(job_start)
+                end_date = format_date_correctly(job_end)
+                due_date = format_date_correctly(due_time)
                 
                 # Get START_DATE for display
                 user_start_date = ""
                 if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
-                    user_start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                    user_start_date = format_date_correctly(job['START_DATE_EPOCH'])
                 
                 # Calculate duration and buffer
                 duration_seconds = job_end - job_start
@@ -267,8 +308,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             margin: 0 auto;
         }}
         .dashboard {{
-            margin-bottom: 30px; 
-            padding: 20px; 
+            margin-bottom: 20px; 
+            padding: 15px; 
             border-radius: 8px; 
             background: #fff;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
@@ -279,8 +320,9 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             font-weight: 600;
             color: #3a3a3a;
             border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-            margin-bottom: 15px;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+            font-size: 16px;
         }}
         table.dataTable {{
             border-collapse: separate !important;
@@ -288,20 +330,77 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            font-size: 11px;  /* Smaller base font size */
+            width: 100%;
+            table-layout: fixed;  /* Fixed table layout for better control */
         }}
-        .status-critical {{ background-color: rgba(255, 0, 0, 0.15); }}
-        .status-warning {{ background-color: rgba(255, 190, 0, 0.15); }}
-        .status-caution {{ background-color: rgba(128, 0, 128, 0.15); }}
-        .status-ok {{ background-color: rgba(0, 128, 0, 0.15); }}
+        
+        table.dataTable th {{
+            font-size: 11px;  /* Smaller header font */
+            padding: 4px !important;  /* Reduced padding */
+            font-weight: 600;
+            white-space: nowrap;  /* Prevent wrapping in headers */
+            overflow: hidden;
+            text-overflow: ellipsis;  /* Show ellipsis for overflow */
+        }}
+        
+        table.dataTable td {{
+            font-size: 11px;  /* Smaller cell font */
+            padding: 3px 4px !important;  /* Very compact cells */
+            overflow: hidden;
+            text-overflow: ellipsis;  /* Show ellipsis for overflow */
+            white-space: nowrap;
+        }}
+        
+        /* Set specific column widths based on content */
+        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 90px; }} /* LCD_DATE */
+        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 95px; }} /* JOB */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 120px; }} /* PROCESS_CODE */
+        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 65px; }} /* RSC_LOCATION */
+        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) {{ width: 80px; }} /* RSC_CODE */
+        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) {{ width: 60px; }} /* NUMBER_OPERATOR */
+        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) {{ width: 70px; }} /* JOB_QUANTITY */
+        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) {{ width: 75px; }} /* EXPECT_OUTPUT_PER_HOUR */
+        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) {{ width: 50px; }} /* PRIORITY */
+        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) {{ width: 60px; }} /* HOURS_NEED */
+        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) {{ width: 65px; }} /* SETTING_HOURS */
+        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) {{ width: 65px; }} /* BREAK_HOURS */
+        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) {{ width: 50px; }} /* NO_PROD */
+        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) {{ width: 90px; }} /* START_DATE */
+        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) {{ width: 80px; }} /* ACCUMULATED_DAILY_OUTPUT */
+        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) {{ width: 70px; }} /* BALANCE_QUANTITY */
+        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) {{ width: 90px; }} /* START_TIME */
+        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) {{ width: 90px; }} /* END_TIME */
+        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) {{ width: 50px; }} /* BAL_HR */
+        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) {{ width: 70px; }} /* BUFFER_STATUS */
+        
+        /* Make table container scrollable horizontally */
+        .table-container {{
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }}
+        
+        /* Highlight row on hover for better readability */
+        table.dataTable tbody tr:hover {{
+            background-color: rgba(0, 123, 255, 0.05) !important;
+        }}
+        
+        /* Status styles */
+        .status-critical {{ background-color: rgba(255, 0, 0, 0.05); }}
+        .status-warning {{ background-color: rgba(255, 190, 0, 0.05); }}
+        .status-caution {{ background-color: rgba(128, 0, 128, 0.05); }}
+        .status-ok {{ background-color: rgba(0, 128, 0, 0.05); }}
         
         .status-badge {{
             display: inline-block;
-            padding: 5px 10px;
-            border-radius: 4px;
+            padding: 2px 4px;
+            border-radius: 3px;
             font-weight: 600;
             text-align: center;
             width: 100%;
+            font-size: 10px;
         }}
+        
         .badge-critical {{ background-color: #ffcccc; color: #cc0000; border: 1px solid #ff8080; }}
         .badge-warning {{ background-color: #fff2cc; color: #b38600; border: 1px solid #ffdb4d; }}
         .badge-caution {{ background-color: #f0d6f0; color: #800080; border: 1px solid #d699d6; }}
@@ -310,13 +409,13 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
 </head>
 <body>
     <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Production Scheduler</h1>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="mb-0" style="font-size: 20px;"><i class="bi bi-calendar-check me-2"></i>Production Scheduler</h1>
             <div>
-                <button class="btn btn-primary" onclick="window.print()">
+                <button class="btn btn-sm btn-primary" onclick="window.print()">
                     <i class="bi bi-printer me-1"></i> Print
                 </button>
-                <button class="btn btn-outline-secondary ms-2" onclick="exportTableToCSV('production_schedule.csv')">
+                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="exportTableToCSV('production_schedule.csv')">
                     <i class="bi bi-download me-1"></i> Export
                 </button>
             </div>
@@ -325,16 +424,16 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         <div class="dashboard row">
             <div class="col-md-6">
                 <h3>Schedule Overview</h3>
-                <p><strong>Total Jobs:</strong> {len(df)}</p>
-                <p><strong>Date Range:</strong> {df['START_TIME'].min() if not df.empty else 'N/A'} to {df['END_TIME'].max() if not df.empty else 'N/A'}</p>
-                <p><strong>Total Duration:</strong> {df['HOURS_NEED'].sum() if not df.empty else 0} hours</p>
+                <p style="font-size: 12px;"><strong>Total Jobs:</strong> {len(df)}</p>
+                <p style="font-size: 12px;"><strong>Date Range:</strong> {df['START_TIME'].min() if not df.empty else 'N/A'} to {df['END_TIME'].max() if not df.empty else 'N/A'}</p>
+                <p style="font-size: 12px;"><strong>Total Duration:</strong> {df['HOURS_NEED'].sum() if not df.empty else 0} hours</p>
             </div>
             <div class="col-md-6">
                 <h3>Buffer Status</h3>
                 <div class="d-flex flex-column gap-2">
                     <div class="d-flex align-items-center">
-                        <div class="status-badge badge-critical me-2" style="width: 120px;">Critical</div>
-                        <div class="progress flex-grow-1" style="height: 20px;">
+                        <div class="status-badge badge-critical me-2" style="width: 80px;">Critical</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar bg-danger" role="progressbar" 
                                 style="width: {critical_percent}%;" 
                                 aria-valuenow="{len(df[df['BUFFER_STATUS'] == 'Critical']) if not df.empty else 0}" 
@@ -344,8 +443,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         </div>
                     </div>
                     <div class="d-flex align-items-center">
-                        <div class="status-badge badge-warning me-2" style="width: 120px;">Warning</div>
-                        <div class="progress flex-grow-1" style="height: 20px;">
+                        <div class="status-badge badge-warning me-2" style="width: 80px;">Warning</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar bg-warning text-dark" role="progressbar" 
                                 style="width: {warning_percent}%;" 
                                 aria-valuenow="{len(df[df['BUFFER_STATUS'] == 'Warning']) if not df.empty else 0}" 
@@ -355,8 +454,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         </div>
                     </div>
                     <div class="d-flex align-items-center">
-                        <div class="status-badge badge-caution me-2" style="width: 120px;">Caution</div>
-                        <div class="progress flex-grow-1" style="height: 20px;">
+                        <div class="status-badge badge-caution me-2" style="width: 80px;">Caution</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar" role="progressbar" style="background-color: purple; width: {caution_percent}%;" 
                                 aria-valuenow="{len(df[df['BUFFER_STATUS'] == 'Caution']) if not df.empty else 0}" 
                                 aria-valuemin="0" aria-valuemax="{len(df) if not df.empty else 0}">
@@ -365,8 +464,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         </div>
                     </div>
                     <div class="d-flex align-items-center">
-                        <div class="status-badge badge-ok me-2" style="width: 120px;">OK</div>
-                        <div class="progress flex-grow-1" style="height: 20px;">
+                        <div class="status-badge badge-ok me-2" style="width: 80px;">OK</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar bg-success" role="progressbar" 
                                 style="width: {ok_percent}%;" 
                                 aria-valuenow="{len(df[df['BUFFER_STATUS'] == 'OK']) if not df.empty else 0}" 
@@ -380,7 +479,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         </div>
         
         <div class="table-container">
-            <h2>Production Jobs</h2>
+            <h2 style="font-size: 16px; margin-bottom: 10px;">Production Jobs</h2>
             <table id="scheduleTable" class="table table-striped table-bordered">
                 <thead>
                     <tr>
@@ -433,25 +532,25 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 
             html_content += f"""
                     <tr class="{buffer_class}">
-                        <td>{row['LCD_DATE']}</td>
-                        <td>{row['JOB']}</td>
-                        <td>{row['PROCESS_CODE']}</td>
-                        <td>{row['RSC_LOCATION']}</td>
-                        <td>{row['RSC_CODE']}</td>
-                        <td>{row['NUMBER_OPERATOR']}</td>
-                        <td>{row['JOB_QUANTITY']}</td>
-                        <td>{row['EXPECT_OUTPUT_PER_HOUR']}</td>
-                        <td>{row['PRIORITY']}</td>
-                        <td>{row['HOURS_NEED']:.1f}</td>
-                        <td>{row['SETTING_HOURS']:.1f}</td>
-                        <td>{row['BREAK_HOURS']:.1f}</td>
-                        <td>{row['NO_PROD']:.1f}</td>
-                        <td>{row['START_DATE']}</td>
-                        <td>{row['ACCUMULATED_DAILY_OUTPUT']}</td>
-                        <td>{row['BALANCE_QUANTITY']}</td>
-                        <td>{row['START_TIME']}</td>
-                        <td>{row['END_TIME']}</td>
-                        <td>{row['BAL_HR']:.1f}</td>
+                        <td title="{row['LCD_DATE']}">{row['LCD_DATE']}</td>
+                        <td title="{row['JOB']}">{row['JOB']}</td>
+                        <td title="{row['PROCESS_CODE']}">{row['PROCESS_CODE']}</td>
+                        <td title="{row['RSC_LOCATION']}">{row['RSC_LOCATION']}</td>
+                        <td title="{row['RSC_CODE']}">{row['RSC_CODE']}</td>
+                        <td title="{row['NUMBER_OPERATOR']}">{row['NUMBER_OPERATOR']}</td>
+                        <td title="{row['JOB_QUANTITY']}">{row['JOB_QUANTITY']}</td>
+                        <td title="{row['EXPECT_OUTPUT_PER_HOUR']}">{row['EXPECT_OUTPUT_PER_HOUR']}</td>
+                        <td title="{row['PRIORITY']}">{row['PRIORITY']}</td>
+                        <td title="{row['HOURS_NEED']:.1f}">{row['HOURS_NEED']:.1f}</td>
+                        <td title="{row['SETTING_HOURS']:.1f}">{row['SETTING_HOURS']:.1f}</td>
+                        <td title="{row['BREAK_HOURS']:.1f}">{row['BREAK_HOURS']:.1f}</td>
+                        <td title="{row['NO_PROD']:.1f}">{row['NO_PROD']:.1f}</td>
+                        <td title="{row['START_DATE']}">{row['START_DATE']}</td>
+                        <td title="{row['ACCUMULATED_DAILY_OUTPUT']}">{row['ACCUMULATED_DAILY_OUTPUT']}</td>
+                        <td title="{row['BALANCE_QUANTITY']}">{row['BALANCE_QUANTITY']}</td>
+                        <td title="{row['START_TIME']}">{row['START_TIME']}</td>
+                        <td title="{row['END_TIME']}">{row['END_TIME']}</td>
+                        <td title="{row['BAL_HR']:.1f}">{row['BAL_HR']:.1f}</td>
                         <td><div class="status-badge {buffer_badge_class}">{row['BUFFER_STATUS']}</div></td>
                     </tr>"""
         
@@ -473,13 +572,47 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
     <script>
         $(document).ready(function() {
+            // Initialize DataTables with improved options
             $('#scheduleTable').DataTable({
                 order: [[0, 'asc']], // Sort by LCD_DATE by default
                 pageLength: 25,
                 lengthMenu: [10, 25, 50, 100, 200],
                 responsive: true,
+                scrollX: true,  // Enable horizontal scrolling
+                scrollCollapse: true,
+                autoWidth: false, // Don't auto-calculate widths
+                columnDefs: [
+                    // Set column visibility and width options
+                    { "width": "90px", "targets": 0 }, // LCD_DATE
+                    { "width": "95px", "targets": 1 }, // JOB
+                    { "width": "120px", "targets": 2 }, // PROCESS_CODE
+                    { "width": "65px", "targets": 3 }, // RSC_LOCATION
+                    { "width": "80px", "targets": 4 }, // RSC_CODE
+                    { "width": "60px", "targets": 5 }, // NUMBER_OPERATOR
+                    { "width": "70px", "targets": 6 }, // JOB_QUANTITY
+                    { "width": "75px", "targets": 7 }, // EXPECT_OUTPUT_PER_HOUR
+                    { "width": "50px", "targets": 8 }, // PRIORITY
+                    { "width": "60px", "targets": 9 }, // HOURS_NEED
+                    { "width": "65px", "targets": 10 }, // SETTING_HOURS
+                    { "width": "65px", "targets": 11 }, // BREAK_HOURS
+                    { "width": "50px", "targets": 12 }, // NO_PROD
+                    { "width": "90px", "targets": 13 }, // START_DATE
+                    { "width": "80px", "targets": 14 }, // ACCUMULATED_DAILY_OUTPUT
+                    { "width": "70px", "targets": 15 }, // BALANCE_QUANTITY
+                    { "width": "90px", "targets": 16 }, // START_TIME
+                    { "width": "90px", "targets": 17 }, // END_TIME
+                    { "width": "50px", "targets": 18 }, // BAL_HR
+                    { "width": "70px", "targets": 19 }  // BUFFER_STATUS
+                ],
                 dom: 'Bfrtip',
                 buttons: [
+                    {
+                        extend: 'colvis',
+                        text: '<i class="bi bi-eye me-1"></i> Show/Hide Columns',
+                        className: 'btn btn-sm btn-secondary mb-2',
+                        // Show this button first
+                        postfixButtons: ['colvisRestore']
+                    },
                     {
                         extend: 'excel',
                         text: '<i class="bi bi-file-earmark-excel me-1"></i> Excel',
@@ -503,18 +636,13 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         exportOptions: {
                             columns: ':visible'
                         }
-                    },
-                    {
-                        extend: 'colvis',
-                        text: '<i class="bi bi-eye me-1"></i> Columns',
-                        className: 'btn btn-sm btn-secondary'
                     }
                 ],
                 initComplete: function () {
                     // Add a legend at the top
-                    var legendHtml = '<div class="mb-3 p-3 bg-white rounded shadow-sm">' +
-                        '<h5 class="border-bottom pb-2 mb-3"><i class="bi bi-info-circle me-2"></i>Buffer Status Legend:</h5>' +
-                        '<div class="d-flex flex-wrap gap-3">' +
+                    var legendHtml = '<div class="mb-3 p-2 bg-white rounded shadow-sm" style="font-size: 11px;">' +
+                        '<h5 class="border-bottom pb-2 mb-2" style="font-size: 14px;"><i class="bi bi-info-circle me-2"></i>Buffer Status Legend:</h5>' +
+                        '<div class="d-flex flex-wrap gap-2">' +
                         '<div class="status-badge badge-critical">Critical (&lt;8h)</div>' +
                         '<div class="status-badge badge-warning">Warning (&lt;24h)</div>' +
                         '<div class="status-badge badge-caution">Caution (&lt;72h)</div>' +

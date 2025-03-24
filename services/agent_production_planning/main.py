@@ -184,9 +184,9 @@ def main():
         logger.error(f"Failed to load job data: {e}")
         return
 
-    # Sort jobs by process code to maintain sequential processing
-    jobs.sort(key=lambda job: (extract_job_family(job['PROCESS_CODE']), extract_process_number(job['PROCESS_CODE'])))
-    logger.info(f"Sorted {len(jobs)} jobs by family and process sequence")
+    # Sort jobs by LCD_DATE to implement FIFO (First In, First Out)
+    jobs.sort(key=lambda job: job.get('LCD_DATE_EPOCH', 0))
+    logger.info(f"Sorted {len(jobs)} jobs by LCD_DATE (First In, First Out)")
 
     # Limit to max_jobs
     if len(jobs) > args.max_jobs:

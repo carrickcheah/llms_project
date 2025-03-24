@@ -15,6 +15,25 @@ from greedy import greedy_schedule, extract_job_family, extract_process_number
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+def format_date_correctly(epoch_timestamp):
+    """
+    Format an epoch timestamp into a consistent date string format.
+    Ensures dates from mydata.xlsx are correctly displayed.
+    """
+    # Default fallback date in case of issues
+    default_date = "N/A"
+    
+    try:
+        if not epoch_timestamp or epoch_timestamp <= 0:
+            return default_date
+        
+        # Convert to datetime and format
+        date_obj = datetime.fromtimestamp(epoch_timestamp)
+        return date_obj.strftime('%Y-%m-%d %H:%M')
+    except Exception as e:
+        logger.error(f"Error formatting timestamp {epoch_timestamp}: {e}")
+        return default_date
+
 def get_buffer_status_color(buffer_hours):
     """
     Get color for buffer status based on hours remaining.
@@ -109,7 +128,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         if process_code not in start_date_processes:
                             start_date_processes[process_code] = (adjusted_start, adjusted_end)
                         
-                        logger.info(f"Visualizing {process_code} at START_DATE: {datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}")
+                        logger.info(f"Visualizing {process_code} at START_DATE: {format_date_correctly(adjusted_start)}")
         
         # Step 3: Calculate time shifts for visualization
         family_time_shifts = {}
@@ -153,8 +172,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     process_info[family] = []
                 process_info[family].append((process_code, machine, adjusted_start, adjusted_end, priority, seq_num))
                 
-                logger.info(f"  Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
-                           f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+                logger.info(f"  Adjusted {process_code}: START={format_date_correctly(adjusted_start)}, "
+                           f"END={format_date_correctly(adjusted_end)}")
         
         # Step 5: Override for START_DATE processes that were missed
         for process_code, (adjusted_start, adjusted_end) in start_date_processes.items():
@@ -204,14 +223,14 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 due_date_field = next((f for f in ['LCD_DATE_EPOCH', 'DUE_DATE_TIME'] if f in job_data), None)
                 
                 if due_date_field and job_data[due_date_field]:
-                    due_date = datetime.fromtimestamp(job_data[due_date_field])
+                    due_date_str = format_date_correctly(job_data[due_date_field])
                     buffer_hours = (job_data[due_date_field] - end) / 3600
                     buffer_status = get_buffer_status_color(buffer_hours)
-                    buffer_info = f"<br><b>Due Date:</b> {due_date.strftime('%Y-%m-%d %H:%M')}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
+                    buffer_info = f"<br><b>Due Date:</b> {due_date_str}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
                     
                     # Add START_DATE information if present
                     if 'START_DATE_EPOCH' in job_data and job_data['START_DATE_EPOCH']:
-                        start_date_info = datetime.fromtimestamp(job_data['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                        start_date_info = format_date_correctly(job_data['START_DATE_EPOCH'])
                         buffer_info += f"<br><b>START_DATE Constraint:</b> {start_date_info}"
                 
                 if 'NUMBER_OPERATOR' in job_data:

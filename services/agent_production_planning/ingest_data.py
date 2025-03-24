@@ -6,6 +6,15 @@ import os
 import logging
 import re
 from dotenv import load_dotenv
+from ingest_config import DATE_COLUMNS_CONFIG, DEFAULT_TIME
+
+# Import the time disparency fix function if available
+try:
+    from fix_time_disparency import fix_time_disparency
+    TIME_DISPARENCY_FIX_AVAILABLE = True
+except ImportError:
+    TIME_DISPARENCY_FIX_AVAILABLE = False
+    logging.warning("fix_time_disparency module not found, falling back to standard date processing")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -107,27 +116,74 @@ def clean_excel_data(df):
     # Process date columns - handle column names with or without trailing spaces
     base_date_cols = ['LCD_DATE', 'PLANNED_START', 'PLANNED_END', 'LATEST_COMPLETION_DATE', 'START_DATE']
     date_cols = []
+    col_mapping = {}  # Map from base column name to actual column name
     
     # Find actual column names that match base names (handling trailing spaces)
     for base_col in base_date_cols:
         matching_cols = [col for col in df.columns if col.strip() == base_col]
         if matching_cols:
             date_cols.extend(matching_cols)
+            col_mapping[base_col] = matching_cols[0]  # Map base name to actual column name with spaces
         elif base_col in df.columns:
             date_cols.append(base_col)
+            col_mapping[base_col] = base_col
     
     logger.info(f"Date columns found in Excel: {date_cols}")
+    logger.info(f"Column mapping: {col_mapping}")
     
     for col in date_cols:
-        # Try multiple date formats - IMPORTANT: Added '%d/%m/%y' first for DD/MM/YY format
-        for fmt in ['%d/%m/%y', '%Y-%m-%dT%H:%M:%S.000Z', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y', '%Y/%m/%d']:
+        # Try multiple date formats - IMPORTANT: Added formats with time components first
+        # This ensures we capture the time part properly, especially for START_DATE
+        date_formats = [
+            '%d/%m/%y %H:%M',     # DD/MM/YY HH:MM (prioritize this format for dates with times)
+            '%d/%m/%Y %H:%M',     # DD/MM/YYYY HH:MM
+            '%Y-%m-%d %H:%M',     # YYYY-MM-DD HH:MM
+            '%m/%d/%Y %H:%M',     # MM/DD/YYYY HH:MM
+            '%Y-%m-%dT%H:%M:%S.000Z',  # ISO format with timezone
+            '%d/%m/%y',           # DD/MM/YY (without time)
+            '%Y-%m-%d',           # YYYY-MM-DD (without time)
+            '%m/%d/%Y',           # MM/DD/YYYY (without time)
+            '%d-%m-%Y',           # DD-MM-YYYY (without time)
+            '%Y/%m/%d'            # YYYY/MM/DD (without time)
+        ]
+        
+        # Special handling for START_DATE to preserve time component
+        if col.strip() == 'START_DATE':
+            logger.info(f"Special handling for START_DATE column '{col}' to preserve time component")
+            # Check if the column actually has time information
+            sample_values = df[col].dropna().head(5).astype(str).tolist()
+            logger.info(f"Sample raw START_DATE values: {sample_values}")
+            
+        success = False
+        for fmt in date_formats:
             try:
-                df[col] = pd.to_datetime(df[col], format=fmt, errors='coerce')
-                if df[col].notna().sum() > 0:
-                    logger.info(f"Converted {col} using format {fmt}: {df[col].notna().sum()} valid dates")
+                # For START_DATE, we'll be extra careful to preserve the time component
+                temp_dates = pd.to_datetime(df[col], format=fmt, errors='coerce')
+                if temp_dates.notna().sum() > 0:
+                    df[col] = temp_dates
+                    valid_count = df[col].notna().sum()
+                    logger.info(f"Converted {col} using format {fmt}: {valid_count} valid dates")
+                    
+                    # Log a sample of the parsed dates with their time components for debugging
+                    if col.strip() == 'START_DATE':
+                        sample_dates = df[df[col].notna()][col].head(3)
+                        for idx, date_val in sample_dates.items():
+                            logger.info(f"  Sample {col} value: {date_val.strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    success = True
                     break
-            except:
+            except Exception as e:
+                logger.debug(f"Error with format {fmt} for {col}: {e}")
                 continue
+        
+        if not success:
+            logger.warning(f"Could not parse any dates in {col} column with standard formats")
+            # Try a more flexible approach as a last resort
+            try:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                logger.info(f"Parsed {col} using pandas flexible parser: {df[col].notna().sum()} valid dates")
+            except Exception as e:
+                logger.error(f"Failed to parse {col} column: {e}")
     
     # Remove duplicates on key columns - updated with new column names
     key_cols = [col for col in ['JOB', 'PROCESS_CODE', 'RSC_LOCATION'] if col in df.columns]
@@ -199,6 +255,7 @@ def convert_to_epoch(df, columns, base_date=None):
     
     # Find the actual column names that match the base names (handling trailing spaces)
     actual_columns = {}
+    col_mapping = {}  # Create a column mapping for use within this function
     for base_col in columns:
         matching_cols = [col for col in df.columns if col.strip() == base_col]
         if matching_cols:
@@ -237,32 +294,161 @@ def convert_to_epoch(df, columns, base_date=None):
                 logger.warning(f"No valid dates in LCD_DATE - using default (30 days from now)")
                 df[epoch_col] = default_due_date
         
-        # Special handling for START_DATE
-        elif base_col == 'START_DATE':
-            logger.info(f"Processing START_DATE column ('{col}')")
-            epoch_col = 'START_DATE_EPOCH'
+        # Special handling for date columns with time configuration
+        elif base_col in DATE_COLUMNS_CONFIG:
+            actual_col = col_mapping.get(base_col, col)  # Get the actual column name with spaces
+            hour, minute = DATE_COLUMNS_CONFIG[base_col]
+            logger.info(f"Processing {base_col} column ('{actual_col}') with time set to {hour:02d}:{minute:02d}")
+            epoch_col = f"{base_col}_EPOCH"
             
-            # Try with multiple date formats
-            date_formats = ['%d/%m/%y', '%d/%m/%Y', '%Y-%m-%d', '%m/%d/%Y', '%d-%m-%Y']
+            # Log raw values for debugging
+            sample_values = df[actual_col].dropna().head(5).astype(str).tolist()
+            logger.info(f"Sample raw {base_col} values: {sample_values}")
+            
+            # Try with multiple date formats - prioritize formats with time components
+            date_formats = [
+                '%d/%m/%y %H:%M',     # DD/MM/YY HH:MM
+                '%d/%m/%Y %H:%M',     # DD/MM/YYYY HH:MM
+                '%Y-%m-%d %H:%M',     # YYYY-MM-DD HH:MM
+                '%m/%d/%Y %H:%M',     # MM/DD/YYYY HH:MM
+                '%Y-%m-%dT%H:%M:%S',  # ISO format
+                '%d/%m/%y',           # DD/MM/YY (without time)
+                '%d/%m/%Y',           # DD/MM/YYYY (without time)
+                '%Y-%m-%d',           # YYYY-MM-DD (without time)
+                '%m/%d/%Y',           # MM/DD/YYYY (without time)
+                '%d-%m-%Y'            # DD-MM-YYYY (without time)
+            ]
+            
+            # First try to directly parse Excel's datetime values and set the configured time
+            try:
+                # Try to use pandas' native datetime handling first
+                if pd.api.types.is_datetime64_any_dtype(df[actual_col]):
+                    # Get the target time from configuration
+                    hour, minute = DATE_COLUMNS_CONFIG[base_col]
+                    
+                    logger.info(f"{base_col} column is already in datetime format, setting time to {hour:02d}:{minute:02d}")
+                    
+                    # Create a new column with the original dates
+                    df['original_dates'] = df[actual_col].copy()
+                    
+                    # Apply the specified time to all datetime values - use direct datetime manipulation
+                    # to avoid timezone issues
+                    for idx, date_val in df['original_dates'].items():
+                        if pd.notna(date_val):
+                            # Create a new datetime with the date components but set hour to specified time
+                            new_date = datetime(date_val.year, date_val.month, date_val.day, hour, minute, 0)
+                            # Convert to epoch timestamp
+                            df.loc[idx, epoch_col] = int(new_date.timestamp())
+                            
+                            # Log for debugging
+                            process = df.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else f"Row {idx}"
+                            logger.info(f"  Set {base_col} for {process}: {new_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                    
+                    valid_count = df[epoch_col].notna().sum()
+                    if valid_count > 0:
+                        logger.info(f"Set {valid_count} datetime values to {hour:02d}:{minute:02d} using direct datetime creation")
+                        # Drop the temporary column
+                        df = df.drop('original_dates', axis=1)
+                        continue
+            except Exception as e:
+                logger.debug(f"Error setting time for {base_col}: {e}")
+            
+            # If direct datetime preservation didn't work, try parsing with formats
             success = False
             for fmt in date_formats:
                 try:
-                    # Convert to datetime first
-                    dates = pd.to_datetime(df[col], format=fmt, errors='coerce')
+                    # Convert to datetime first, preserving time component
+                    dates = pd.to_datetime(df[actual_col], format=fmt, errors='coerce')
                     # Then convert to epoch timestamps
                     df[epoch_col] = dates.apply(lambda x: int(x.timestamp()) if pd.notna(x) else None)
                     valid_count = df[epoch_col].notna().sum()
-                    logger.info(f"START_DATE with format {fmt}: {valid_count} valid dates")
+                    logger.info(f"{base_col} with format {fmt}: {valid_count} valid dates")
                     if valid_count > 0:
                         success = True
-                        # Log each START_DATE for debugging
+                        # Log each date for debugging with full time component
                         for idx, timestamp in df[df[epoch_col].notna()][epoch_col].items():
-                            date_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M')
+                            date_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
                             process = df.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else f"Row {idx}"
-                            logger.info(f"  Found START_DATE for {process}: {date_str}")
+                            logger.info(f"  Found {base_col} for {process}: {date_str}")
                         break
                 except Exception as e:
-                    logger.warning(f"Error with format {fmt}: {e}")
+                    logger.debug(f"Error with format {fmt}: {e}")
+            
+            # If standard formats fail, try pandas flexible parser as a last resort
+            if not success:
+                try:
+                    # Use pandas flexible parser
+                    dates = pd.to_datetime(df[actual_col], errors='coerce')
+                    
+                    # For columns with specific time configuration, set the configured time
+                    if base_col in DATE_COLUMNS_CONFIG:
+                        hour, minute = DATE_COLUMNS_CONFIG[base_col]
+                        # Apply time setting to each valid date
+                        for idx, date_val in dates.items():
+                            if pd.notna(date_val):
+                                # Set the time component to the configured value
+                                new_date = datetime(date_val.year, date_val.month, date_val.day, hour, minute, 0)
+                                df.loc[idx, epoch_col] = int(new_date.timestamp())
+                    else:
+                        # Just convert to timestamps without altering time
+                        df[epoch_col] = dates.apply(lambda x: int(x.timestamp()) if pd.notna(x) else None)
+                    
+                    valid_count = df[epoch_col].notna().sum()
+                    
+                    if valid_count > 0:
+                        logger.info(f"{base_col} with flexible parser: {valid_count} valid dates")
+                        # Log the parsed dates
+                        for idx, timestamp in df[df[epoch_col].notna()][epoch_col].items():
+                            date_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                            process = df.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else f"Row {idx}"
+                            logger.info(f"  Found {base_col} for {process}: {date_str} (flexible parser)")
+                    else:
+                        logger.warning(f"Could not parse any {base_col} values")
+                except Exception as e:
+                    logger.error(f"Error with flexible parser for {base_col}: {e}")
+                    
+            # As a last resort, try to manually parse the time component
+            if not success:
+                try:
+                    # Try to extract time information directly from string values
+                    time_pattern = r'(\d{1,2}):(\d{2})'
+                    
+                    # First get the dates without time
+                    base_dates = pd.to_datetime(df[actual_col], errors='coerce')
+                    if base_dates.notna().sum() > 0:
+                        logger.info(f"Got {base_dates.notna().sum()} base dates without time")
+                        
+                        # Now try to extract time components
+                        df[epoch_col] = None
+                        for idx, date_val in base_dates.items():
+                            if pd.isna(date_val):
+                                continue
+                                
+                            # Get the original string value
+                            orig_val = str(df.loc[idx, actual_col])
+                            time_match = re.search(time_pattern, orig_val)
+                            
+                            if time_match:
+                                hour = int(time_match.group(1))
+                                minute = int(time_match.group(2))
+                                # Create a new datetime with the extracted time
+                                adjusted_date = date_val.replace(hour=hour, minute=minute)
+                                df.loc[idx, epoch_col] = int(adjusted_date.timestamp())
+                                process = df.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else f"Row {idx}"
+                                logger.info(f"  Manually extracted time for {process}: {adjusted_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                            else:
+                                # Set time to 13:00 as per requirement - use direct datetime creation
+                                # to avoid timezone issues
+                                new_date = datetime(date_val.year, date_val.month, date_val.day, 13, 0, 0)
+                                df.loc[idx, epoch_col] = int(new_date.timestamp())
+                                process = df.loc[idx, 'PROCESS_CODE'] if 'PROCESS_CODE' in df.columns else f"Row {idx}"
+                                logger.info(f"  Applied 13:00 time for {process}: {new_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                        
+                        valid_count = df[epoch_col].notna().sum()
+                        if valid_count > 0:
+                            logger.info(f"Manually processed {valid_count} START_DATE values with time set to 13:00")
+                except Exception as e:
+                    logger.error(f"Error with manual time extraction for START_DATE: {e}")
         
         # Regular date column handling
         else:
@@ -593,6 +779,21 @@ def load_jobs_planning_data(file_path=None):
     # Log the file path being used
     logger.info(f"Loading job data from: {file_path}")
     
+    # Check if we can use the time disparency fix to preserve time components
+    df_with_epochs = None
+    if TIME_DISPARENCY_FIX_AVAILABLE:
+        try:
+            # Process the file with our specialized time handling
+            logger.info("Using fix_time_disparency to preserve time components in dates")
+            df_with_epochs = fix_time_disparency(file_path)
+            # Verify we have the epoch columns
+            epoch_cols = [col for col in df_with_epochs.columns if col.startswith('epoch_')]
+            logger.info(f"Found {len(epoch_cols)} epoch columns: {epoch_cols}")
+        except Exception as e:
+            logger.error(f"Error using fix_time_disparency: {e}")
+            logger.warning("Falling back to standard date processing")
+            df_with_epochs = None
+    
     # Load and process the data into a DataFrame
     df = load_job_data(file_path)
     
@@ -672,7 +873,26 @@ def load_jobs_planning_data(file_path=None):
         
         # Get user-defined start date if it exists
         user_start_time = None
-        if 'START_DATE_EPOCH' in row and pd.notna(row['START_DATE_EPOCH']):
+        
+        # First check for epoch timestamps from fix_time_disparency
+        if df_with_epochs is not None:
+            # Try to find matching row in df_with_epochs
+            match_found = False
+            for _, epoch_row in df_with_epochs.iterrows():
+                if (epoch_row.get('PROCESS_CODE') == row.get('PROCESS_CODE') and 
+                    epoch_row.get('JOB') == row.get('JOB') and 
+                    epoch_row.get('RSC_LOCATION') == row.get('RSC_LOCATION')):
+                    # Found matching row in epoch dataframe
+                    start_date_cols = [col for col in epoch_row.index if 'start_date' in col.lower() and 'epoch' in col.lower()]
+                    if start_date_cols and pd.notna(epoch_row[start_date_cols[0]]):
+                        user_start_time = int(epoch_row[start_date_cols[0]])
+                        start_date = datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')
+                        logger.info(f"Found time-preserving epoch timestamp for {row['PROCESS_CODE']}: {start_date}")
+                        match_found = True
+                        break
+        
+        # Fall back to standard approach if no match found
+        if user_start_time is None and 'START_DATE_EPOCH' in row and pd.notna(row['START_DATE_EPOCH']):
             try:
                 user_start_time = int(row['START_DATE_EPOCH'])
                 start_date = datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')
