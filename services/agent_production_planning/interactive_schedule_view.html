@@ -42,14 +42,16 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            font-size: 11px;  /* Smaller base font size */
+            font-size: 9px;  /* Smaller base font size */
             width: 100%;
             table-layout: fixed;  /* Fixed table layout for better control */
+            margin: 0;
+            padding: 0;
         }
         
         table.dataTable th {
-            font-size: 11px;  /* Smaller header font */
-            padding: 4px !important;  /* Reduced padding */
+            font-size: 9px;  /* Extra small header font */
+            padding: 1px 2px !important;  /* Minimal padding */
             font-weight: 600;
             white-space: nowrap;  /* Prevent wrapping in headers */
             overflow: hidden;
@@ -57,39 +59,40 @@
         }
         
         table.dataTable td {
-            font-size: 11px;  /* Smaller cell font */
-            padding: 3px 4px !important;  /* Very compact cells */
+            font-size: 9px;  /* Extra small cell font */
+            padding: 1px 2px !important;  /* Minimal padding */
             overflow: hidden;
             text-overflow: ellipsis;  /* Show ellipsis for overflow */
-            white-space: nowrap;
+            white-space: normal;  /* Allow text to wrap */
         }
         
-        /* Set specific column widths based on content */
-        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) { width: 90px; } /* LCD_DATE */
-        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) { width: 95px; } /* JOB */
-        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) { width: 120px; } /* PROCESS_CODE */
-        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) { width: 65px; } /* RSC_LOCATION */
-        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) { width: 80px; } /* RSC_CODE */
-        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) { width: 60px; } /* NUMBER_OPERATOR */
-        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) { width: 70px; } /* JOB_QUANTITY */
-        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) { width: 75px; } /* EXPECT_OUTPUT_PER_HOUR */
-        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) { width: 50px; } /* PRIORITY */
-        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) { width: 60px; } /* HOURS_NEED */
-        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) { width: 65px; } /* SETTING_HOURS */
-        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) { width: 65px; } /* BREAK_HOURS */
-        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) { width: 50px; } /* NO_PROD */
-        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) { width: 90px; } /* START_DATE */
-        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) { width: 80px; } /* ACCUMULATED_DAILY_OUTPUT */
-        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) { width: 70px; } /* BALANCE_QUANTITY */
-        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) { width: 90px; } /* START_TIME */
-        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) { width: 90px; } /* END_TIME */
-        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) { width: 50px; } /* BAL_HR */
-        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) { width: 70px; } /* BUFFER_STATUS */
+        /* Set specific column widths based on content - reduced to fit all columns */
+        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) { width: 65px; } /* LCD_DATE */
+        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) { width: 65px; } /* JOB */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) { width: 80px; } /* PROCESS_CODE */
+        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) { width: 40px; } /* RSC_LOCATION */
+        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) { width: 55px; } /* RSC_CODE */
+        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) { width: 35px; } /* NUMBER_OPERATOR */
+        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) { width: 45px; } /* JOB_QUANTITY */
+        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) { width: 45px; } /* EXPECT_OUTPUT_PER_HOUR */
+        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) { width: 30px; } /* PRIORITY */
+        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) { width: 40px; } /* HOURS_NEED */
+        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) { width: 45px; } /* SETTING_HOURS */
+        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) { width: 45px; } /* BREAK_HOURS */
+        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) { width: 35px; } /* NO_PROD */
+        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) { width: 65px; } /* START_DATE */
+        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) { width: 55px; } /* ACCUMULATED_DAILY_OUTPUT */
+        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) { width: 45px; } /* BALANCE_QUANTITY */
+        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) { width: 65px; } /* START_TIME */
+        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) { width: 65px; } /* END_TIME */
+        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) { width: 35px; } /* BAL_HR */
+        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) { width: 50px; } /* BUFFER_STATUS */
         
         /* Make table container scrollable horizontally */
         .table-container {
-            overflow-x: auto;
+            overflow-x: visible;
             margin-bottom: 30px;
+            width: 100%;
         }
         
         /* Highlight row on hover for better readability */
@@ -120,7 +123,7 @@
     </style>
 </head>
 <body>
-    <div class="container-fluid">
+    <div class="container-fluid" style="max-width: 100%; padding: 10px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h1 class="mb-0" style="font-size: 20px;"><i class="bi bi-calendar-check me-2"></i>Production Scheduler</h1>
             <div>
@@ -302,9 +305,9 @@
                         <td title=""></td>
                         <td title="100806">100806</td>
                         <td title="0">0</td>
-                        <td title="2025-03-29 08:24">2025-03-29 08:24</td>
-                        <td title="2025-04-15 03:38">2025-04-15 03:38</td>
-                        <td title="388.4">388.4</td>
+                        <td title="2025-03-29 08:47">2025-03-29 08:47</td>
+                        <td title="2025-04-15 04:01">2025-04-15 04:01</td>
+                        <td title="388.0">388.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
@@ -412,9 +415,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5900">5900</td>
-                        <td title="2025-03-26 23:06">2025-03-26 23:06</td>
-                        <td title="2025-03-27 16:06">2025-03-27 16:06</td>
-                        <td title="1215.9">1215.9</td>
+                        <td title="2025-03-26 23:29">2025-03-26 23:29</td>
+                        <td title="2025-03-27 16:29">2025-03-27 16:29</td>
+                        <td title="1215.5">1215.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -434,9 +437,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5900">5900</td>
-                        <td title="2025-03-25 10:26">2025-03-25 10:26</td>
-                        <td title="2025-03-26 03:26">2025-03-26 03:26</td>
-                        <td title="1252.6">1252.6</td>
+                        <td title="2025-03-25 10:49">2025-03-25 10:49</td>
+                        <td title="2025-03-26 03:49">2025-03-26 03:49</td>
+                        <td title="1252.2">1252.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -544,9 +547,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5900">5900</td>
-                        <td title="2025-03-28 11:46">2025-03-28 11:46</td>
-                        <td title="2025-03-29 04:46">2025-03-29 04:46</td>
-                        <td title="1203.2">1203.2</td>
+                        <td title="2025-03-28 12:09">2025-03-28 12:09</td>
+                        <td title="2025-03-29 05:09">2025-03-29 05:09</td>
+                        <td title="1202.8">1202.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -566,9 +569,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5900">5900</td>
-                        <td title="2025-03-30 00:26">2025-03-30 00:26</td>
-                        <td title="2025-03-30 17:26">2025-03-30 17:26</td>
-                        <td title="1190.6">1190.6</td>
+                        <td title="2025-03-30 00:49">2025-03-30 00:49</td>
+                        <td title="2025-03-30 17:49">2025-03-30 17:49</td>
+                        <td title="1190.2">1190.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -588,9 +591,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5900">5900</td>
-                        <td title="2025-03-31 13:06">2025-03-31 13:06</td>
-                        <td title="2025-04-01 06:06">2025-04-01 06:06</td>
-                        <td title="1177.9">1177.9</td>
+                        <td title="2025-03-31 13:29">2025-03-31 13:29</td>
+                        <td title="2025-04-01 06:29">2025-04-01 06:29</td>
+                        <td title="1177.5">1177.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -610,9 +613,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5900">5900</td>
-                        <td title="2025-04-03 07:16">2025-04-03 07:16</td>
-                        <td title="2025-04-05 01:46">2025-04-05 01:46</td>
-                        <td title="1110.2">1110.2</td>
+                        <td title="2025-04-03 07:39">2025-04-03 07:39</td>
+                        <td title="2025-04-05 02:09">2025-04-05 02:09</td>
+                        <td title="1109.8">1109.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -896,9 +899,9 @@
                         <td title=""></td>
                         <td title="142">142</td>
                         <td title="3000">3000</td>
-                        <td title="2025-03-26 23:15">2025-03-26 23:15</td>
-                        <td title="2025-03-27 12:20">2025-03-27 12:20</td>
-                        <td title="1555.7">1555.7</td>
+                        <td title="2025-03-26 23:38">2025-03-26 23:38</td>
+                        <td title="2025-03-27 12:43">2025-03-27 12:43</td>
+                        <td title="1555.3">1555.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1358,9 +1361,9 @@
                         <td title=""></td>
                         <td title="22678">22678</td>
                         <td title="37322">37322</td>
-                        <td title="2025-03-24 14:46">2025-03-24 14:46</td>
-                        <td title="2025-03-30 04:06">2025-03-30 04:06</td>
-                        <td title="2523.9">2523.9</td>
+                        <td title="2025-03-24 15:09">2025-03-24 15:09</td>
+                        <td title="2025-03-30 04:29">2025-03-30 04:29</td>
+                        <td title="2523.5">2523.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1380,9 +1383,9 @@
                         <td title=""></td>
                         <td title="5000">5000</td>
                         <td title="55000">55000</td>
-                        <td title="2025-03-30 04:06">2025-03-30 04:06</td>
-                        <td title="2025-04-01 22:46">2025-04-01 22:46</td>
-                        <td title="2481.2">2481.2</td>
+                        <td title="2025-03-30 04:29">2025-03-30 04:29</td>
+                        <td title="2025-04-01 23:09">2025-04-01 23:09</td>
+                        <td title="2480.8">2480.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1402,9 +1405,9 @@
                         <td title=""></td>
                         <td title="20100">20100</td>
                         <td title="70809">70809</td>
-                        <td title="2025-03-24 14:46">2025-03-24 14:46</td>
-                        <td title="2025-03-25 21:04">2025-03-25 21:04</td>
-                        <td title="2674.9">2674.9</td>
+                        <td title="2025-03-24 15:09">2025-03-24 15:09</td>
+                        <td title="2025-03-25 21:27">2025-03-25 21:27</td>
+                        <td title="2674.5">2674.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1424,9 +1427,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="90909">90909</td>
-                        <td title="2025-03-25 21:04">2025-03-25 21:04</td>
-                        <td title="2025-03-29 15:59">2025-03-29 15:59</td>
-                        <td title="2608.0">2608.0</td>
+                        <td title="2025-03-25 21:27">2025-03-25 21:27</td>
+                        <td title="2025-03-29 16:22">2025-03-29 16:22</td>
+                        <td title="2607.6">2607.6</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1490,9 +1493,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2604">2604</td>
-                        <td title="2025-03-27 14:31">2025-03-27 14:31</td>
-                        <td title="2025-03-27 15:23">2025-03-27 15:23</td>
-                        <td title="2680.6">2680.6</td>
+                        <td title="2025-03-27 14:53">2025-03-27 14:53</td>
+                        <td title="2025-03-27 15:45">2025-03-27 15:45</td>
+                        <td title="2680.2">2680.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1512,9 +1515,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5100">5100</td>
-                        <td title="2025-04-03 07:16">2025-04-03 07:16</td>
-                        <td title="2025-04-05 01:46">2025-04-05 01:46</td>
-                        <td title="2478.2">2478.2</td>
+                        <td title="2025-04-03 07:39">2025-04-03 07:39</td>
+                        <td title="2025-04-05 02:09">2025-04-05 02:09</td>
+                        <td title="2477.8">2477.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1556,9 +1559,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="43210">43210</td>
-                        <td title="2025-03-26 03:47">2025-03-26 03:47</td>
-                        <td title="2025-03-26 23:15">2025-03-26 23:15</td>
-                        <td title="2696.7">2696.7</td>
+                        <td title="2025-03-26 04:10">2025-03-26 04:10</td>
+                        <td title="2025-03-26 23:38">2025-03-26 23:38</td>
+                        <td title="2696.4">2696.4</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1622,9 +1625,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2000">2000</td>
-                        <td title="2025-04-15 04:49">2025-04-15 04:49</td>
-                        <td title="2025-04-15 05:49">2025-04-15 05:49</td>
-                        <td title="2234.2">2234.2</td>
+                        <td title="2025-04-15 05:12">2025-04-15 05:12</td>
+                        <td title="2025-04-15 06:12">2025-04-15 06:12</td>
+                        <td title="2233.8">2233.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1644,9 +1647,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5400">5400</td>
-                        <td title="2025-04-01 21:06">2025-04-01 21:06</td>
-                        <td title="2025-04-02 12:06">2025-04-02 12:06</td>
-                        <td title="2539.9">2539.9</td>
+                        <td title="2025-04-01 21:29">2025-04-01 21:29</td>
+                        <td title="2025-04-02 12:29">2025-04-02 12:29</td>
+                        <td title="2539.5">2539.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1776,9 +1779,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5400">5400</td>
-                        <td title="2025-04-01 06:06">2025-04-01 06:06</td>
-                        <td title="2025-04-01 21:06">2025-04-01 21:06</td>
-                        <td title="2554.9">2554.9</td>
+                        <td title="2025-04-01 06:29">2025-04-01 06:29</td>
+                        <td title="2025-04-01 21:29">2025-04-01 21:29</td>
+                        <td title="2554.5">2554.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1842,9 +1845,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="3550">3550</td>
-                        <td title="2025-04-15 03:38">2025-04-15 03:38</td>
-                        <td title="2025-04-15 04:49">2025-04-15 04:49</td>
-                        <td title="2235.2">2235.2</td>
+                        <td title="2025-04-15 04:01">2025-04-15 04:01</td>
+                        <td title="2025-04-15 05:12">2025-04-15 05:12</td>
+                        <td title="2234.8">2234.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1864,9 +1867,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5100">5100</td>
-                        <td title="2025-03-31 13:06">2025-03-31 13:06</td>
-                        <td title="2025-04-01 06:06">2025-04-01 06:06</td>
-                        <td title="2569.9">2569.9</td>
+                        <td title="2025-03-31 13:29">2025-03-31 13:29</td>
+                        <td title="2025-04-01 06:29">2025-04-01 06:29</td>
+                        <td title="2569.5">2569.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1886,9 +1889,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5100">5100</td>
-                        <td title="2025-03-26 23:06">2025-03-26 23:06</td>
-                        <td title="2025-03-27 16:06">2025-03-27 16:06</td>
-                        <td title="2679.9">2679.9</td>
+                        <td title="2025-03-26 23:29">2025-03-26 23:29</td>
+                        <td title="2025-03-27 16:29">2025-03-27 16:29</td>
+                        <td title="2679.5">2679.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1908,9 +1911,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5100">5100</td>
-                        <td title="2025-03-28 11:46">2025-03-28 11:46</td>
-                        <td title="2025-03-29 04:46">2025-03-29 04:46</td>
-                        <td title="2643.2">2643.2</td>
+                        <td title="2025-03-28 12:09">2025-03-28 12:09</td>
+                        <td title="2025-03-29 05:09">2025-03-29 05:09</td>
+                        <td title="2642.8">2642.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -1930,9 +1933,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5100">5100</td>
-                        <td title="2025-03-30 00:26">2025-03-30 00:26</td>
-                        <td title="2025-03-30 17:26">2025-03-30 17:26</td>
-                        <td title="2606.6">2606.6</td>
+                        <td title="2025-03-30 00:49">2025-03-30 00:49</td>
+                        <td title="2025-03-30 17:49">2025-03-30 17:49</td>
+                        <td title="2606.2">2606.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2150,9 +2153,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="802">802</td>
-                        <td title="2025-03-24 14:46">2025-03-24 14:46</td>
-                        <td title="2025-03-24 21:27">2025-03-24 21:27</td>
-                        <td title="2746.5">2746.5</td>
+                        <td title="2025-03-24 15:09">2025-03-24 15:09</td>
+                        <td title="2025-03-24 21:50">2025-03-24 21:50</td>
+                        <td title="2746.2">2746.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2172,9 +2175,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="802">802</td>
-                        <td title="2025-03-24 21:27">2025-03-24 21:27</td>
-                        <td title="2025-03-26 20:38">2025-03-26 20:38</td>
-                        <td title="2699.4">2699.4</td>
+                        <td title="2025-03-24 21:50">2025-03-24 21:50</td>
+                        <td title="2025-03-26 21:01">2025-03-26 21:01</td>
+                        <td title="2699.0">2699.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2194,9 +2197,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="802">802</td>
-                        <td title="2025-03-26 20:38">2025-03-26 20:38</td>
-                        <td title="2025-03-27 12:40">2025-03-27 12:40</td>
-                        <td title="2683.3">2683.3</td>
+                        <td title="2025-03-26 21:01">2025-03-26 21:01</td>
+                        <td title="2025-03-27 13:03">2025-03-27 13:03</td>
+                        <td title="2682.9">2682.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2216,9 +2219,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="802">802</td>
-                        <td title="2025-03-27 12:40">2025-03-27 12:40</td>
-                        <td title="2025-03-28 02:02">2025-03-28 02:02</td>
-                        <td title="2670.0">2670.0</td>
+                        <td title="2025-03-27 13:03">2025-03-27 13:03</td>
+                        <td title="2025-03-28 02:25">2025-03-28 02:25</td>
+                        <td title="2669.6">2669.6</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2238,9 +2241,9 @@
                         <td title=""></td>
                         <td title="2200">2200</td>
                         <td title="14393">14393</td>
-                        <td title="2025-04-02 05:06">2025-04-02 05:06</td>
-                        <td title="2025-04-02 18:56">2025-04-02 18:56</td>
-                        <td title="2533.1">2533.1</td>
+                        <td title="2025-04-02 05:29">2025-04-02 05:29</td>
+                        <td title="2025-04-02 19:19">2025-04-02 19:19</td>
+                        <td title="2532.7">2532.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2304,9 +2307,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5100">5100</td>
-                        <td title="2025-03-25 10:26">2025-03-25 10:26</td>
-                        <td title="2025-03-26 03:26">2025-03-26 03:26</td>
-                        <td title="2716.6">2716.6</td>
+                        <td title="2025-03-25 10:49">2025-03-25 10:49</td>
+                        <td title="2025-03-26 03:49">2025-03-26 03:49</td>
+                        <td title="2716.2">2716.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2326,9 +2329,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="20000">20000</td>
-                        <td title="2025-03-25 21:04">2025-03-25 21:04</td>
-                        <td title="2025-03-29 08:24">2025-03-29 08:24</td>
-                        <td title="2639.6">2639.6</td>
+                        <td title="2025-03-25 21:27">2025-03-25 21:27</td>
+                        <td title="2025-03-29 08:47">2025-03-29 08:47</td>
+                        <td title="2639.2">2639.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2370,9 +2373,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="350">350</td>
-                        <td title="2025-04-15 20:14">2025-04-15 20:14</td>
-                        <td title="2025-04-15 23:09">2025-04-15 23:09</td>
-                        <td title="2360.8">2360.8</td>
+                        <td title="2025-04-15 20:37">2025-04-15 20:37</td>
+                        <td title="2025-04-15 23:32">2025-04-15 23:32</td>
+                        <td title="2360.5">2360.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2392,9 +2395,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="350">350</td>
-                        <td title="2025-04-15 23:09">2025-04-15 23:09</td>
-                        <td title="2025-04-16 02:04">2025-04-16 02:04</td>
-                        <td title="2357.9">2357.9</td>
+                        <td title="2025-04-15 23:32">2025-04-15 23:32</td>
+                        <td title="2025-04-16 02:27">2025-04-16 02:27</td>
+                        <td title="2357.5">2357.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2414,9 +2417,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="350">350</td>
-                        <td title="2025-04-16 02:04">2025-04-16 02:04</td>
-                        <td title="2025-04-16 07:54">2025-04-16 07:54</td>
-                        <td title="2352.1">2352.1</td>
+                        <td title="2025-04-16 02:27">2025-04-16 02:27</td>
+                        <td title="2025-04-16 08:17">2025-04-16 08:17</td>
+                        <td title="2351.7">2351.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2436,9 +2439,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="350">350</td>
-                        <td title="2025-04-16 07:54">2025-04-16 07:54</td>
-                        <td title="2025-04-16 10:49">2025-04-16 10:49</td>
-                        <td title="2349.2">2349.2</td>
+                        <td title="2025-04-16 08:17">2025-04-16 08:17</td>
+                        <td title="2025-04-16 11:12">2025-04-16 11:12</td>
+                        <td title="2348.8">2348.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2480,9 +2483,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="350">350</td>
-                        <td title="2025-04-16 13:44">2025-04-16 13:44</td>
-                        <td title="2025-04-16 18:07">2025-04-16 18:07</td>
-                        <td title="2341.9">2341.9</td>
+                        <td title="2025-04-16 14:07">2025-04-16 14:07</td>
+                        <td title="2025-04-16 18:30">2025-04-16 18:30</td>
+                        <td title="2341.5">2341.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2590,9 +2593,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="350">350</td>
-                        <td title="2025-04-16 10:49">2025-04-16 10:49</td>
-                        <td title="2025-04-16 13:44">2025-04-16 13:44</td>
-                        <td title="2346.3">2346.3</td>
+                        <td title="2025-04-16 11:12">2025-04-16 11:12</td>
+                        <td title="2025-04-16 14:07">2025-04-16 14:07</td>
+                        <td title="2345.9">2345.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -2656,9 +2659,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="902">902</td>
-                        <td title="2025-03-25 04:06">2025-03-25 04:06</td>
-                        <td title="2025-03-25 22:54">2025-03-25 22:54</td>
-                        <td title="2865.1">2865.1</td>
+                        <td title="2025-03-25 04:29">2025-03-25 04:29</td>
+                        <td title="2025-03-25 23:16">2025-03-25 23:16</td>
+                        <td title="2864.7">2864.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3008,9 +3011,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2500">2500</td>
-                        <td title="2025-04-16 18:07">2025-04-16 18:07</td>
-                        <td title="2025-04-16 23:19">2025-04-16 23:19</td>
-                        <td title="2456.7">2456.7</td>
+                        <td title="2025-04-16 18:30">2025-04-16 18:30</td>
+                        <td title="2025-04-16 23:42">2025-04-16 23:42</td>
+                        <td title="2456.3">2456.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3228,9 +3231,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="250">250</td>
-                        <td title="2025-03-24 14:46">2025-03-24 14:46</td>
-                        <td title="2025-03-24 16:09">2025-03-24 16:09</td>
-                        <td title="3015.8">3015.8</td>
+                        <td title="2025-03-24 15:09">2025-03-24 15:09</td>
+                        <td title="2025-03-24 16:32">2025-03-24 16:32</td>
+                        <td title="3015.5">3015.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3250,9 +3253,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="250">250</td>
-                        <td title="2025-03-24 16:09">2025-03-24 16:09</td>
-                        <td title="2025-03-24 17:33">2025-03-24 17:33</td>
-                        <td title="3014.4">3014.4</td>
+                        <td title="2025-03-24 16:32">2025-03-24 16:32</td>
+                        <td title="2025-03-24 17:56">2025-03-24 17:56</td>
+                        <td title="3014.1">3014.1</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3272,9 +3275,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="250">250</td>
-                        <td title="2025-04-10 08:34">2025-04-10 08:34</td>
-                        <td title="2025-04-10 16:54">2025-04-10 16:54</td>
-                        <td title="2607.1">2607.1</td>
+                        <td title="2025-04-10 08:56">2025-04-10 08:56</td>
+                        <td title="2025-04-10 17:16">2025-04-10 17:16</td>
+                        <td title="2606.7">2606.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3470,9 +3473,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="900">900</td>
-                        <td title="2025-03-24 14:46">2025-03-24 14:46</td>
-                        <td title="2025-03-24 22:16">2025-03-24 22:16</td>
-                        <td title="3009.7">3009.7</td>
+                        <td title="2025-03-24 15:09">2025-03-24 15:09</td>
+                        <td title="2025-03-24 22:39">2025-03-24 22:39</td>
+                        <td title="3009.3">3009.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3536,9 +3539,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="900">900</td>
-                        <td title="2025-04-07 20:22">2025-04-07 20:22</td>
-                        <td title="2025-04-07 22:52">2025-04-07 22:52</td>
-                        <td title="2673.1">2673.1</td>
+                        <td title="2025-04-07 20:45">2025-04-07 20:45</td>
+                        <td title="2025-04-07 23:15">2025-04-07 23:15</td>
+                        <td title="2672.7">2672.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3558,9 +3561,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="900">900</td>
-                        <td title="2025-04-07 22:52">2025-04-07 22:52</td>
-                        <td title="2025-04-08 02:37">2025-04-08 02:37</td>
-                        <td title="2669.4">2669.4</td>
+                        <td title="2025-04-07 23:15">2025-04-07 23:15</td>
+                        <td title="2025-04-08 03:00">2025-04-08 03:00</td>
+                        <td title="2669.0">2669.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3580,9 +3583,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="3906">3906</td>
-                        <td title="2025-03-27 12:20">2025-03-27 12:20</td>
-                        <td title="2025-03-27 14:31">2025-03-27 14:31</td>
-                        <td title="2945.5">2945.5</td>
+                        <td title="2025-03-27 12:43">2025-03-27 12:43</td>
+                        <td title="2025-03-27 14:53">2025-03-27 14:53</td>
+                        <td title="2945.1">2945.1</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3624,9 +3627,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2100">2100</td>
-                        <td title="2025-04-11 20:39">2025-04-11 20:39</td>
-                        <td title="2025-04-12 03:39">2025-04-12 03:39</td>
-                        <td title="2572.3">2572.3</td>
+                        <td title="2025-04-11 21:01">2025-04-11 21:01</td>
+                        <td title="2025-04-12 04:01">2025-04-12 04:01</td>
+                        <td title="2572.0">2572.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3646,9 +3649,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2100">2100</td>
-                        <td title="2025-04-12 03:39">2025-04-12 03:39</td>
-                        <td title="2025-04-12 10:39">2025-04-12 10:39</td>
-                        <td title="2565.3">2565.3</td>
+                        <td title="2025-04-12 04:01">2025-04-12 04:01</td>
+                        <td title="2025-04-12 11:01">2025-04-12 11:01</td>
+                        <td title="2565.0">2565.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3668,9 +3671,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2100">2100</td>
-                        <td title="2025-04-12 10:39">2025-04-12 10:39</td>
-                        <td title="2025-04-12 17:39">2025-04-12 17:39</td>
-                        <td title="2558.3">2558.3</td>
+                        <td title="2025-04-12 11:01">2025-04-12 11:01</td>
+                        <td title="2025-04-12 18:01">2025-04-12 18:01</td>
+                        <td title="2558.0">2558.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3690,9 +3693,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2100">2100</td>
-                        <td title="2025-04-12 17:39">2025-04-12 17:39</td>
-                        <td title="2025-04-13 00:39">2025-04-13 00:39</td>
-                        <td title="2551.3">2551.3</td>
+                        <td title="2025-04-12 18:01">2025-04-12 18:01</td>
+                        <td title="2025-04-13 01:01">2025-04-13 01:01</td>
+                        <td title="2551.0">2551.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3712,9 +3715,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2100">2100</td>
-                        <td title="2025-04-13 00:39">2025-04-13 00:39</td>
-                        <td title="2025-04-13 07:39">2025-04-13 07:39</td>
-                        <td title="2544.3">2544.3</td>
+                        <td title="2025-04-13 01:01">2025-04-13 01:01</td>
+                        <td title="2025-04-13 08:01">2025-04-13 08:01</td>
+                        <td title="2544.0">2544.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3734,9 +3737,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2100">2100</td>
-                        <td title="2025-04-13 07:39">2025-04-13 07:39</td>
-                        <td title="2025-04-13 14:39">2025-04-13 14:39</td>
-                        <td title="2537.3">2537.3</td>
+                        <td title="2025-04-13 08:01">2025-04-13 08:01</td>
+                        <td title="2025-04-13 15:01">2025-04-13 15:01</td>
+                        <td title="2537.0">2537.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3756,9 +3759,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2220">2220</td>
-                        <td title="2025-03-25 23:28">2025-03-25 23:28</td>
-                        <td title="2025-03-26 08:43">2025-03-26 08:43</td>
-                        <td title="2975.3">2975.3</td>
+                        <td title="2025-03-25 23:51">2025-03-25 23:51</td>
+                        <td title="2025-03-26 09:06">2025-03-26 09:06</td>
+                        <td title="2974.9">2974.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3778,9 +3781,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2220">2220</td>
-                        <td title="2025-04-10 16:54">2025-04-10 16:54</td>
-                        <td title="2025-04-11 02:09">2025-04-11 02:09</td>
-                        <td title="2597.8">2597.8</td>
+                        <td title="2025-04-10 17:16">2025-04-10 17:16</td>
+                        <td title="2025-04-11 02:31">2025-04-11 02:31</td>
+                        <td title="2597.5">2597.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3800,9 +3803,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2220">2220</td>
-                        <td title="2025-04-11 02:09">2025-04-11 02:09</td>
-                        <td title="2025-04-11 11:24">2025-04-11 11:24</td>
-                        <td title="2588.6">2588.6</td>
+                        <td title="2025-04-11 02:31">2025-04-11 02:31</td>
+                        <td title="2025-04-11 11:46">2025-04-11 11:46</td>
+                        <td title="2588.2">2588.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3822,9 +3825,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2220">2220</td>
-                        <td title="2025-04-11 11:24">2025-04-11 11:24</td>
-                        <td title="2025-04-11 20:39">2025-04-11 20:39</td>
-                        <td title="2579.3">2579.3</td>
+                        <td title="2025-04-11 11:46">2025-04-11 11:46</td>
+                        <td title="2025-04-11 21:01">2025-04-11 21:01</td>
+                        <td title="2579.0">2579.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3844,9 +3847,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1300">1300</td>
-                        <td title="2025-04-16 23:19">2025-04-16 23:19</td>
-                        <td title="2025-04-17 02:02">2025-04-17 02:02</td>
-                        <td title="2454.0">2454.0</td>
+                        <td title="2025-04-16 23:42">2025-04-16 23:42</td>
+                        <td title="2025-04-17 02:25">2025-04-17 02:25</td>
+                        <td title="2453.6">2453.6</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -3976,9 +3979,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="15217">15217</td>
-                        <td title="2025-04-01 22:46">2025-04-01 22:46</td>
-                        <td title="2025-04-02 05:06">2025-04-02 05:06</td>
-                        <td title="2810.9">2810.9</td>
+                        <td title="2025-04-01 23:09">2025-04-01 23:09</td>
+                        <td title="2025-04-02 05:29">2025-04-02 05:29</td>
+                        <td title="2810.5">2810.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4108,9 +4111,9 @@
                         <td title=""></td>
                         <td title="159">159</td>
                         <td title="1581">1581</td>
-                        <td title="2025-04-10 01:19">2025-04-10 01:19</td>
-                        <td title="2025-04-10 08:34">2025-04-10 08:34</td>
-                        <td title="2759.4">2759.4</td>
+                        <td title="2025-04-10 01:41">2025-04-10 01:41</td>
+                        <td title="2025-04-10 08:56">2025-04-10 08:56</td>
+                        <td title="2759.1">2759.1</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4130,9 +4133,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1615">1615</td>
-                        <td title="2025-04-09 11:51">2025-04-09 11:51</td>
-                        <td title="2025-04-09 16:20">2025-04-09 16:20</td>
-                        <td title="2799.7">2799.7</td>
+                        <td title="2025-04-09 12:14">2025-04-09 12:14</td>
+                        <td title="2025-04-09 16:43">2025-04-09 16:43</td>
+                        <td title="2799.3">2799.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4152,9 +4155,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1615">1615</td>
-                        <td title="2025-04-09 16:20">2025-04-09 16:20</td>
-                        <td title="2025-04-09 20:49">2025-04-09 20:49</td>
-                        <td title="2819.2">2819.2</td>
+                        <td title="2025-04-09 16:43">2025-04-09 16:43</td>
+                        <td title="2025-04-09 21:12">2025-04-09 21:12</td>
+                        <td title="2818.8">2818.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4174,9 +4177,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1615">1615</td>
-                        <td title="2025-04-09 20:49">2025-04-09 20:49</td>
-                        <td title="2025-04-10 01:19">2025-04-10 01:19</td>
-                        <td title="2838.7">2838.7</td>
+                        <td title="2025-04-09 21:12">2025-04-09 21:12</td>
+                        <td title="2025-04-10 01:41">2025-04-10 01:41</td>
+                        <td title="2838.3">2838.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4240,9 +4243,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="770">770</td>
-                        <td title="2025-03-25 23:00">2025-03-25 23:00</td>
-                        <td title="2025-03-25 23:09">2025-03-25 23:09</td>
-                        <td title="3320.8">3320.8</td>
+                        <td title="2025-03-25 23:23">2025-03-25 23:23</td>
+                        <td title="2025-03-25 23:32">2025-03-25 23:32</td>
+                        <td title="3320.5">3320.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4460,9 +4463,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1710">1710</td>
-                        <td title="2025-04-08 06:11">2025-04-08 06:11</td>
-                        <td title="2025-04-08 10:56">2025-04-08 10:56</td>
-                        <td title="2997.1">2997.1</td>
+                        <td title="2025-04-08 06:33">2025-04-08 06:33</td>
+                        <td title="2025-04-08 11:18">2025-04-08 11:18</td>
+                        <td title="2996.7">2996.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4482,9 +4485,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1710">1710</td>
-                        <td title="2025-04-08 02:37">2025-04-08 02:37</td>
-                        <td title="2025-04-08 06:11">2025-04-08 06:11</td>
-                        <td title="3001.8">3001.8</td>
+                        <td title="2025-04-08 03:00">2025-04-08 03:00</td>
+                        <td title="2025-04-08 06:33">2025-04-08 06:33</td>
+                        <td title="3001.4">3001.4</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4504,9 +4507,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1710">1710</td>
-                        <td title="2025-03-25 23:09">2025-03-25 23:09</td>
-                        <td title="2025-03-25 23:28">2025-03-25 23:28</td>
-                        <td title="3320.5">3320.5</td>
+                        <td title="2025-03-25 23:32">2025-03-25 23:32</td>
+                        <td title="2025-03-25 23:51">2025-03-25 23:51</td>
+                        <td title="3320.1">3320.1</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4548,9 +4551,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="680">680</td>
-                        <td title="2025-03-25 22:54">2025-03-25 22:54</td>
-                        <td title="2025-03-25 23:00">2025-03-25 23:00</td>
-                        <td title="3345.0">3345.0</td>
+                        <td title="2025-03-25 23:16">2025-03-25 23:16</td>
+                        <td title="2025-03-25 23:23">2025-03-25 23:23</td>
+                        <td title="3344.6">3344.6</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4658,9 +4661,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2200">2200</td>
-                        <td title="2025-04-08 05:18">2025-04-08 05:18</td>
-                        <td title="2025-04-08 11:25">2025-04-08 11:25</td>
-                        <td title="3140.6">3140.6</td>
+                        <td title="2025-04-08 05:41">2025-04-08 05:41</td>
+                        <td title="2025-04-08 11:47">2025-04-08 11:47</td>
+                        <td title="3140.2">3140.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4680,9 +4683,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2200">2200</td>
-                        <td title="2025-04-08 11:25">2025-04-08 11:25</td>
-                        <td title="2025-04-08 17:31">2025-04-08 17:31</td>
-                        <td title="3158.5">3158.5</td>
+                        <td title="2025-04-08 11:47">2025-04-08 11:47</td>
+                        <td title="2025-04-08 17:54">2025-04-08 17:54</td>
+                        <td title="3158.1">3158.1</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4702,9 +4705,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2200">2200</td>
-                        <td title="2025-04-08 17:31">2025-04-08 17:31</td>
-                        <td title="2025-04-08 23:38">2025-04-08 23:38</td>
-                        <td title="3176.4">3176.4</td>
+                        <td title="2025-04-08 17:54">2025-04-08 17:54</td>
+                        <td title="2025-04-09 00:01">2025-04-09 00:01</td>
+                        <td title="3176.0">3176.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4724,9 +4727,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2200">2200</td>
-                        <td title="2025-04-08 23:38">2025-04-08 23:38</td>
-                        <td title="2025-04-09 05:45">2025-04-09 05:45</td>
-                        <td title="3194.2">3194.2</td>
+                        <td title="2025-04-09 00:01">2025-04-09 00:01</td>
+                        <td title="2025-04-09 06:07">2025-04-09 06:07</td>
+                        <td title="3193.9">3193.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4746,9 +4749,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="2200">2200</td>
-                        <td title="2025-04-09 05:45">2025-04-09 05:45</td>
-                        <td title="2025-04-09 11:51">2025-04-09 11:51</td>
-                        <td title="3212.1">3212.1</td>
+                        <td title="2025-04-09 06:07">2025-04-09 06:07</td>
+                        <td title="2025-04-09 12:14">2025-04-09 12:14</td>
+                        <td title="3211.8">3211.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4768,9 +4771,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1767">1767</td>
-                        <td title="2025-04-15 05:49">2025-04-15 05:49</td>
-                        <td title="2025-04-15 13:10">2025-04-15 13:10</td>
-                        <td title="3090.8">3090.8</td>
+                        <td title="2025-04-15 06:12">2025-04-15 06:12</td>
+                        <td title="2025-04-15 13:33">2025-04-15 13:33</td>
+                        <td title="3090.4">3090.4</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4790,9 +4793,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1767">1767</td>
-                        <td title="2025-04-15 13:10">2025-04-15 13:10</td>
-                        <td title="2025-04-15 20:14">2025-04-15 20:14</td>
-                        <td title="3107.8">3107.8</td>
+                        <td title="2025-04-15 13:33">2025-04-15 13:33</td>
+                        <td title="2025-04-15 20:37">2025-04-15 20:37</td>
+                        <td title="3107.4">3107.4</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4812,9 +4815,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1072">1072</td>
-                        <td title="2025-04-07 15:54">2025-04-07 15:54</td>
-                        <td title="2025-04-07 20:22">2025-04-07 20:22</td>
-                        <td title="3323.6">3323.6</td>
+                        <td title="2025-04-07 16:17">2025-04-07 16:17</td>
+                        <td title="2025-04-07 20:45">2025-04-07 20:45</td>
+                        <td title="3323.2">3323.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4834,9 +4837,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1072">1072</td>
-                        <td title="2025-04-07 20:22">2025-04-07 20:22</td>
-                        <td title="2025-04-07 23:21">2025-04-07 23:21</td>
-                        <td title="3344.7">3344.7</td>
+                        <td title="2025-04-07 20:45">2025-04-07 20:45</td>
+                        <td title="2025-04-07 23:43">2025-04-07 23:43</td>
+                        <td title="3344.3">3344.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4856,9 +4859,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1072">1072</td>
-                        <td title="2025-04-07 23:21">2025-04-07 23:21</td>
-                        <td title="2025-04-08 02:19">2025-04-08 02:19</td>
-                        <td title="3365.7">3365.7</td>
+                        <td title="2025-04-07 23:43">2025-04-07 23:43</td>
+                        <td title="2025-04-08 02:42">2025-04-08 02:42</td>
+                        <td title="3365.3">3365.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -4878,9 +4881,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1072">1072</td>
-                        <td title="2025-04-08 02:19">2025-04-08 02:19</td>
-                        <td title="2025-04-08 05:18">2025-04-08 05:18</td>
-                        <td title="3386.7">3386.7</td>
+                        <td title="2025-04-08 02:42">2025-04-08 02:42</td>
+                        <td title="2025-04-08 05:41">2025-04-08 05:41</td>
+                        <td title="3386.3">3386.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5186,9 +5189,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="897">897</td>
-                        <td title="2025-04-05 23:26">2025-04-05 23:26</td>
-                        <td title="2025-04-06 03:31">2025-04-06 03:31</td>
-                        <td title="3772.5">3772.5</td>
+                        <td title="2025-04-05 23:49">2025-04-05 23:49</td>
+                        <td title="2025-04-06 03:54">2025-04-06 03:54</td>
+                        <td title="3772.1">3772.1</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5208,9 +5211,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="897">897</td>
-                        <td title="2025-04-06 03:31">2025-04-06 03:31</td>
-                        <td title="2025-04-06 07:35">2025-04-06 07:35</td>
-                        <td title="3792.4">3792.4</td>
+                        <td title="2025-04-06 03:54">2025-04-06 03:54</td>
+                        <td title="2025-04-06 07:58">2025-04-06 07:58</td>
+                        <td title="3792.0">3792.0</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5230,9 +5233,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="897">897</td>
-                        <td title="2025-04-06 07:35">2025-04-06 07:35</td>
-                        <td title="2025-04-06 11:40">2025-04-06 11:40</td>
-                        <td title="3812.3">3812.3</td>
+                        <td title="2025-04-06 07:58">2025-04-06 07:58</td>
+                        <td title="2025-04-06 12:03">2025-04-06 12:03</td>
+                        <td title="3811.9">3811.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5252,9 +5255,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="8163">8163</td>
-                        <td title="2025-04-05 01:46">2025-04-05 01:46</td>
-                        <td title="2025-04-05 07:13">2025-04-05 07:13</td>
-                        <td title="3864.8">3864.8</td>
+                        <td title="2025-04-05 02:09">2025-04-05 02:09</td>
+                        <td title="2025-04-05 07:35">2025-04-05 07:35</td>
+                        <td title="3864.4">3864.4</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5274,9 +5277,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="8163">8163</td>
-                        <td title="2025-04-05 07:13">2025-04-05 07:13</td>
-                        <td title="2025-04-06 05:53">2025-04-06 05:53</td>
-                        <td title="3866.1">3866.1</td>
+                        <td title="2025-04-05 07:35">2025-04-05 07:35</td>
+                        <td title="2025-04-06 06:16">2025-04-06 06:16</td>
+                        <td title="3865.7">3865.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5296,9 +5299,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="8163">8163</td>
-                        <td title="2025-04-06 05:53">2025-04-06 05:53</td>
-                        <td title="2025-04-07 15:54">2025-04-07 15:54</td>
-                        <td title="3856.1">3856.1</td>
+                        <td title="2025-04-06 06:16">2025-04-06 06:16</td>
+                        <td title="2025-04-07 16:17">2025-04-07 16:17</td>
+                        <td title="3855.7">3855.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5318,9 +5321,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5000">5000</td>
-                        <td title="2025-04-02 12:06">2025-04-02 12:06</td>
-                        <td title="2025-04-03 04:46">2025-04-03 04:46</td>
-                        <td title="3987.2">3987.2</td>
+                        <td title="2025-04-02 12:29">2025-04-02 12:29</td>
+                        <td title="2025-04-03 05:09">2025-04-03 05:09</td>
+                        <td title="3986.8">3986.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5340,9 +5343,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5000">5000</td>
-                        <td title="2025-04-03 04:46">2025-04-03 04:46</td>
-                        <td title="2025-04-03 21:26">2025-04-03 21:26</td>
-                        <td title="3994.6">3994.6</td>
+                        <td title="2025-04-03 05:09">2025-04-03 05:09</td>
+                        <td title="2025-04-03 21:49">2025-04-03 21:49</td>
+                        <td title="3994.2">3994.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5362,9 +5365,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5000">5000</td>
-                        <td title="2025-04-03 21:26">2025-04-03 21:26</td>
-                        <td title="2025-04-04 14:06">2025-04-04 14:06</td>
-                        <td title="4001.9">4001.9</td>
+                        <td title="2025-04-03 21:49">2025-04-03 21:49</td>
+                        <td title="2025-04-04 14:29">2025-04-04 14:29</td>
+                        <td title="4001.5">4001.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5384,9 +5387,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5000">5000</td>
-                        <td title="2025-04-04 14:06">2025-04-04 14:06</td>
-                        <td title="2025-04-05 06:46">2025-04-05 06:46</td>
-                        <td title="4009.2">4009.2</td>
+                        <td title="2025-04-04 14:29">2025-04-04 14:29</td>
+                        <td title="2025-04-05 07:09">2025-04-05 07:09</td>
+                        <td title="4008.8">4008.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5406,9 +5409,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="5000">5000</td>
-                        <td title="2025-04-05 06:46">2025-04-05 06:46</td>
-                        <td title="2025-04-05 23:26">2025-04-05 23:26</td>
-                        <td title="4016.6">4016.6</td>
+                        <td title="2025-04-05 07:09">2025-04-05 07:09</td>
+                        <td title="2025-04-05 23:49">2025-04-05 23:49</td>
+                        <td title="4016.2">4016.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5516,9 +5519,9 @@
                         <td title=""></td>
                         <td title="35563">35563</td>
                         <td title="11077">11077</td>
-                        <td title="2025-03-24 14:46">2025-03-24 14:46</td>
-                        <td title="2025-03-26 03:47">2025-03-26 03:47</td>
-                        <td title="4396.2">4396.2</td>
+                        <td title="2025-03-24 15:09">2025-03-24 15:09</td>
+                        <td title="2025-03-26 04:10">2025-03-26 04:10</td>
+                        <td title="4395.8">4395.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
@@ -5626,9 +5629,9 @@
                         <td title=""></td>
                         <td title="0">0</td>
                         <td title="1800">1800</td>
-                        <td title="2025-03-26 08:43">2025-03-26 08:43</td>
-                        <td title="2025-03-26 13:43">2025-03-26 13:43</td>
-                        <td title="4506.3">4506.3</td>
+                        <td title="2025-03-26 09:06">2025-03-26 09:06</td>
+                        <td title="2025-03-26 14:06">2025-03-26 14:06</td>
+                        <td title="4505.9">4505.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">

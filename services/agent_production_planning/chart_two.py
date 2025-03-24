@@ -330,14 +330,16 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            font-size: 11px;  /* Smaller base font size */
+            font-size: 9px;  /* Smaller base font size */
             width: 100%;
             table-layout: fixed;  /* Fixed table layout for better control */
+            margin: 0;
+            padding: 0;
         }}
         
         table.dataTable th {{
-            font-size: 11px;  /* Smaller header font */
-            padding: 4px !important;  /* Reduced padding */
+            font-size: 9px;  /* Extra small header font */
+            padding: 1px 2px !important;  /* Minimal padding */
             font-weight: 600;
             white-space: nowrap;  /* Prevent wrapping in headers */
             overflow: hidden;
@@ -345,39 +347,40 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         }}
         
         table.dataTable td {{
-            font-size: 11px;  /* Smaller cell font */
-            padding: 3px 4px !important;  /* Very compact cells */
+            font-size: 9px;  /* Extra small cell font */
+            padding: 1px 2px !important;  /* Minimal padding */
             overflow: hidden;
             text-overflow: ellipsis;  /* Show ellipsis for overflow */
-            white-space: nowrap;
+            white-space: normal;  /* Allow text to wrap */
         }}
         
-        /* Set specific column widths based on content */
-        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 90px; }} /* LCD_DATE */
-        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 95px; }} /* JOB */
-        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 120px; }} /* PROCESS_CODE */
-        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 65px; }} /* RSC_LOCATION */
-        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) {{ width: 80px; }} /* RSC_CODE */
-        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) {{ width: 60px; }} /* NUMBER_OPERATOR */
-        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) {{ width: 70px; }} /* JOB_QUANTITY */
-        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) {{ width: 75px; }} /* EXPECT_OUTPUT_PER_HOUR */
-        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) {{ width: 50px; }} /* PRIORITY */
-        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) {{ width: 60px; }} /* HOURS_NEED */
-        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) {{ width: 65px; }} /* SETTING_HOURS */
-        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) {{ width: 65px; }} /* BREAK_HOURS */
-        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) {{ width: 50px; }} /* NO_PROD */
-        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) {{ width: 90px; }} /* START_DATE */
-        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) {{ width: 80px; }} /* ACCUMULATED_DAILY_OUTPUT */
-        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) {{ width: 70px; }} /* BALANCE_QUANTITY */
-        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) {{ width: 90px; }} /* START_TIME */
-        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) {{ width: 90px; }} /* END_TIME */
-        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) {{ width: 50px; }} /* BAL_HR */
-        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) {{ width: 70px; }} /* BUFFER_STATUS */
+        /* Set specific column widths based on content - reduced to fit all columns */
+        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 65px; }} /* LCD_DATE */
+        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 65px; }} /* JOB */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 80px; }} /* PROCESS_CODE */
+        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 40px; }} /* RSC_LOCATION */
+        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) {{ width: 55px; }} /* RSC_CODE */
+        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) {{ width: 35px; }} /* NUMBER_OPERATOR */
+        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) {{ width: 45px; }} /* JOB_QUANTITY */
+        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) {{ width: 45px; }} /* EXPECT_OUTPUT_PER_HOUR */
+        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) {{ width: 30px; }} /* PRIORITY */
+        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) {{ width: 40px; }} /* HOURS_NEED */
+        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) {{ width: 45px; }} /* SETTING_HOURS */
+        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) {{ width: 45px; }} /* BREAK_HOURS */
+        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) {{ width: 35px; }} /* NO_PROD */
+        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) {{ width: 65px; }} /* START_DATE */
+        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) {{ width: 55px; }} /* ACCUMULATED_DAILY_OUTPUT */
+        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) {{ width: 45px; }} /* BALANCE_QUANTITY */
+        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) {{ width: 65px; }} /* START_TIME */
+        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) {{ width: 65px; }} /* END_TIME */
+        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) {{ width: 35px; }} /* BAL_HR */
+        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) {{ width: 50px; }} /* BUFFER_STATUS */
         
         /* Make table container scrollable horizontally */
         .table-container {{
-            overflow-x: auto;
+            overflow-x: visible;
             margin-bottom: 30px;
+            width: 100%;
         }}
         
         /* Highlight row on hover for better readability */
@@ -408,7 +411,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
     </style>
 </head>
 <body>
-    <div class="container-fluid">
+    <div class="container-fluid" style="max-width: 100%; padding: 10px;">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h1 class="mb-0" style="font-size: 20px;"><i class="bi bi-calendar-check me-2"></i>Production Scheduler</h1>
             <div>
