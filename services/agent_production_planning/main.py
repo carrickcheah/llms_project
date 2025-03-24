@@ -160,7 +160,7 @@ def main():
     parser = argparse.ArgumentParser(description="Production Planning Scheduler")
     parser.add_argument("--file", default=os.getenv('file_path'), 
                        help="Path to the Excel file with job data")
-    parser.add_argument("--max-jobs", type=int, default=250, help="Maximum number of jobs to schedule (default: 250)")
+    parser.add_argument("--max-jobs", type=int, default=500, help="Maximum number of jobs to schedule (default: 250)")
     parser.add_argument("--force-greedy", action="store_true", help="Force the use of the greedy scheduler")
     parser.add_argument("--output", default="interactive_schedule.html", help="Output file for the Gantt chart")
     parser.add_argument("--enforce-sequence", action="store_true", default=True, help="Enforce process sequence dependencies (default: True)")
