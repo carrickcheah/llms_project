@@ -144,15 +144,22 @@ def add_schedule_times_and_buffer(jobs, schedule):
                 job_end = original_end
             
             # Override with exact START_DATE if specified for any job with this constraint
+            # Check both formats of the START_DATE field
+            start_date_epoch = None
             if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']):
+                start_date_epoch = job['START_DATE_EPOCH']
+            elif 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None and not pd.isna(job['START_DATE _EPOCH']):
+                start_date_epoch = job['START_DATE _EPOCH']
+                
+            if start_date_epoch is not None:
                 # CRITICAL FIX: Always prioritize START_DATE
-                job_start = job['START_DATE_EPOCH']
+                job_start = start_date_epoch
                 # Adjust end time to maintain the same duration
                 duration = original_end - original_start
                 job_end = job_start + duration
                 
                 # For logging
-                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+                start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
                 logger.info(f"Setting START_TIME to match START_DATE ({start_date}) for job {process_code}")
             
             # Make sure start and end times are valid numbers, not NaN
@@ -174,15 +181,35 @@ def add_schedule_times_and_buffer(jobs, schedule):
             job_start = job['START_TIME'] 
             job_end = job['END_TIME']
             
-            # Calculate buffer in hours (with validation)
-            if due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)) and due_time > 0:
-                buffer_seconds = max(0, due_time - job_end)
-                buffer_hours = buffer_seconds / 3600
-            else:
-                # Default buffer if due time is invalid
+            # Calculate buffer in hours (with improved validation)
+            valid_due_time = False
+            if due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)):
+                # Check if due time is reasonable (not too far in past or future)
+                current_time = int(datetime.now().timestamp())
+                # Only use due dates that are after the job's end time or at most 1 year in the future
+                if job_end <= due_time <= (current_time + 365 * 24 * 3600):
+                    buffer_seconds = max(0, due_time - job_end)
+                    buffer_hours = buffer_seconds / 3600
+                    valid_due_time = True
+                elif due_time < job_end:
+                    # Due date is before job end - LATE!
+                    buffer_seconds = 0
+                    buffer_hours = 0
+                    valid_due_time = True
+                    logger.warning(f"Job {process_code} will be LATE! Due at {datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')} but ends at {datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')}")
+                else:
+                    # Due date too far in future, might be incorrect
+                    logger.warning(f"Due date for {process_code} is too far in future ({datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')}), might be incorrect")
+            
+            if not valid_due_time:
+                # Set a reasonable default buffer for invalid due dates
                 buffer_seconds = 24 * 3600  # 24 hours default
                 buffer_hours = 24.0
                 logger.warning(f"Set default BAL_HR for job {process_code} due to invalid LCD_DATE_EPOCH: {due_time}")
+            
+            # No capping - return true buffer value regardless of size
+            if buffer_hours > 720:  # Just log large values (over 30 days) but don't cap them
+                logger.info(f"Job {process_code} has a large buffer of {buffer_hours:.1f} hours ({buffer_hours/24:.1f} days)")
             
             job['BAL_HR'] = buffer_hours
             job['BUFFER_STATUS'] = get_buffer_status(buffer_hours)
@@ -266,18 +293,30 @@ def main():
         # Ensure START_DATE constraints are strictly enforced
         logger.info("Ensuring START_DATE constraints are enforced...")
         
-        # Only keep START_DATE_EPOCH when it was actually provided in the input
-        # DO NOT set defaults for those without specified constraints
+        # Handle all forms of START_DATE in jobs
         for job in jobs:
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None:
+            # Check for both field name formats
+            start_date_epoch = None
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']):
+                start_date_epoch = job['START_DATE_EPOCH']
+            elif 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None and not pd.isna(job['START_DATE _EPOCH']):
+                # Copy to standard format for consistency
+                start_date_epoch = job['START_DATE _EPOCH']
+                job['START_DATE_EPOCH'] = start_date_epoch
+            
+            # Only enforce START_DATE constraints if they were actually provided
+            if start_date_epoch is not None:
                 # Only enforce constraints that are in the future
-                if job['START_DATE_EPOCH'] > current_time:
-                    logger.info(f"ENFORCING START_DATE {datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')} for {job['PROCESS_CODE']}")
+                if start_date_epoch > current_time:
+                    logger.info(f"ENFORCING START_DATE {datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')} for {job['PROCESS_CODE']}")
             else:
                 # If START_DATE wasn't provided in input, remove it from job dictionary if present
                 if 'START_DATE_EPOCH' in job:
                     del job['START_DATE_EPOCH']
                     logger.debug(f"Removed empty START_DATE_EPOCH for {job['PROCESS_CODE']}")
+                if 'START_DATE _EPOCH' in job:
+                    del job['START_DATE _EPOCH']
+                    logger.debug(f"Removed empty START_DATE _EPOCH for {job['PROCESS_CODE']}")
 
     # Schedule jobs
     start_time = time.time()

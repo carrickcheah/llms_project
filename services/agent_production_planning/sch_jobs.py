@@ -23,22 +23,33 @@ def extract_process_number(process_code):
         return seq
     return 999  # Default if parsing fails
 
-def extract_job_family(process_code):
+def extract_job_family(process_code, job_id=None):
     """
     Extract the job family (e.g., 'CP08-231B') from the process code.
+    If job_id is provided, it will be included in the family to distinguish between
+    different jobs that share the same process code pattern.
     """
     process_code = str(process_code).upper()
     match = re.search(r'(.*?)-P\d+', process_code)
     if match:
         family = match.group(1)
         logger.debug(f"Extracted family {family} from {process_code}")
+        # If a job_id is provided, include it in the family
+        if job_id:
+            return f"{family}_{job_id}"
         return family
     parts = process_code.split("-P")
     if len(parts) >= 2:
         family = parts[0]
         logger.debug(f"Extracted family {family} from {process_code} (using split)")
+        # If a job_id is provided, include it in the family
+        if job_id:
+            return f"{family}_{job_id}"
         return family
     logger.warning(f"Could not extract family from {process_code}, using full code")
+    # If a job_id is provided, include it in the family
+    if job_id:
+        return f"{process_code}_{job_id}"
     return process_code
 
 def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_limit_seconds=300):
@@ -60,7 +71,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     current_time = int(datetime.now().timestamp())
 
     # Determine horizon (end of scheduling period)
-    horizon_end = current_time + max(job.get('LCD_DATE_EPOCH', current_time + 2592000) for job in jobs) + max(job['processing_time'] for job in jobs)
+    horizon_end = int(current_time + max(job.get('LCD_DATE_EPOCH', current_time + 2592000) for job in jobs) + max(job['processing_time'] for job in jobs))
     horizon = horizon_end - current_time
 
     # Create CP-SAT model
@@ -90,10 +101,12 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             logger.info(f"  Job {job['PROCESS_CODE']} on {resource_location}: MUST start EXACTLY at {start_date}")
         logger.info("START_DATE constraints will be strictly enforced in the model")
 
-    # Step 1: Organize jobs by families and process numbers
+    # Step 1: Organize jobs by families and process numbers, including JOB ID to differentiate
     family_jobs = {}
     for job in jobs:
-        family = extract_job_family(job['PROCESS_CODE'])
+        # Include JOB ID in family to differentiate jobs with same process code pattern
+        job_id = job.get('JOB', '')
+        family = extract_job_family(job['PROCESS_CODE'], job_id)
         if family not in family_jobs:
             family_jobs[family] = []
         family_jobs[family].append(job)
@@ -131,9 +144,10 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         due_time = job.get('LCD_DATE_EPOCH', horizon_end - duration)
         priority = job['PRIORITY']
 
-        # Get user-defined start date if exists
-        has_start_date = 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None
-        user_start_time = job.get('START_DATE_EPOCH', current_time)
+        # Get user-defined start date if exists (handle both column formats)
+        has_start_date = (('START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None) or 
+                         ('START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None))
+        user_start_time = job.get('START_DATE_EPOCH', job.get('START_DATE _EPOCH', current_time))
 
         # Validate duration
         if not isinstance(duration, (int, float)) or duration <= 0:
@@ -152,23 +166,28 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             job['START_TIME'] = int_start_time
         else:
             # Regular job with flexible start time
-            earliest_start = max(current_time, user_start_time)
+            earliest_start = int(current_time)  # All other jobs start from current time
             start_var = model.NewIntVar(earliest_start, horizon_end, f'start_{machine_id}_{job_id}')
             
-        end_var = model.NewIntVar(current_time, horizon_end + duration, f'end_{machine_id}_{job_id}')
-        interval_var = model.NewIntervalVar(start_var, duration, end_var, f'interval_{machine_id}_{job_id}')
+        # Ensure end_time domain is integer
+        end_time = int(horizon_end + duration)
+        end_var = model.NewIntVar(current_time, end_time, f'end_{machine_id}_{job_id}')
+        
+        # Ensure duration is integer for interval var
+        int_duration = int(duration)
+        interval_var = model.NewIntervalVar(start_var, int_duration, end_var, f'interval_{machine_id}_{job_id}')
 
         start_vars[(job_id, machine_id)] = start_var
         end_vars[(job_id, machine_id)] = end_var
         intervals[(job_id, machine_id)] = interval_var
 
-        # Constraint: end = start + duration
-        model.Add(end_var == start_var + duration)
+        # Constraint: end = start + duration (using integer duration)
+        model.Add(end_var == start_var + int_duration)
 
     # Add machine no-overlap constraints with duplicate job detection
     for machine in machines:
-        # Create a set of unique job IDs to prevent duplicates
-        unique_job_ids = set()
+        # Create a set of unique job signatures to prevent duplicates
+        unique_job_signatures = set()
         machine_intervals = []
         
         for job in jobs:
@@ -176,12 +195,20 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                 job_id = job['PROCESS_CODE']
                 interval_key = (job_id, job.get('RSC_LOCATION', job.get('MACHINE_ID')))
                 
+                # Create a unique signature using JOB, PROCESS_CODE, RSC_LOCATION, and RSC_CODE
+                job_signature = (
+                    job.get('JOB', ''),
+                    job['PROCESS_CODE'],
+                    job.get('RSC_LOCATION', job.get('MACHINE_ID', '')),
+                    job.get('RSC_CODE', '')
+                )
+                
                 # Only add the interval if this exact job hasn't been seen before
-                if job_id not in unique_job_ids:
-                    unique_job_ids.add(job_id)
+                if job_signature not in unique_job_signatures:
+                    unique_job_signatures.add(job_signature)
                     machine_intervals.append(intervals[interval_key])
                 else:
-                    logger.warning(f"Skipping duplicate job {job_id} on machine {machine} to prevent constraint conflicts")
+                    logger.warning(f"Skipping duplicate job {job_id} on machine {machine} with signature {job_signature} to prevent constraint conflicts")
         
         if machine_intervals:
             model.AddNoOverlap(machine_intervals)
@@ -210,10 +237,33 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                     logger.warning(f"Skipping sequence constraint to avoid infeasibility")
                     continue
                 
-                # Check if jobs overlap directly (duplicate jobs with same process code)
+                # Verify this isn't a self-dependency (same process code)
                 if job1['PROCESS_CODE'] == job2['PROCESS_CODE']:
-                    logger.warning(f"Skipping sequence constraint for duplicate job {job1['PROCESS_CODE']}")
+                    logger.warning(f"Skipping invalid self-dependency for {job1['PROCESS_CODE']}")
                     continue
+                
+                # Get process numbers for verification
+                proc1 = extract_process_number(job1['PROCESS_CODE'])
+                proc2 = extract_process_number(job2['PROCESS_CODE'])
+                
+                # Double-check process numbers are sequential
+                if proc2 != proc1 + 1:
+                    logger.warning(f"Process numbers not sequential: {job1['PROCESS_CODE']} ({proc1}) → {job2['PROCESS_CODE']} ({proc2})")
+                
+                # For logging, create signatures to show the full context
+                job1_signature = (
+                    job1.get('JOB', ''),
+                    job1['PROCESS_CODE'],
+                    job1.get('RSC_LOCATION', job1.get('MACHINE_ID', '')),
+                    job1.get('RSC_CODE', '')
+                )
+                
+                job2_signature = (
+                    job2.get('JOB', ''),
+                    job2['PROCESS_CODE'],
+                    job2.get('RSC_LOCATION', job2.get('MACHINE_ID', '')),
+                    job2.get('RSC_CODE', '')
+                )
                 
                 # Add the constraint normally
                 model.Add(end_vars[(job1['PROCESS_CODE'], machine_id1)] <= 
@@ -284,12 +334,17 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         total_jobs += 1
 
         # For jobs with START_DATE, verify that the schedule honors the constraint
-        if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and job['START_DATE_EPOCH'] > current_time:
-            if start != job['START_DATE_EPOCH']:
+        start_date_epoch = job.get('START_DATE_EPOCH', job.get('START_DATE _EPOCH'))
+        if start_date_epoch is not None and start_date_epoch > current_time:
+            if start != start_date_epoch:
                 logger.warning(f"⚠️ Job {job_id} scheduled at {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} " 
-                             f"instead of requested START_DATE={datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')}")
+                             f"instead of requested START_DATE={datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')}")
             else:
                 logger.info(f"✅ Job {job_id} scheduled exactly at requested START_DATE")
+        
+        # Store actual start and end times for all jobs
+        job['START_TIME'] = start
+        job['END_TIME'] = end
         
         if machine_id not in schedule:
             schedule[machine_id] = []
@@ -363,24 +418,36 @@ if __name__ == "__main__":
             total_jobs = sum(len(jobs_list) for jobs_list in schedule.values())
             logger.info(f"Generated schedule with {total_jobs} tasks across {len(schedule)} machines")
             
+            # Verify all jobs have START_TIME and END_TIME values
+            for job in jobs:
+                if 'START_TIME' not in job or 'END_TIME' not in job:
+                    job_id = job['PROCESS_CODE']
+                    logger.warning(f"Job {job_id} is missing START_TIME or END_TIME. Adding them now.")
+                    for machine, tasks in schedule.items():
+                        for task_id, start, end, _ in tasks:
+                            if task_id == job_id:
+                                job['START_TIME'] = start
+                                job['END_TIME'] = end
+                                break
+            
             # Count jobs with START_DATE that were scheduled exactly as requested
-            start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and job['START_DATE_EPOCH'] > int(datetime.now().timestamp())]
+            start_date_jobs = [job for job in jobs if 
+                              ('START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and job['START_DATE_EPOCH'] > int(datetime.now().timestamp())) or
+                              ('START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None and job['START_DATE _EPOCH'] > int(datetime.now().timestamp()))]
+            
             if start_date_jobs:
                 logger.info(f"Summary of {len(start_date_jobs)} jobs with START_DATE constraints:")
                 for job in start_date_jobs:
                     job_id = job['PROCESS_CODE']
                     resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
-                    for machine, tasks in schedule.items():
-                        for task_id, start, _, _ in tasks:
-                            if task_id == job_id:
-                                start_time = start
-                                requested_time = job['START_DATE_EPOCH']
-                                if start_time == requested_time:
-                                    logger.info(f"  ✅ Job {job_id} scheduled exactly at START_DATE={datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
-                                else:
-                                    logger.warning(f"  ❌ Job {job_id} scheduled at {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M')} " 
-                                                 f"instead of requested {datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
-                                break
+                    requested_time = job.get('START_DATE_EPOCH', job.get('START_DATE _EPOCH'))
+                    start_time = job.get('START_TIME')
+                    
+                    if start_time == requested_time:
+                        logger.info(f"  ✅ Job {job_id} scheduled exactly at START_DATE={datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
+                    else:
+                        logger.warning(f"  ❌ Job {job_id} scheduled at {datetime.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M')} " 
+                                     f"instead of requested {datetime.fromtimestamp(requested_time).strftime('%Y-%m-%d %H:%M')}")
         else:
             logger.error("Failed to generate valid schedule")
     except Exception as e:

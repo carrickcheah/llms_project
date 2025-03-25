@@ -303,7 +303,11 @@ def load_jobs_planning_data(excel_file):
             logger.warning("No machine column found (RSC_LOCATION or MACHINE_ID)")
         
         # Get processing time in seconds
-        if 'PROCESSING_TIME_HR' in df.columns:
+        if 'HOURS_NEED' in df.columns:
+            # Use HOURS_NEED directly from Excel and convert to seconds
+            logger.info("Using HOURS_NEED from Excel for job durations")
+            df['processing_time'] = df['HOURS_NEED'] * 3600
+        elif 'PROCESSING_TIME_HR' in df.columns:
             # Convert hours to seconds
             df['processing_time'] = df['PROCESSING_TIME_HR'] * 3600
         elif 'PROC_TIME_HR' in df.columns:

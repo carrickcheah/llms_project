@@ -118,6 +118,11 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         # FIRST PRIORITY: EXPLICIT START_DATE OVERRIDES
         for job in jobs:
             process_code = job['PROCESS_CODE']
+            # Ensure all process codes have entries in the times dictionaries
+            if process_code not in start_times and process_code not in end_times:
+                logger.warning(f"Process {process_code} missing from schedule, will not be visualized properly")
+                continue
+                
             if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] and process_code in start_times:
                 # For START_DATE jobs, always use exactly the requested START_DATE for visualization
                 original_start = start_times[process_code]
@@ -198,6 +203,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         is_first_process = (family_processes[family][0][1] == process_code)
                     
                     # For jobs with START_DATE constraints, prioritize using the exact date
+                    # IMPORTANT: We store the START_DATE_EPOCH value for display in the START_DATE column
+                    # but we still want to calculate and show START_TIME and END_TIME values
                     # Check both formats of START_DATE_EPOCH (with and without space)
                     start_date_epoch = None
                     if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
@@ -213,9 +220,15 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         logger.info(f"Using START_DATE={user_start_date} for {process_code} in visualization")
                 
                 # Format the dates for display
+                # Always format job_start and job_end for display even if START_DATE is provided
                 job_start_date = format_date_correctly(job_start)
                 end_date = format_date_correctly(job_end)
                 due_date = format_date_correctly(due_time, is_lcd_date=True)
+                
+                # IMPORTANT: Also update the original dictionaries to ensure data is preserved
+                # This ensures that all jobs (not just START_DATE jobs) have proper START_TIME and END_TIME
+                start_times[process_code] = job_start
+                end_times[process_code] = job_end
                 
                 # Get START_DATE for display
                 user_start_date = ""
@@ -237,17 +250,21 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                                isinstance(job_start, (int, float)) and 
                                isinstance(job_end, (int, float)))
                 
-                # Calculate HOURS_NEED based on formula, with fallback to scheduled duration
-                if job_quantity > 0 and expect_output > 0:
-                    # HOURS_NEED is JOB_QUANTITY/EXPECT_OUTPUT_PER_HOUR
-                    hours_need = job_quantity / expect_output
+                # Get HOURS_NEED directly from the Excel data
+                if 'HOURS_NEED' in job and job['HOURS_NEED'] is not None and not pd.isna(job['HOURS_NEED']) and isinstance(job['HOURS_NEED'], (int, float)):
+                    # Use the HOURS_NEED value directly from Excel
+                    hours_need = job['HOURS_NEED']
+                    logger.info(f"Using HOURS_NEED={hours_need} directly from Excel for {process_code}")
+                # Fallback only if HOURS_NEED is not available in Excel
                 elif valid_times:
-                    # Fallback to scheduled duration if formula can't be applied
+                    # Fallback to scheduled duration if HOURS_NEED not found
                     duration_seconds = job_end - job_start
                     hours_need = duration_seconds / 3600
+                    logger.info(f"HOURS_NEED not found in Excel for {process_code}, using calculated duration: {hours_need:.2f} hours")
                 else:
                     # Default if no valid data available
                     hours_need = 1.0
+                    logger.info(f"HOURS_NEED not found in Excel for {process_code} and times invalid, using default: 1.0 hour")
                 
                 # Calculate duration only with valid times
                 if valid_times:
@@ -258,12 +275,36 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     duration_hours = 1.0
                 
                 # Calculate buffer only with valid times and due time
-                if valid_times and due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)) and due_time > 0:
-                    buffer_seconds = max(0, due_time - job_end)
-                    buffer_hours = buffer_seconds / 3600
-                else:
-                    buffer_seconds = 0
-                    buffer_hours = 0.0
+                valid_due_time = False
+                if valid_times and due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)):
+                    # Check if due time is reasonable (not too far in past or future)
+                    current_time = int(datetime.now().timestamp())
+                    # Only use due dates that are after the job's end time or at most 1 year in the future
+                    if job_end <= due_time <= (current_time + 365 * 24 * 3600):
+                        buffer_seconds = max(0, due_time - job_end)
+                        buffer_hours = buffer_seconds / 3600
+                        valid_due_time = True
+                    elif due_time < job_end:
+                        # Due date is before job end - LATE!
+                        buffer_seconds = 0
+                        buffer_hours = 0
+                        valid_due_time = True
+                        logger.warning(f"Chart: Job {process_code} will be LATE! Due at {datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')} but ends at {datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')}")
+                    else:
+                        # Due date too far in future, might be incorrect
+                        logger.warning(f"Chart: Due date for {process_code} is too far in future, might be incorrect")
+                
+                if not valid_due_time:
+                    if 'BAL_HR' in job and job['BAL_HR'] is not None and not pd.isna(job['BAL_HR']) and isinstance(job['BAL_HR'], (int, float)):
+                        # Use pre-calculated BAL_HR if available
+                        buffer_hours = job['BAL_HR']
+                    else:
+                        # Set a reasonable default buffer for invalid due dates
+                        buffer_hours = 24.0
+                
+                # No capping - return true buffer value regardless of size
+                if buffer_hours > 720:  # Just log large values (over 30 days) but don't cap them
+                    logger.info(f"Chart: Job {process_code} has a large buffer of {buffer_hours:.1f} hours ({buffer_hours/24:.1f} days)")
                 
                 # Job family and sequence
                 # Use RSC_CODE if available, fall back to legacy ways of determining job code
@@ -313,6 +354,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     balance_quantity = 0
                 
                 # Add to schedule data
+                # IMPORTANT: We're keeping job_start_date and end_date in the schedule_data
+                # even when START_DATE is specified to ensure they appear in the HTML output
                 schedule_data.append({
                     'LCD_DATE': due_date,
                     'JOB': job_name,
@@ -617,8 +660,19 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             start_date = row['START_DATE'] if pd.notna(row['START_DATE']) else "N/A"
             accumulated = row['ACCUMULATED_DAILY_OUTPUT'] if pd.notna(row['ACCUMULATED_DAILY_OUTPUT']) else 0
             balance = row['BALANCE_QUANTITY'] if pd.notna(row['BALANCE_QUANTITY']) else 0
-            start_time = row['START_TIME'] if pd.notna(row['START_TIME']) else "N/A"
-            end_time = row['END_TIME'] if pd.notna(row['END_TIME']) else "N/A"
+            
+            # IMPORTANT: Ensure START_TIME and END_TIME are always properly displayed
+            # This is critical to show calculated values even for jobs without START_DATE constraints
+            start_time = row['START_TIME'] 
+            end_time = row['END_TIME']
+            
+            # Enhanced debugging for START_TIME and END_TIME values
+            if pd.isna(start_time) or start_time == "" or start_time is None:
+                logger.warning(f"Missing START_TIME for job {process_code}")
+                start_time = "N/A"
+            if pd.isna(end_time) or end_time == "" or end_time is None:
+                logger.warning(f"Missing END_TIME for job {process_code}")
+                end_time = "N/A"
             
             html_content += f"""
                     <tr class="{buffer_class}">
