@@ -64,18 +64,38 @@ def add_schedule_times_and_buffer(jobs, schedule):
     for family, processes in family_processes.items():
         # Check if any process in this family has a START_DATE
         for seq_num, process_code, job in processes:
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] and process_code in times:
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']) and process_code in times:
                 # Calculate the time shift (positive for earlier, negative for later)
                 scheduled_start = times[process_code][0]
-                requested_start = job['START_DATE_EPOCH']
-                time_shift = scheduled_start - requested_start
                 
-                # Store the time shift for this family
-                if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
-                    family_time_shifts[family] = time_shift
+                # Get the START_DATE_EPOCH value (checking both fields)
+                requested_start = None
+                if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None:
+                    if isinstance(job['START_DATE_EPOCH'], float) and not pd.isna(job['START_DATE_EPOCH']):
+                        requested_start = job['START_DATE_EPOCH']
+                    elif not isinstance(job['START_DATE_EPOCH'], float):
+                        requested_start = job['START_DATE_EPOCH']
+                        
+                if requested_start is None and 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None:
+                    if isinstance(job['START_DATE _EPOCH'], float) and not pd.isna(job['START_DATE _EPOCH']):
+                        requested_start = job['START_DATE _EPOCH']
+                    elif not isinstance(job['START_DATE _EPOCH'], float):
+                        requested_start = job['START_DATE _EPOCH']
+                        
+                # Only calculate time shift for valid values
+                time_shift = None
+                if requested_start is not None:
+                    time_shift = scheduled_start - requested_start
+                    
+                    # Store the time shift for this family
+                    if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
+                        family_time_shifts[family] = time_shift
                 
-                logger.info(f"Family {family} has START_DATE constraint for {process_code}: " 
-                          f"shift={time_shift/3600:.1f} hours")
+                if time_shift is not None:
+                    logger.info(f"Family {family} has START_DATE constraint for {process_code}: " 
+                              f"shift={time_shift/3600:.1f} hours")
+                else:
+                    logger.info(f"Family {family} has START_DATE constraint for {process_code}, but no valid time shift calculated")
     
     # Step 3: Apply time shifts to all processes in affected families
     job_adjustments = {}  # Store adjusted times for each job
@@ -90,15 +110,24 @@ def add_schedule_times_and_buffer(jobs, schedule):
             if process_code in times:
                 original_start, original_end = times[process_code]
                 
-                # Apply the time shift
-                adjusted_start = original_start - time_shift
-                adjusted_end = original_end - time_shift
-                
-                # Store the adjusted times
-                job_adjustments[process_code] = (adjusted_start, adjusted_end)
-                
-                logger.info(f"  Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
-                          f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+                # Apply the time shift, checking for valid values first
+                # Skip NaN or invalid values
+                if time_shift is None or (isinstance(time_shift, float) and (pd.isna(time_shift) or not pd.notna(time_shift))):
+                    logger.warning(f"Skipping time shift for {process_code} due to invalid shift value: {time_shift}")
+                    continue
+                    
+                # Only apply time shift to valid timestamps
+                try:
+                    adjusted_start = original_start - time_shift
+                    adjusted_end = original_end - time_shift
+                    
+                    # Store the adjusted times
+                    job_adjustments[process_code] = (adjusted_start, adjusted_end)
+                    
+                    logger.info(f"  Adjusted {process_code}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
+                              f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+                except Exception as e:
+                    logger.warning(f"Error adjusting time for {process_code}: {e}")
     
     # Step 4: Update job dictionaries with adjusted times
     for job in jobs:
@@ -115,7 +144,7 @@ def add_schedule_times_and_buffer(jobs, schedule):
                 job_end = original_end
             
             # Override with exact START_DATE if specified for any job with this constraint
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']):
                 # CRITICAL FIX: Always prioritize START_DATE
                 job_start = job['START_DATE_EPOCH']
                 # Adjust end time to maintain the same duration
@@ -126,13 +155,34 @@ def add_schedule_times_and_buffer(jobs, schedule):
                 start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
                 logger.info(f"Setting START_TIME to match START_DATE ({start_date}) for job {process_code}")
             
-            # Update job with adjusted times
-            job['START_TIME'] = job_start
-            job['END_TIME'] = job_end
+            # Make sure start and end times are valid numbers, not NaN
+            if job_start is not None and not pd.isna(job_start) and isinstance(job_start, (int, float)):
+                job['START_TIME'] = job_start
+            else:
+                # If invalid, set a default start time (current time)
+                job['START_TIME'] = int(datetime.now().timestamp())
+                logger.warning(f"Set default START_TIME for job {process_code} due to invalid value: {job_start}")
+                
+            if job_end is not None and not pd.isna(job_end) and isinstance(job_end, (int, float)):
+                job['END_TIME'] = job_end
+            else:
+                # If invalid, set default end time (start + 1 hour)
+                job['END_TIME'] = job['START_TIME'] + 3600
+                logger.warning(f"Set default END_TIME for job {process_code} due to invalid value: {job_end}")
             
-            # Calculate buffer in hours
-            buffer_seconds = max(0, due_time - job_end)
-            buffer_hours = buffer_seconds / 3600
+            # Recalculate to ensure we have valid values
+            job_start = job['START_TIME'] 
+            job_end = job['END_TIME']
+            
+            # Calculate buffer in hours (with validation)
+            if due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)) and due_time > 0:
+                buffer_seconds = max(0, due_time - job_end)
+                buffer_hours = buffer_seconds / 3600
+            else:
+                # Default buffer if due time is invalid
+                buffer_seconds = 24 * 3600  # 24 hours default
+                buffer_hours = 24.0
+                logger.warning(f"Set default BAL_HR for job {process_code} due to invalid LCD_DATE_EPOCH: {due_time}")
             
             job['BAL_HR'] = buffer_hours
             job['BUFFER_STATUS'] = get_buffer_status(buffer_hours)
@@ -195,12 +245,21 @@ def main():
 
     logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines")
 
-    # Check for START_DATE values and log them
-    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    # Check for START_DATE values and log them (supporting both field name formats)
+    start_date_jobs = [job for job in jobs if 
+                      ('START_DATE_EPOCH' in job and job.get('START_DATE_EPOCH') is not None and not pd.isna(job.get('START_DATE_EPOCH')) and job.get('START_DATE_EPOCH') > current_time) or 
+                      ('START_DATE _EPOCH' in job and job.get('START_DATE _EPOCH') is not None and not pd.isna(job.get('START_DATE _EPOCH')) and job.get('START_DATE _EPOCH') > current_time)]
     if start_date_jobs:
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints:")
         for job in start_date_jobs:
-            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            # Get START_DATE_EPOCH from either field format
+            start_date_epoch = None
+            if 'START_DATE_EPOCH' in job and job.get('START_DATE_EPOCH') is not None and not pd.isna(job.get('START_DATE_EPOCH')):
+                start_date_epoch = job.get('START_DATE_EPOCH')
+            elif 'START_DATE _EPOCH' in job and job.get('START_DATE _EPOCH') is not None and not pd.isna(job.get('START_DATE _EPOCH')):
+                start_date_epoch = job.get('START_DATE _EPOCH')
+                
+            start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M') if start_date_epoch is not None else 'INVALID DATE'
             resource_location = job.get('RSC_LOCATION') or job.get('MACHINE_ID')  # Try both column names
             logger.info(f"  Job {job['PROCESS_CODE']} (Resource: {resource_location}): MUST start EXACTLY at {start_date}")
         
@@ -238,7 +297,7 @@ def main():
         logger.info("Falling back to greedy scheduler...")
         try:
             # Ensure START_DATE constraints are properly passed to the greedy scheduler
-            start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+            start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']) and job['START_DATE_EPOCH'] > current_time]
             if start_date_jobs:
                 logger.info(f"Passing {len(start_date_jobs)} START_DATE constraints to greedy scheduler:")
                 for job in start_date_jobs:
@@ -350,10 +409,19 @@ def main():
                 resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
                 buffer = job['BAL_HR']
                 lcd_epoch = job.get('LCD_DATE_EPOCH', 0)
-                # Force display with 08:00 time
+                # Keep the original date and time from the Excel file
                 dt = datetime.fromtimestamp(lcd_epoch)
-                due_date = f"{dt.strftime('%Y-%m-%d')} 08:00"
-                print(f"  Debug - Job {process}: LCD_DATE_EPOCH={lcd_epoch}, formatted={due_date}")
+                due_date = dt.strftime('%Y-%m-%d %H:%M')
+                orig_date = ""
+                for j in jobs:
+                    if j['PROCESS_CODE'] == process:
+                        if 'LCD_DATE' in j and pd.notna(j['LCD_DATE']):
+                            # Use the original timestamp from Excel
+                            if isinstance(j['LCD_DATE'], str):
+                                orig_date = f" (original={j['LCD_DATE']})"
+                            else:
+                                orig_date = f" (original={j['LCD_DATE'].strftime('%Y-%m-%d %H:%M')})"
+                print(f"  Debug - Job {process}: LCD_DATE_EPOCH={lcd_epoch}, formatted={due_date}{orig_date}")
                 print(f"  {process} on {resource_location}: {buffer:.1f} hours buffer, due {due_date}")
 
     print("\nSchedule statistics:")
@@ -368,7 +436,7 @@ def main():
     print(f"Scheduling completed in {time.time() - start_time:.2f} seconds")
     
     # Check for START_DATE constraints and their impact
-    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None]
+    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH'])]
     future_date_jobs = [job for job in start_date_jobs if job['START_DATE_EPOCH'] > current_time]
     
     if start_date_jobs:

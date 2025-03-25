@@ -69,13 +69,22 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     solver.parameters.max_time_in_seconds = time_limit_seconds
     solver.parameters.log_search_progress = True
     solver.parameters.num_search_workers = 16
+    
+    # Use a more relaxed linearization level to improve solver flexibility
+    solver.parameters.linearization_level = 2
 
-    # Check for jobs with START_DATE constraints
-    start_date_jobs = [job for job in jobs if job.get('START_DATE_EPOCH', current_time) > current_time]
+    # Check for jobs with START_DATE constraints (both formats)
+    start_date_jobs = [job for job in jobs if 
+                      (job.get('START_DATE_EPOCH', current_time) > current_time) or 
+                      (job.get('START_DATE _EPOCH', current_time) > current_time)]
     if start_date_jobs:
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints for CP-SAT solver:")
         for job in start_date_jobs:
-            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            # Get the START_DATE_EPOCH value (from either format of field name)
+            start_date_epoch = job.get('START_DATE_EPOCH')
+            if start_date_epoch is None:
+                start_date_epoch = job.get('START_DATE _EPOCH')
+            start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
             # Get resource location (try both old and new column names)
             resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
             logger.info(f"  Job {job['PROCESS_CODE']} on {resource_location}: MUST start EXACTLY at {start_date}")
@@ -135,10 +144,12 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         # MODIFIED: For future START_DATE jobs, set exact start time with narrow domain
         if has_start_date and user_start_time > current_time:
             # Fixed start time - must start EXACTLY at START_DATE
-            start_var = model.NewIntVar(user_start_time, user_start_time, f'start_{machine_id}_{job_id}')
-            logger.info(f"Job {job_id} must start EXACTLY at {datetime.fromtimestamp(user_start_time).strftime('%Y-%m-%d %H:%M')}")
+            # Ensure it's an integer for the CP-SAT solver
+            int_start_time = int(user_start_time)
+            start_var = model.NewIntVar(int_start_time, int_start_time, f'start_{machine_id}_{job_id}')
+            logger.info(f"Job {job_id} must start EXACTLY at {datetime.fromtimestamp(int_start_time).strftime('%Y-%m-%d %H:%M')}")
             # Store START_TIME equal to START_DATE for visualization
-            job['START_TIME'] = user_start_time
+            job['START_TIME'] = int_start_time
         else:
             # Regular job with flexible start time
             earliest_start = max(current_time, user_start_time)
@@ -154,11 +165,24 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         # Constraint: end = start + duration
         model.Add(end_var == start_var + duration)
 
-    # Add machine no-overlap constraints
+    # Add machine no-overlap constraints with duplicate job detection
     for machine in machines:
-        machine_intervals = [intervals[(job['PROCESS_CODE'], job.get('RSC_LOCATION', job.get('MACHINE_ID')))] 
-                           for job in jobs 
-                           if job.get('RSC_LOCATION') == machine or job.get('MACHINE_ID') == machine]
+        # Create a set of unique job IDs to prevent duplicates
+        unique_job_ids = set()
+        machine_intervals = []
+        
+        for job in jobs:
+            if job.get('RSC_LOCATION') == machine or job.get('MACHINE_ID') == machine:
+                job_id = job['PROCESS_CODE']
+                interval_key = (job_id, job.get('RSC_LOCATION', job.get('MACHINE_ID')))
+                
+                # Only add the interval if this exact job hasn't been seen before
+                if job_id not in unique_job_ids:
+                    unique_job_ids.add(job_id)
+                    machine_intervals.append(intervals[interval_key])
+                else:
+                    logger.warning(f"Skipping duplicate job {job_id} on machine {machine} to prevent constraint conflicts")
+        
         if machine_intervals:
             model.AddNoOverlap(machine_intervals)
 
@@ -184,6 +208,11 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                                   f"should finish before {job2['PROCESS_CODE']} (starts {datetime.fromtimestamp(job2_start_time).strftime('%Y-%m-%d %H:%M')})")
                     # Skip this constraint to prevent infeasibility
                     logger.warning(f"Skipping sequence constraint to avoid infeasibility")
+                    continue
+                
+                # Check if jobs overlap directly (duplicate jobs with same process code)
+                if job1['PROCESS_CODE'] == job2['PROCESS_CODE']:
+                    logger.warning(f"Skipping sequence constraint for duplicate job {job1['PROCESS_CODE']}")
                     continue
                 
                 # Add the constraint normally
@@ -231,8 +260,14 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     elif status == cp_model.FEASIBLE:
         logger.info(f"Feasible solution found in {solve_time:.2f} seconds")
     elif status == cp_model.INFEASIBLE:
-        logger.error("Problem is infeasible")
-        return {}
+        logger.error("Problem is infeasible with CP-SAT solver")
+        logger.warning("Falling back to greedy scheduler due to constraint conflicts")
+        
+        # Import here to avoid circular imports
+        from greedy import greedy_schedule
+        
+        # Try with greedy scheduler which is more flexible with constraints
+        return greedy_schedule(jobs, machines, setup_times)
     else:
         logger.error(f"No solution found. Status: {solver.StatusName(status)}")
         return {}

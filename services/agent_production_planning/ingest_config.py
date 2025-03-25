@@ -9,7 +9,7 @@ DATE_COLUMNS_CONFIG = {
     'START_DATE': (13, 0),  # Set START_DATE to 13:00 (1 PM)
     'PLANNED_END': (16, 0),  # Set PLANNED_END to 16:00 (4 PM)
     'LATEST_COMPLETION_DATE': (16, 0),  # Set LATEST_COMPLETION_DATE to 16:00 (4 PM)
-    'LCD_DATE': (8, 0),  # Set LCD_DATE to 8:00 AM to match Excel data
+    # Removed hardcoded time for LCD_DATE to use the original time from Excel
     # Add more columns as needed
 }
 

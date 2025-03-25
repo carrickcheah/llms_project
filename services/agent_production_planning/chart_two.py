@@ -16,22 +16,22 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 def format_date_correctly(epoch_timestamp, is_lcd_date=False):
-    """Format an epoch timestamp maintaining exact time values from Excel (8:00 AM for LCD_DATE)."""
+    """Format an epoch timestamp maintaining exact time values from Excel."""
     default_date = "N/A"
     
     try:
-        if not epoch_timestamp or epoch_timestamp <= 0:
+        # More extensive validation to handle NaN values
+        if (epoch_timestamp is None or 
+            pd.isna(epoch_timestamp) or 
+            not isinstance(epoch_timestamp, (int, float)) or 
+            isinstance(epoch_timestamp, float) and (pd.isna(epoch_timestamp) or not pd.notna(epoch_timestamp)) or
+            (isinstance(epoch_timestamp, (int, float)) and epoch_timestamp <= 0)):
             return default_date
         
         # Create a datetime object from timestamp
         date_obj = datetime.fromtimestamp(epoch_timestamp)
         
-        # For LCD_DATE always force 08:00 time to match Excel display
-        if is_lcd_date:
-            formatted = f"{date_obj.strftime('%Y-%m-%d')} 08:00"
-            return formatted
-        
-        # For other timestamps, preserve the original time
+        # Preserve the original time for all dates, including LCD_DATE
         formatted = date_obj.strftime('%Y-%m-%d %H:%M')
         
         return formatted
@@ -198,8 +198,15 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         is_first_process = (family_processes[family][0][1] == process_code)
                     
                     # For jobs with START_DATE constraints, prioritize using the exact date
-                    if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time:
-                        job_start = job['START_DATE_EPOCH']
+                    # Check both formats of START_DATE_EPOCH (with and without space)
+                    start_date_epoch = None
+                    if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+                        start_date_epoch = job['START_DATE_EPOCH']
+                    elif 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH']:
+                        start_date_epoch = job['START_DATE _EPOCH']
+                        
+                    if start_date_epoch and start_date_epoch > current_time:
+                        job_start = start_date_epoch
                         # Adjust end time to maintain the same duration
                         original_duration = original_end - original_start
                         job_end = job_start + original_duration
@@ -212,14 +219,51 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 
                 # Get START_DATE for display
                 user_start_date = ""
+                # Try multiple variations of the START_DATE field
                 if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
                     user_start_date = format_date_correctly(job['START_DATE_EPOCH'])
+                # Also check for START_DATE _EPOCH (with space)
+                elif 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH']:
+                    user_start_date = format_date_correctly(job['START_DATE _EPOCH'])
                 
                 # Calculate duration and buffer
-                duration_seconds = job_end - job_start
-                duration_hours = duration_seconds / 3600
-                buffer_seconds = max(0, due_time - job_end)
-                buffer_hours = buffer_seconds / 3600
+                # Calculate HOURS_NEED based on JOB_QUANTITY and EXPECT_OUTPUT_PER_HOUR
+                job_quantity = job.get('JOB_QUANTITY', 0)
+                expect_output = job.get('EXPECT_OUTPUT_PER_HOUR', 0)
+                
+                # Validate job start and end times before calculations to prevent NaN
+                valid_times = (job_start is not None and not pd.isna(job_start) and 
+                               job_end is not None and not pd.isna(job_end) and
+                               isinstance(job_start, (int, float)) and 
+                               isinstance(job_end, (int, float)))
+                
+                # Calculate HOURS_NEED based on formula, with fallback to scheduled duration
+                if job_quantity > 0 and expect_output > 0:
+                    # HOURS_NEED is JOB_QUANTITY/EXPECT_OUTPUT_PER_HOUR
+                    hours_need = job_quantity / expect_output
+                elif valid_times:
+                    # Fallback to scheduled duration if formula can't be applied
+                    duration_seconds = job_end - job_start
+                    hours_need = duration_seconds / 3600
+                else:
+                    # Default if no valid data available
+                    hours_need = 1.0
+                
+                # Calculate duration only with valid times
+                if valid_times:
+                    duration_seconds = job_end - job_start
+                    duration_hours = duration_seconds / 3600
+                else:
+                    duration_seconds = 3600  # Default to 1 hour
+                    duration_hours = 1.0
+                
+                # Calculate buffer only with valid times and due time
+                if valid_times and due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)) and due_time > 0:
+                    buffer_seconds = max(0, due_time - job_end)
+                    buffer_hours = buffer_seconds / 3600
+                else:
+                    buffer_seconds = 0
+                    buffer_hours = 0.0
                 
                 # Job family and sequence
                 # Use RSC_CODE if available, fall back to legacy ways of determining job code
@@ -232,6 +276,10 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 # Get job name
                 job_name = job.get('JOB', job_code)
                 
+                # Validate buffer_hours for buffer status determination
+                if buffer_hours is None or pd.isna(buffer_hours) or not isinstance(buffer_hours, (int, float)):
+                    buffer_hours = 0.0
+                
                 # Get buffer status
                 buffer_status = ""
                 if buffer_hours < 8:
@@ -243,11 +291,26 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 else:
                     buffer_status = "OK"
                 
-                # Get quantity information
+                # Get quantity information with validation
                 job_quantity = job.get('JOB_QUANTITY', 0)
+                if job_quantity is None or pd.isna(job_quantity) or not isinstance(job_quantity, (int, float)):
+                    job_quantity = 0
+                    
                 expect_output = job.get('EXPECT_OUTPUT_PER_HOUR', 0)
+                if expect_output is None or pd.isna(expect_output) or not isinstance(expect_output, (int, float)):
+                    expect_output = 0
+                    
                 accumulated_output = job.get('ACCUMULATED_DAILY_OUTPUT', 0)
-                balance_quantity = job.get('BALANCE_QUANTITY', job_quantity - accumulated_output)
+                if accumulated_output is None or pd.isna(accumulated_output) or not isinstance(accumulated_output, (int, float)):
+                    accumulated_output = 0
+                    
+                # Calculate balance quantity with validated values
+                try:
+                    balance_quantity = job.get('BALANCE_QUANTITY', job_quantity - accumulated_output)
+                    if balance_quantity is None or pd.isna(balance_quantity) or not isinstance(balance_quantity, (int, float)):
+                        balance_quantity = max(0, job_quantity - accumulated_output)
+                except:
+                    balance_quantity = 0
                 
                 # Add to schedule data
                 schedule_data.append({
@@ -260,10 +323,10 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     'JOB_QUANTITY': job_quantity,
                     'EXPECT_OUTPUT_PER_HOUR': expect_output,
                     'PRIORITY': job.get('PRIORITY', 3),
-                    'HOURS_NEED': duration_hours,  # Using the calculated duration
-                    'SETTING_HOURS': job.get('setup_time', 0) / 3600,
-                    'BREAK_HOURS': job.get('break_time', 0) / 3600 if 'break_time' in job else 0,
-                    'NO_PROD': job.get('downtime', 0) / 3600,
+                    'HOURS_NEED': hours_need,  # Using the formula JOB_QUANTITY/EXPECT_OUTPUT_PER_HOUR
+                    'SETTING_HOURS': job.get('SETTING_HOURS', job.get('setup_time', 0)),
+                    'BREAK_HOURS': job.get('BREAK_HOURS', job.get('break_time', 0)),
+                    'NO_PROD': job.get('NO_PROD', job.get('downtime', 0)),
                     'START_DATE': user_start_date,
                     'ACCUMULATED_DAILY_OUTPUT': accumulated_output,
                     'BALANCE_QUANTITY': balance_quantity,
@@ -534,27 +597,50 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             elif row['BUFFER_STATUS'] == 'OK':
                 buffer_badge_class = "badge-ok"
                 
+            # Format numeric values with proper handling for NaN
+            hours_need_fmt = f"{row['HOURS_NEED']:.1f}" if pd.notna(row['HOURS_NEED']) else "0.0"
+            setting_hours_fmt = f"{row['SETTING_HOURS']:.1f}" if pd.notna(row['SETTING_HOURS']) else "0.0"
+            break_hours_fmt = f"{row['BREAK_HOURS']:.1f}" if pd.notna(row['BREAK_HOURS']) else "0.0"
+            no_prod_fmt = f"{row['NO_PROD']:.1f}" if pd.notna(row['NO_PROD']) else "0.0"
+            bal_hr_fmt = f"{row['BAL_HR']:.1f}" if pd.notna(row['BAL_HR']) else "0.0"
+            
+            # Format other possibly NaN values
+            lcd_date = row['LCD_DATE'] if pd.notna(row['LCD_DATE']) else "N/A"
+            job = row['JOB'] if pd.notna(row['JOB']) else ""
+            process_code = row['PROCESS_CODE'] if pd.notna(row['PROCESS_CODE']) else ""
+            rsc_location = row['RSC_LOCATION'] if pd.notna(row['RSC_LOCATION']) else ""
+            rsc_code = row['RSC_CODE'] if pd.notna(row['RSC_CODE']) else ""
+            number_operator = row['NUMBER_OPERATOR'] if pd.notna(row['NUMBER_OPERATOR']) else 1
+            job_quantity = row['JOB_QUANTITY'] if pd.notna(row['JOB_QUANTITY']) else 0
+            expect_output = row['EXPECT_OUTPUT_PER_HOUR'] if pd.notna(row['EXPECT_OUTPUT_PER_HOUR']) else 0
+            priority = row['PRIORITY'] if pd.notna(row['PRIORITY']) else 3
+            start_date = row['START_DATE'] if pd.notna(row['START_DATE']) else "N/A"
+            accumulated = row['ACCUMULATED_DAILY_OUTPUT'] if pd.notna(row['ACCUMULATED_DAILY_OUTPUT']) else 0
+            balance = row['BALANCE_QUANTITY'] if pd.notna(row['BALANCE_QUANTITY']) else 0
+            start_time = row['START_TIME'] if pd.notna(row['START_TIME']) else "N/A"
+            end_time = row['END_TIME'] if pd.notna(row['END_TIME']) else "N/A"
+            
             html_content += f"""
                     <tr class="{buffer_class}">
-                        <td title="{row['LCD_DATE']}">{row['LCD_DATE']}</td>
-                        <td title="{row['JOB']}">{row['JOB']}</td>
-                        <td title="{row['PROCESS_CODE']}">{row['PROCESS_CODE']}</td>
-                        <td title="{row['RSC_LOCATION']}">{row['RSC_LOCATION']}</td>
-                        <td title="{row['RSC_CODE']}">{row['RSC_CODE']}</td>
-                        <td title="{row['NUMBER_OPERATOR']}">{row['NUMBER_OPERATOR']}</td>
-                        <td title="{row['JOB_QUANTITY']}">{row['JOB_QUANTITY']}</td>
-                        <td title="{row['EXPECT_OUTPUT_PER_HOUR']}">{row['EXPECT_OUTPUT_PER_HOUR']}</td>
-                        <td title="{row['PRIORITY']}">{row['PRIORITY']}</td>
-                        <td title="{row['HOURS_NEED']:.1f}">{row['HOURS_NEED']:.1f}</td>
-                        <td title="{row['SETTING_HOURS']:.1f}">{row['SETTING_HOURS']:.1f}</td>
-                        <td title="{row['BREAK_HOURS']:.1f}">{row['BREAK_HOURS']:.1f}</td>
-                        <td title="{row['NO_PROD']:.1f}">{row['NO_PROD']:.1f}</td>
-                        <td title="{row['START_DATE']}">{row['START_DATE']}</td>
-                        <td title="{row['ACCUMULATED_DAILY_OUTPUT']}">{row['ACCUMULATED_DAILY_OUTPUT']}</td>
-                        <td title="{row['BALANCE_QUANTITY']}">{row['BALANCE_QUANTITY']}</td>
-                        <td title="{row['START_TIME']}">{row['START_TIME']}</td>
-                        <td title="{row['END_TIME']}">{row['END_TIME']}</td>
-                        <td title="{row['BAL_HR']:.1f}">{row['BAL_HR']:.1f}</td>
+                        <td title="{lcd_date}">{lcd_date}</td>
+                        <td title="{job}">{job}</td>
+                        <td title="{process_code}">{process_code}</td>
+                        <td title="{rsc_location}">{rsc_location}</td>
+                        <td title="{rsc_code}">{rsc_code}</td>
+                        <td title="{number_operator}">{number_operator}</td>
+                        <td title="{job_quantity}">{job_quantity}</td>
+                        <td title="{expect_output}">{expect_output}</td>
+                        <td title="{priority}">{priority}</td>
+                        <td title="{hours_need_fmt}">{hours_need_fmt}</td>
+                        <td title="{setting_hours_fmt}">{setting_hours_fmt}</td>
+                        <td title="{break_hours_fmt}">{break_hours_fmt}</td>
+                        <td title="{no_prod_fmt}">{no_prod_fmt}</td>
+                        <td title="{start_date}">{start_date}</td>
+                        <td title="{accumulated}">{accumulated}</td>
+                        <td title="{balance}">{balance}</td>
+                        <td title="{start_time}">{start_time}</td>
+                        <td title="{end_time}">{end_time}</td>
+                        <td title="{bal_hr_fmt}">{bal_hr_fmt}</td>
                         <td><div class="status-badge {buffer_badge_class}">{row['BUFFER_STATUS']}</div></td>
                     </tr>"""
         

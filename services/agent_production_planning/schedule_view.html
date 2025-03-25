@@ -1,0 +1,2459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Scheduler</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.10.25/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.2.2/css/buttons.bootstrap5.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.2.9/css/responsive.bootstrap5.min.css">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; 
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container-fluid {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .dashboard {
+            margin-bottom: 20px; 
+            padding: 15px; 
+            border-radius: 8px; 
+            background: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            border: 1px solid #eaeaea;
+        }
+        .dashboard h3 {
+            margin-top: 0;
+            font-weight: 600;
+            color: #3a3a3a;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        table.dataTable {
+            border-collapse: separate !important;
+            border-spacing: 0;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            font-size: 9px;  /* Smaller base font size */
+            width: 100%;
+            table-layout: fixed;  /* Fixed table layout for better control */
+            margin: 0;
+            padding: 0;
+        }
+        
+        table.dataTable th {
+            font-size: 9px;  /* Extra small header font */
+            padding: 1px 2px !important;  /* Minimal padding */
+            font-weight: 600;
+            white-space: nowrap;  /* Prevent wrapping in headers */
+            overflow: hidden;
+            text-overflow: ellipsis;  /* Show ellipsis for overflow */
+        }
+        
+        table.dataTable td {
+            font-size: 9px;  /* Extra small cell font */
+            padding: 1px 2px !important;  /* Minimal padding */
+            overflow: hidden;
+            text-overflow: ellipsis;  /* Show ellipsis for overflow */
+            white-space: normal;  /* Allow text to wrap */
+        }
+        
+        /* Set specific column widths based on content - reduced to fit all columns */
+        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) { width: 65px; } /* LCD_DATE */
+        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) { width: 65px; } /* JOB */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) { width: 80px; } /* PROCESS_CODE */
+        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) { width: 40px; } /* RSC_LOCATION */
+        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) { width: 55px; } /* RSC_CODE */
+        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) { width: 35px; } /* NUMBER_OPERATOR */
+        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) { width: 45px; } /* JOB_QUANTITY */
+        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) { width: 45px; } /* EXPECT_OUTPUT_PER_HOUR */
+        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) { width: 30px; } /* PRIORITY */
+        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) { width: 40px; } /* HOURS_NEED */
+        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) { width: 45px; } /* SETTING_HOURS */
+        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) { width: 45px; } /* BREAK_HOURS */
+        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) { width: 35px; } /* NO_PROD */
+        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) { width: 65px; } /* START_DATE */
+        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) { width: 55px; } /* ACCUMULATED_DAILY_OUTPUT */
+        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) { width: 45px; } /* BALANCE_QUANTITY */
+        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) { width: 65px; } /* START_TIME */
+        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) { width: 65px; } /* END_TIME */
+        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) { width: 35px; } /* BAL_HR */
+        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) { width: 50px; } /* BUFFER_STATUS */
+        
+        /* Make table container scrollable horizontally */
+        .table-container {
+            overflow-x: visible;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+        
+        /* Highlight row on hover for better readability */
+        table.dataTable tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.05) !important;
+        }
+        
+        /* Status styles */
+        .status-critical { background-color: rgba(255, 0, 0, 0.05); }
+        .status-warning { background-color: rgba(255, 190, 0, 0.05); }
+        .status-caution { background-color: rgba(128, 0, 128, 0.05); }
+        .status-ok { background-color: rgba(0, 128, 0, 0.05); }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-weight: 600;
+            text-align: center;
+            width: 100%;
+            font-size: 10px;
+        }
+        
+        .badge-critical { background-color: #ffcccc; color: #cc0000; border: 1px solid #ff8080; }
+        .badge-warning { background-color: #fff2cc; color: #b38600; border: 1px solid #ffdb4d; }
+        .badge-caution { background-color: #f0d6f0; color: #800080; border: 1px solid #d699d6; }
+        .badge-ok { background-color: #d6f0d6; color: #006600; border: 1px solid #99d699; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid" style="max-width: 100%; padding: 10px;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="mb-0" style="font-size: 20px;"><i class="bi bi-calendar-check me-2"></i>Production Scheduler</h1>
+            <div>
+                <button class="btn btn-sm btn-primary" onclick="window.print()">
+                    <i class="bi bi-printer me-1"></i> Print
+                </button>
+                <button class="btn btn-sm btn-outline-secondary ms-2" onclick="exportTableToCSV('production_schedule.csv')">
+                    <i class="bi bi-download me-1"></i> Export
+                </button>
+            </div>
+        </div>
+        
+        <div class="dashboard row">
+            <div class="col-md-6">
+                <h3>Schedule Overview</h3>
+                <p style="font-size: 12px;"><strong>Total Jobs:</strong> 95</p>
+                <p style="font-size: 12px;"><strong>Date Range:</strong> 2025-03-25 13:44 to 2025-03-26 13:44</p>
+                <p style="font-size: 12px;"><strong>Total Duration:</strong> 95.0 hours</p>
+            </div>
+            <div class="col-md-6">
+                <h3>Buffer Status</h3>
+                <div class="d-flex flex-column gap-2">
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-critical me-2" style="width: 80px;">Critical</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
+                            <div class="progress-bar bg-danger" role="progressbar" 
+                                style="width: 0.0%;" 
+                                aria-valuenow="0" 
+                                aria-valuemin="0" aria-valuemax="95">
+                                0 jobs
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-warning me-2" style="width: 80px;">Warning</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
+                            <div class="progress-bar bg-warning text-dark" role="progressbar" 
+                                style="width: 0.0%;" 
+                                aria-valuenow="0" 
+                                aria-valuemin="0" aria-valuemax="95">
+                                0 jobs
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-caution me-2" style="width: 80px;">Caution</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
+                            <div class="progress-bar" role="progressbar" style="background-color: purple; width: 0.0%;" 
+                                aria-valuenow="0" 
+                                aria-valuemin="0" aria-valuemax="95">
+                                0 jobs
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-badge badge-ok me-2" style="width: 80px;">OK</div>
+                        <div class="progress flex-grow-1" style="height: 16px;">
+                            <div class="progress-bar bg-success" role="progressbar" 
+                                style="width: 100.0%;" 
+                                aria-valuenow="95" 
+                                aria-valuemin="0" aria-valuemax="95">
+                                95 jobs
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="table-container">
+            <h2 style="font-size: 16px; margin-bottom: 10px;">Production Jobs</h2>
+            <table id="scheduleTable" class="table table-striped table-bordered">
+                <thead>
+                    <tr>
+                        <th>LCD_DATE</th>
+                        <th>JOB</th>
+                        <th>PROCESS_CODE</th>
+                        <th>RSC_LOCATION</th>
+                        <th>RSC_CODE</th>
+                        <th>NUMBER_OPERATOR</th>
+                        <th>JOB_QUANTITY</th>
+                        <th>EXPECT_OUTPUT_PER_HOUR</th>
+                        <th>PRIORITY</th>
+                        <th>HOURS_NEED</th>
+                        <th>SETTING_HOURS</th>
+                        <th>BREAK_HOURS</th>
+                        <th>NO_PROD</th>
+                        <th>START_DATE</th>
+                        <th>ACCUMULATED_DAILY_OUTPUT</th>
+                        <th>BALANCE_QUANTITY</th>
+                        <th>START_TIME</th>
+                        <th>END_TIME</th>
+                        <th>BAL_HR</th>
+                        <th>BUFFER_STATUS</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <tr class="status-ok">
+                        <td title="2025-05-01 00:00">2025-05-01 00:00</td>
+                        <td title="JOAW24120201">JOAW24120201</td>
+                        <td title="CM03-001-P03-04">CM03-001-P03-04</td>
+                        <td title="AL">AL</td>
+                        <td title="CHECKING">CHECKING</td>
+                        <td title="1">1</td>
+                        <td title="100806">100806</td>
+                        <td title="250">250</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="57547.0">57547.0</td>
+                        <td title="43259">43259</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="870.3">870.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 07:00">2025-05-01 07:00</td>
+                        <td title="JOAW24090215">JOAW24090215</td>
+                        <td title="CD11-027-P05-06">CD11-027-P05-06</td>
+                        <td title="WN">WN</td>
+                        <td title="TW01">TW01</td>
+                        <td title="1">1</td>
+                        <td title="10000">10000</td>
+                        <td title="400">400</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="9969.0">9969.0</td>
+                        <td title="31">31</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="878.3">878.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 08:00">2025-05-01 08:00</td>
+                        <td title="JOST24120090">JOST24120090</td>
+                        <td title="CP08-544-P01-02">CP08-544-P01-02</td>
+                        <td title="ST">ST</td>
+                        <td title="STICK LABEL">STICK LABEL</td>
+                        <td title="1">1</td>
+                        <td title="1100">1100</td>
+                        <td title="30">30</td>
+                        <td title="1">1</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="428.0">428.0</td>
+                        <td title="672">672</td>
+                        <td title="2025-03-26 04:44">2025-03-26 04:44</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="866.3">866.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 08:00">2025-05-01 08:00</td>
+                        <td title="JOST24120047">JOST24120047</td>
+                        <td title="CP08-046-P03-04">CP08-046-P03-04</td>
+                        <td title="AL">AL</td>
+                        <td title="CHECKING">CHECKING</td>
+                        <td title="1">1</td>
+                        <td title="30120">30120</td>
+                        <td title="1800">1800</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="30120">30120</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="875.3">875.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 08:00">2025-05-01 08:00</td>
+                        <td title="JOTP24110201">JOTP24110201</td>
+                        <td title="CP08-553-P05-07">CP08-553-P05-07</td>
+                        <td title="TR">TR</td>
+                        <td title="PAINTING">PAINTING</td>
+                        <td title="1">1</td>
+                        <td title="252">252</td>
+                        <td title="12">12</td>
+                        <td title="1">1</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="211.0">211.0</td>
+                        <td title="41">41</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="2025-03-25 22:44">2025-03-25 22:44</td>
+                        <td title="873.3">873.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 09:00">2025-05-01 09:00</td>
+                        <td title="JOST24120021">JOST24120021</td>
+                        <td title="CM10-009-P04-05">CM10-009-P04-05</td>
+                        <td title="AL">AL</td>
+                        <td title="CHECKING">CHECKING</td>
+                        <td title="1">1</td>
+                        <td title="41613">41613</td>
+                        <td title="1200">1200</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="17400.0">17400.0</td>
+                        <td title="24213">24213</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="877.3">877.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 09:00">2025-05-01 09:00</td>
+                        <td title="JOST24120092">JOST24120092</td>
+                        <td title="CP08-545-P01-02">CP08-545-P01-02</td>
+                        <td title="ST">ST</td>
+                        <td title="STICK LABEL">STICK LABEL</td>
+                        <td title="1">1</td>
+                        <td title="500">500</td>
+                        <td title="18">18</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="500">500</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="2025-03-26 06:44">2025-03-26 06:44</td>
+                        <td title="866.3">866.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 10:00">2025-05-01 10:00</td>
+                        <td title="JOAW24120118">JOAW24120118</td>
+                        <td title="CD11-026-P05-06">CD11-026-P05-06</td>
+                        <td title="WN">WN</td>
+                        <td title="TW01">TW01</td>
+                        <td title="1">1</td>
+                        <td title="15000">15000</td>
+                        <td title="420">420</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="15000">15000</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="882.3">882.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 11:00">2025-05-01 11:00</td>
+                        <td title="JOAW24120201">JOAW24120201</td>
+                        <td title="CM03-001-P02-04">CM03-001-P02-04</td>
+                        <td title="ST">ST</td>
+                        <td title="VM04">VM04</td>
+                        <td title="1">1</td>
+                        <td title="100806">100806</td>
+                        <td title="250">250</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="100806.0">100806.0</td>
+                        <td title="0">0</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="882.3">882.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-01 13:00">2025-05-01 13:00</td>
+                        <td title="JOTP24110201">JOTP24110201</td>
+                        <td title="CP08-553-P06-07">CP08-553-P06-07</td>
+                        <td title="TR">TR</td>
+                        <td title="PACK & LABEL">PACK & LABEL</td>
+                        <td title="1">1</td>
+                        <td title="252">252</td>
+                        <td title="12">12</td>
+                        <td title="1">1</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="182.0">182.0</td>
+                        <td title="70">70</td>
+                        <td title="2025-03-25 22:44">2025-03-25 22:44</td>
+                        <td title="2025-03-25 23:44">2025-03-25 23:44</td>
+                        <td title="877.3">877.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-02 12:59">2025-05-02 12:59</td>
+                        <td title="JOST24120179">JOST24120179</td>
+                        <td title="CP08-289-P04-06">CP08-289-P04-06</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="TP08">TP08</td>
+                        <td title="1">1</td>
+                        <td title="28632">28632</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="5990.0">5990.0</td>
+                        <td title="22642">22642</td>
+                        <td title="2025-03-25 13:44">2025-03-25 13:44</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="910.3">910.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-03 12:59">2025-05-03 12:59</td>
+                        <td title="JOST24120179">JOST24120179</td>
+                        <td title="CP08-289-P05-06">CP08-289-P05-06</td>
+                        <td title="AL">AL</td>
+                        <td title="CHECKING">CHECKING</td>
+                        <td title="1">1</td>
+                        <td title="28632">28632</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="5990.0">5990.0</td>
+                        <td title="22642">22642</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="927.3">927.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-04 12:59">2025-05-04 12:59</td>
+                        <td title="JOST24120433">JOST24120433</td>
+                        <td title="CH04-002-P01-07">CH04-002-P01-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP25">PP25</td>
+                        <td title="1">1</td>
+                        <td title="5900">5900</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5900">5900</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="957.3">957.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-05 12:59">2025-05-05 12:59</td>
+                        <td title="JOST24120433">JOST24120433</td>
+                        <td title="CH04-002-P02-07">CH04-002-P02-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP26-110T">PP26-110T</td>
+                        <td title="1">1</td>
+                        <td title="5900">5900</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5900">5900</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="979.3">979.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-06 12:59">2025-05-06 12:59</td>
+                        <td title="JOST24120433">JOST24120433</td>
+                        <td title="CH04-002-P03-07">CH04-002-P03-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP20">PP20</td>
+                        <td title="1">1</td>
+                        <td title="5900">5900</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5900">5900</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="1001.3">1001.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-07 12:59">2025-05-07 12:59</td>
+                        <td title="JOST24120433">JOST24120433</td>
+                        <td title="CH04-002-P04-07">CH04-002-P04-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="5900">5900</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5900">5900</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="1023.3">1023.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-08 12:59">2025-05-08 12:59</td>
+                        <td title="JOST24120433">JOST24120433</td>
+                        <td title="CH04-002-P05-07">CH04-002-P05-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="SW01">SW01</td>
+                        <td title="1">1</td>
+                        <td title="5900">5900</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5900">5900</td>
+                        <td title="2025-03-25 22:44">2025-03-25 22:44</td>
+                        <td title="2025-03-25 23:44">2025-03-25 23:44</td>
+                        <td title="1045.3">1045.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-09 12:59">2025-05-09 12:59</td>
+                        <td title="JOST24120433">JOST24120433</td>
+                        <td title="CH04-002-P06-07">CH04-002-P06-07</td>
+                        <td title="ST-1">ST-1</td>
+                        <td title="OPT PAINTING">OPT PAINTING</td>
+                        <td title="1">1</td>
+                        <td title="5900">5900</td>
+                        <td title="120">120</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5900">5900</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="1067.3">1067.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-10 12:59">2025-05-10 12:59</td>
+                        <td title="JOST24120408">JOST24120408</td>
+                        <td title="CT10-001-P01-06">CT10-001-P01-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP09-160T">PP09-160T</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="6042.0">6042.0</td>
+                        <td title="38">38</td>
+                        <td title="2025-03-26 04:44">2025-03-26 04:44</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="1087.3">1087.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-11 12:59">2025-05-11 12:59</td>
+                        <td title="JOST24120408">JOST24120408</td>
+                        <td title="CT10-001-P02-06">CT10-001-P02-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP18">PP18</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="6042.0">6042.0</td>
+                        <td title="38">38</td>
+                        <td title="2025-03-26 06:44">2025-03-26 06:44</td>
+                        <td title="2025-03-26 07:44">2025-03-26 07:44</td>
+                        <td title="1109.3">1109.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-12 12:59">2025-05-12 12:59</td>
+                        <td title="JOST24120408">JOST24120408</td>
+                        <td title="CT10-001-P03-06">CT10-001-P03-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP17-110T">PP17-110T</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="6042.0">6042.0</td>
+                        <td title="38">38</td>
+                        <td title="2025-03-26 08:44">2025-03-26 08:44</td>
+                        <td title="2025-03-26 09:44">2025-03-26 09:44</td>
+                        <td title="1131.3">1131.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-13 12:59">2025-05-13 12:59</td>
+                        <td title="JOST24120408">JOST24120408</td>
+                        <td title="CT10-001-P04-06">CT10-001-P04-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP16-110T">PP16-110T</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="6042.0">6042.0</td>
+                        <td title="38">38</td>
+                        <td title="2025-03-26 10:44">2025-03-26 10:44</td>
+                        <td title="2025-03-26 11:44">2025-03-26 11:44</td>
+                        <td title="1153.3">1153.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-14 13:00">2025-05-14 13:00</td>
+                        <td title="JOAW24120383">JOAW24120383</td>
+                        <td title="CP08-557-P08-09">CP08-557-P08-09</td>
+                        <td title="AL">AL</td>
+                        <td title="CHECKING">CHECKING</td>
+                        <td title="1">1</td>
+                        <td title="1000">1000</td>
+                        <td title="15">15</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="1000">1000</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="2025-03-25 22:44">2025-03-25 22:44</td>
+                        <td title="1190.3">1190.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-14 13:00">2025-05-14 13:00</td>
+                        <td title="JOAW24120119">JOAW24120119</td>
+                        <td title="CD11-026-P05-06">CD11-026-P05-06</td>
+                        <td title="WN">WN</td>
+                        <td title="TW01">TW01</td>
+                        <td title="1">1</td>
+                        <td title="15000">15000</td>
+                        <td title="420">420</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="15000">15000</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1197.3">1197.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-14 13:00">2025-05-14 13:00</td>
+                        <td title="JOST24120408">JOST24120408</td>
+                        <td title="CT10-001-P05-06">CT10-001-P05-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP27-110T">PP27-110T</td>
+                        <td title="2">2</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="6042.0">6042.0</td>
+                        <td title="38">38</td>
+                        <td title="2025-03-26 12:44">2025-03-26 12:44</td>
+                        <td title="2025-03-26 13:44">2025-03-26 13:44</td>
+                        <td title="1175.3">1175.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24100348">JOAW24100348</td>
+                        <td title="CA16-011-P01-03">CA16-011-P01-03</td>
+                        <td title="FM">FM</td>
+                        <td title="SW05">SW05</td>
+                        <td title="1">1</td>
+                        <td title="60000">60000</td>
+                        <td title="450">450</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="22678.0">22678.0</td>
+                        <td title="37322">37322</td>
+                        <td title="2025-03-25 13:44">2025-03-25 13:44</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="1217.3">1217.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24100348">JOAW24100348</td>
+                        <td title="CA16-011-P02-03">CA16-011-P02-03</td>
+                        <td title="FM">FM</td>
+                        <td title="OPT">OPT</td>
+                        <td title="1">1</td>
+                        <td title="60000">60000</td>
+                        <td title="900">900</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="5000.0">5000.0</td>
+                        <td title="55000">55000</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1216.3">1216.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24100248">JOST24100248</td>
+                        <td title="CA16-010-P01-03">CA16-010-P01-03</td>
+                        <td title="ST">ST</td>
+                        <td title="PP01-110T">PP01-110T</td>
+                        <td title="1">1</td>
+                        <td title="90909">90909</td>
+                        <td title="3000">3000</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="20100.0">20100.0</td>
+                        <td title="70809">70809</td>
+                        <td title="2025-03-25 13:44">2025-03-25 13:44</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="1217.3">1217.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24100248">JOST24100248</td>
+                        <td title="CA16-010-P02-03">CA16-010-P02-03</td>
+                        <td title="ST-1">ST-1</td>
+                        <td title="VM01">VM01</td>
+                        <td title="1">1</td>
+                        <td title="90909">90909</td>
+                        <td title="1000">1000</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="90909">90909</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1216.3">1216.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120207">JOST24120207</td>
+                        <td title="CV04-010-P01-08">CV04-010-P01-08</td>
+                        <td title="ST-1">ST-1</td>
+                        <td title="PP11-035T">PP11-035T</td>
+                        <td title="1">1</td>
+                        <td title="8270">8270</td>
+                        <td title="480">480</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="8270">8270</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="2025-03-26 02:44">2025-03-26 02:44</td>
+                        <td title="1205.3">1205.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120207">JOST24120207</td>
+                        <td title="CV04-010-P02-08">CV04-010-P02-08</td>
+                        <td title="ST-1">ST-1</td>
+                        <td title="PP11-035T">PP11-035T</td>
+                        <td title="1">1</td>
+                        <td title="8270">8270</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="8270">8270</td>
+                        <td title="2025-03-26 02:44">2025-03-26 02:44</td>
+                        <td title="2025-03-26 03:44">2025-03-26 03:44</td>
+                        <td title="1204.3">1204.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120207">JOST24120207</td>
+                        <td title="CV04-010-P03-08">CV04-010-P03-08</td>
+                        <td title="ST-2">ST-2</td>
+                        <td title="PP06-040T">PP06-040T</td>
+                        <td title="1">1</td>
+                        <td title="8270">8270</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="8270">8270</td>
+                        <td title="2025-03-26 03:44">2025-03-26 03:44</td>
+                        <td title="2025-03-26 04:44">2025-03-26 04:44</td>
+                        <td title="1203.3">1203.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120207">JOST24120207</td>
+                        <td title="CV04-010-P04-08">CV04-010-P04-08</td>
+                        <td title="ST-2">ST-2</td>
+                        <td title="PP15-080T">PP15-080T</td>
+                        <td title="1">1</td>
+                        <td title="8270">8270</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="8270">8270</td>
+                        <td title="2025-03-26 04:44">2025-03-26 04:44</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="1202.3">1202.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120207">JOST24120207</td>
+                        <td title="CV04-010-P05-08">CV04-010-P05-08</td>
+                        <td title="0">0</td>
+                        <td title="HAND BEND-JIG">HAND BEND-JIG</td>
+                        <td title="1">1</td>
+                        <td title="8270">8270</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="8270">8270</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="2025-03-26 06:44">2025-03-26 06:44</td>
+                        <td title="1201.3">1201.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120207">JOST24120207</td>
+                        <td title="CV04-010-P06-08">CV04-010-P06-08</td>
+                        <td title="0">0</td>
+                        <td title="PLIER BENDING">PLIER BENDING</td>
+                        <td title="1">1</td>
+                        <td title="8270">8270</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="8270">8270</td>
+                        <td title="2025-03-26 06:44">2025-03-26 06:44</td>
+                        <td title="2025-03-26 07:44">2025-03-26 07:44</td>
+                        <td title="1200.3">1200.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24120287">JOAW24120287</td>
+                        <td title="CM18-001-P01-06">CM18-001-P01-06</td>
+                        <td title="WN">WN</td>
+                        <td title="SW13">SW13</td>
+                        <td title="1">1</td>
+                        <td title="30000">30000</td>
+                        <td title="150">150</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="24407.0">24407.0</td>
+                        <td title="5593">5593</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="1212.3">1212.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24120287">JOAW24120287</td>
+                        <td title="CM18-001-P02-06">CM18-001-P02-06</td>
+                        <td title="WN">WN</td>
+                        <td title="PP23">PP23</td>
+                        <td title="1">1</td>
+                        <td title="30000">30000</td>
+                        <td title="420">420</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="24813.0">24813.0</td>
+                        <td title="5187">5187</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="1211.3">1211.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24120287">JOAW24120287</td>
+                        <td title="CM18-001-P05-06">CM18-001-P05-06</td>
+                        <td title="WN">WN</td>
+                        <td title="TW01">TW01</td>
+                        <td title="1">1</td>
+                        <td title="30000">30000</td>
+                        <td title="450">450</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="30000">30000</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="1210.3">1210.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24120251">JOAW24120251</td>
+                        <td title="CD11-027D-P01-02">CD11-027D-P01-02</td>
+                        <td title="ST">ST</td>
+                        <td title="PP05-060T">PP05-060T</td>
+                        <td title="1">1</td>
+                        <td title="20000">20000</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="20000">20000</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1216.3">1216.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOTP24120184">JOTP24120184</td>
+                        <td title="CP08-562-P01-05">CP08-562-P01-05</td>
+                        <td title="PB">PB</td>
+                        <td title="SW14">SW14</td>
+                        <td title="1">1</td>
+                        <td title="802">802</td>
+                        <td title="120">120</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="802">802</td>
+                        <td title="2025-03-25 13:44">2025-03-25 13:44</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="1217.3">1217.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOTP24120184">JOTP24120184</td>
+                        <td title="CP08-562-P02-05">CP08-562-P02-05</td>
+                        <td title="PB">PB</td>
+                        <td title="SW14">SW14</td>
+                        <td title="1">1</td>
+                        <td title="802">802</td>
+                        <td title="17">17</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="802">802</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1216.3">1216.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOTP24120184">JOTP24120184</td>
+                        <td title="CP08-562-P03-05">CP08-562-P03-05</td>
+                        <td title="OPT">OPT</td>
+                        <td title="OPT">OPT</td>
+                        <td title="1">1</td>
+                        <td title="802">802</td>
+                        <td title="50">50</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="802">802</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="1215.3">1215.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOTP24120184">JOTP24120184</td>
+                        <td title="CP08-562-P04-05">CP08-562-P04-05</td>
+                        <td title="OPT">OPT</td>
+                        <td title="OPT">OPT</td>
+                        <td title="1">1</td>
+                        <td title="802">802</td>
+                        <td title="60">60</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="802">802</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="1214.3">1214.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24120209">JOAW24120209</td>
+                        <td title="CV04-012-P01-04">CV04-012-P01-04</td>
+                        <td title="FM">FM</td>
+                        <td title="FM01">FM01</td>
+                        <td title="1">1</td>
+                        <td title="16593">16593</td>
+                        <td title="1200">1200</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="2200.0">2200.0</td>
+                        <td title="14393">14393</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="1215.3">1215.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24120209">JOAW24120209</td>
+                        <td title="CV04-012-P02-04">CV04-012-P02-04</td>
+                        <td title="ST-2">ST-2</td>
+                        <td title="PP06-040T">PP06-040T</td>
+                        <td title="1">1</td>
+                        <td title="16593">16593</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="16593">16593</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="2025-03-26 06:44">2025-03-26 06:44</td>
+                        <td title="1201.3">1201.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOAW24120249">JOAW24120249</td>
+                        <td title="CD11-027B-P01-02">CD11-027B-P01-02</td>
+                        <td title="WN">WN</td>
+                        <td title="WS01">WS01</td>
+                        <td title="1">1</td>
+                        <td title="80000">80000</td>
+                        <td title="2160">2160</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="80000">80000</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="1214.3">1214.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120091">JOST24120091</td>
+                        <td title="CP08-544-P01-02">CP08-544-P01-02</td>
+                        <td title="ST">ST</td>
+                        <td title="STICK LABEL">STICK LABEL</td>
+                        <td title="1">1</td>
+                        <td title="1000">1000</td>
+                        <td title="30">30</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="1000">1000</td>
+                        <td title="2025-03-26 04:44">2025-03-26 04:44</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="1202.3">1202.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120366">JOST24120366</td>
+                        <td title="CP08-513-P06-07">CP08-513-P06-07</td>
+                        <td title="ST">ST</td>
+                        <td title="OPT">OPT</td>
+                        <td title="1">1</td>
+                        <td title="2450">2450</td>
+                        <td title="420">420</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="2450">2450</td>
+                        <td title="2025-03-26 02:44">2025-03-26 02:44</td>
+                        <td title="2025-03-26 03:44">2025-03-26 03:44</td>
+                        <td title="1204.3">1204.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120366">JOST24120366</td>
+                        <td title="CP08-513-P04-07">CP08-513-P04-07</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="2450">2450</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="1350.0">1350.0</td>
+                        <td title="1100">1100</td>
+                        <td title="2025-03-25 23:44">2025-03-25 23:44</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="1207.3">1207.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120359">JOST24120359</td>
+                        <td title="CP08-504A-P02-04">CP08-504A-P02-04</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP24-160T">PP24-160T</td>
+                        <td title="1">1</td>
+                        <td title="216">216</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="216">216</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="1211.3">1211.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120366">JOST24120366</td>
+                        <td title="CP08-513-P05-07">CP08-513-P05-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="TP03">TP03</td>
+                        <td title="1">1</td>
+                        <td title="2450">2450</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="625.0">625.0</td>
+                        <td title="1825">1825</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="2025-03-26 02:44">2025-03-26 02:44</td>
+                        <td title="1205.3">1205.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120359">JOST24120359</td>
+                        <td title="CP08-504A-P03-04">CP08-504A-P03-04</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP24-160T">PP24-160T</td>
+                        <td title="1">1</td>
+                        <td title="216">216</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="216">216</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="1210.3">1210.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120337">JOST24120337</td>
+                        <td title="CP08-352-P02-04">CP08-352-P02-04</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP26-110T">PP26-110T</td>
+                        <td title="1">1</td>
+                        <td title="5440">5440</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5440">5440</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1216.3">1216.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120337">JOST24120337</td>
+                        <td title="CP08-352-P03-04">CP08-352-P03-04</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="5440">5440</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5440">5440</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="1215.3">1215.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120338">JOST24120338</td>
+                        <td title="CP08-353&CP08-354-P01-05">CP08-353&CP08-354-P01-05</td>
+                        <td title="SM">SM</td>
+                        <td title="SM01">SM01</td>
+                        <td title="1">1</td>
+                        <td title="2800">2800</td>
+                        <td title="480">480</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="2800">2800</td>
+                        <td title="2025-03-25 13:44">2025-03-25 13:44</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="1217.3">1217.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120338">JOST24120338</td>
+                        <td title="CP08-353&CP08-354-P02-05">CP08-353&CP08-354-P02-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP25-160T">PP25-160T</td>
+                        <td title="1">1</td>
+                        <td title="2800">2800</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="2800">2800</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="1214.3">1214.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120338">JOST24120338</td>
+                        <td title="CP08-353&CP08-354-P04-05">CP08-353&CP08-354-P04-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="2800">2800</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="2800">2800</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="1212.3">1212.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120326">JOST24120326</td>
+                        <td title="CP08-265-P03-04">CP08-265-P03-04</td>
+                        <td title="ST-2">ST-2</td>
+                        <td title="PP06-040T">PP06-040T</td>
+                        <td title="1">1</td>
+                        <td title="3142">3142</td>
+                        <td title="240">240</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="142.0">142.0</td>
+                        <td title="3000">3000</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1216.3">1216.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120418">JOST24120418</td>
+                        <td title="CT10-015-P01-05">CT10-015-P01-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP24-160T">PP24-160T</td>
+                        <td title="1">1</td>
+                        <td title="14400">14400</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="14400">14400</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="1206.3">1206.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120418">JOST24120418</td>
+                        <td title="CT10-015-P02-05">CT10-015-P02-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP25-160T">PP25-160T</td>
+                        <td title="1">1</td>
+                        <td title="14400">14400</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="14400">14400</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="2025-03-26 02:44">2025-03-26 02:44</td>
+                        <td title="1205.3">1205.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120338">JOST24120338</td>
+                        <td title="CP08-353&CP08-354-P03-05">CP08-353&CP08-354-P03-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP20-110T">PP20-110T</td>
+                        <td title="1">1</td>
+                        <td title="2800">2800</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="2800">2800</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="1213.3">1213.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120418">JOST24120418</td>
+                        <td title="CT10-015-P04-05">CT10-015-P04-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="14400">14400</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="14400">14400</td>
+                        <td title="2025-03-26 03:44">2025-03-26 03:44</td>
+                        <td title="2025-03-26 04:44">2025-03-26 04:44</td>
+                        <td title="1203.3">1203.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120418">JOST24120418</td>
+                        <td title="CT10-015-P03-05">CT10-015-P03-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP20-110T">PP20-110T</td>
+                        <td title="1">1</td>
+                        <td title="14400">14400</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="14400">14400</td>
+                        <td title="2025-03-26 02:44">2025-03-26 02:44</td>
+                        <td title="2025-03-26 03:44">2025-03-26 03:44</td>
+                        <td title="1204.3">1204.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120366">JOST24120366</td>
+                        <td title="CP08-513-P02-07">CP08-513-P02-07</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP25-160T">PP25-160T</td>
+                        <td title="1">1</td>
+                        <td title="2450">2450</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="1350.0">1350.0</td>
+                        <td title="1100">1100</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="2025-03-25 22:44">2025-03-25 22:44</td>
+                        <td title="1209.3">1209.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOTP24120398">JOTP24120398</td>
+                        <td title="CP08-587-P03-04">CP08-587-P03-04</td>
+                        <td title="PB">PB</td>
+                        <td title="PB01">PB01</td>
+                        <td title="1">1</td>
+                        <td title="150">150</td>
+                        <td title="50">50</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="150">150</td>
+                        <td title="2025-03-26 07:44">2025-03-26 07:44</td>
+                        <td title="2025-03-26 08:44">2025-03-26 08:44</td>
+                        <td title="1199.3">1199.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOTP24120398">JOTP24120398</td>
+                        <td title="CP08-587-P02-04">CP08-587-P02-04</td>
+                        <td title="ST">ST</td>
+                        <td title="PP05">PP05</td>
+                        <td title="1">1</td>
+                        <td title="150">150</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="150">150</td>
+                        <td title="2025-03-26 06:44">2025-03-26 06:44</td>
+                        <td title="2025-03-26 07:44">2025-03-26 07:44</td>
+                        <td title="1200.3">1200.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120409">JOST24120409</td>
+                        <td title="CT10-001-P05-06">CT10-001-P05-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP27-110T">PP27-110T</td>
+                        <td title="2">2</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="6080">6080</td>
+                        <td title="2025-03-26 12:44">2025-03-26 12:44</td>
+                        <td title="2025-03-26 13:44">2025-03-26 13:44</td>
+                        <td title="1194.3">1194.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120366">JOST24120366</td>
+                        <td title="CP08-513-P03-07">CP08-513-P03-07</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP20-110T">PP20-110T</td>
+                        <td title="1">1</td>
+                        <td title="2450">2450</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="1350.0">1350.0</td>
+                        <td title="1100">1100</td>
+                        <td title="2025-03-25 22:44">2025-03-25 22:44</td>
+                        <td title="2025-03-25 23:44">2025-03-25 23:44</td>
+                        <td title="1208.3">1208.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120409">JOST24120409</td>
+                        <td title="CT10-001-P03-06">CT10-001-P03-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP17-110T">PP17-110T</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="6080">6080</td>
+                        <td title="2025-03-26 08:44">2025-03-26 08:44</td>
+                        <td title="2025-03-26 09:44">2025-03-26 09:44</td>
+                        <td title="1198.3">1198.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120409">JOST24120409</td>
+                        <td title="CT10-001-P02-06">CT10-001-P02-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP18">PP18</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="6080">6080</td>
+                        <td title="2025-03-26 06:44">2025-03-26 06:44</td>
+                        <td title="2025-03-26 07:44">2025-03-26 07:44</td>
+                        <td title="1200.3">1200.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120409">JOST24120409</td>
+                        <td title="CT10-001-P01-06">CT10-001-P01-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP09-160T">PP09-160T</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="6080">6080</td>
+                        <td title="2025-03-26 04:44">2025-03-26 04:44</td>
+                        <td title="2025-03-26 05:44">2025-03-26 05:44</td>
+                        <td title="1202.3">1202.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-15 08:00">2025-05-15 08:00</td>
+                        <td title="JOST24120409">JOST24120409</td>
+                        <td title="CT10-001-P04-06">CT10-001-P04-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP16-110T">PP16-110T</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="6080">6080</td>
+                        <td title="2025-03-26 10:44">2025-03-26 10:44</td>
+                        <td title="2025-03-26 11:44">2025-03-26 11:44</td>
+                        <td title="1196.3">1196.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOTP24120376">JOTP24120376</td>
+                        <td title="CP08-554A-P03-04">CP08-554A-P03-04</td>
+                        <td title="TR">TR</td>
+                        <td title="PB02">PB02</td>
+                        <td title="1">1</td>
+                        <td title="400">400</td>
+                        <td title="30">30</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="400">400</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="1302.3">1302.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST25010143">JOST25010143</td>
+                        <td title="CM03-037-P01-03">CM03-037-P01-03</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP04-060T">PP04-060T</td>
+                        <td title="1">1</td>
+                        <td title="5400">5400</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5400">5400</td>
+                        <td title="2025-03-25 23:44">2025-03-25 23:44</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="1303.3">1303.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOTP25010142">JOTP25010142</td>
+                        <td title="CM03-034-P04-05">CM03-034-P04-05</td>
+                        <td title="TR">TR</td>
+                        <td title="PB04">PB04</td>
+                        <td title="1">1</td>
+                        <td title="300">300</td>
+                        <td title="200">200</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="300">300</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="1307.3">1307.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOTP25010142">JOTP25010142</td>
+                        <td title="CM03-034-P03-05">CM03-034-P03-05</td>
+                        <td title="TR">TR</td>
+                        <td title="APPLY OIL">APPLY OIL</td>
+                        <td title="1">1</td>
+                        <td title="300">300</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="300">300</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="1308.3">1308.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOTP25010142">JOTP25010142</td>
+                        <td title="CM03-034-P02-05">CM03-034-P02-05</td>
+                        <td title="WN">WN</td>
+                        <td title="DEBURR">DEBURR</td>
+                        <td title="1">1</td>
+                        <td title="300">300</td>
+                        <td title="50">50</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="300">300</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="1309.3">1309.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOTP25010142">JOTP25010142</td>
+                        <td title="CM03-034-P01-05">CM03-034-P01-05</td>
+                        <td title="TR">TR</td>
+                        <td title="TM05">TM05</td>
+                        <td title="1">1</td>
+                        <td title="300">300</td>
+                        <td title="81">81</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="1.0">1.0</td>
+                        <td title="299">299</td>
+                        <td title="2025-03-25 13:44">2025-03-25 13:44</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="1313.3">1313.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST25010140">JOST25010140</td>
+                        <td title="CM03-027-P04-05">CM03-027-P04-05</td>
+                        <td title="AL">AL</td>
+                        <td title="CHECKING">CHECKING</td>
+                        <td title="1">1</td>
+                        <td title="3550">3550</td>
+                        <td title="600">600</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="3550">3550</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="1309.3">1309.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST25010140">JOST25010140</td>
+                        <td title="CM03-027-P02-05">CM03-027-P02-05</td>
+                        <td title="ST">ST</td>
+                        <td title="VM01">VM01</td>
+                        <td title="1">1</td>
+                        <td title="3550">3550</td>
+                        <td title="3000">3000</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="3550">3550</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="1310.3">1310.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST25010145">JOST25010145</td>
+                        <td title="CM03-039-P02-03">CM03-039-P02-03</td>
+                        <td title="ST">ST</td>
+                        <td title="VM01">VM01</td>
+                        <td title="1">1</td>
+                        <td title="2000">2000</td>
+                        <td title="2000">2000</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="2000">2000</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="1309.3">1309.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOTP24120376">JOTP24120376</td>
+                        <td title="CP08-554A-P02-04">CP08-554A-P02-04</td>
+                        <td title="TR">TR</td>
+                        <td title="1">1</td>
+                        <td title="1">1</td>
+                        <td title="400">400</td>
+                        <td title="20">20</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="400">400</td>
+                        <td title="2025-03-25 23:44">2025-03-25 23:44</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="1303.3">1303.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST25010143">JOST25010143</td>
+                        <td title="CM03-037-P02-03">CM03-037-P02-03</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP03-060T">PP03-060T</td>
+                        <td title="1">1</td>
+                        <td title="5400">5400</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5400">5400</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="1302.3">1302.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120372">JOST24120372</td>
+                        <td title="CP08-521-P01-02">CP08-521-P01-02</td>
+                        <td title="ST-2">ST-2</td>
+                        <td title="PP01-110T">PP01-110T</td>
+                        <td title="1">1</td>
+                        <td title="2604">2604</td>
+                        <td title="3000">3000</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="2604">2604</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="1311.3">1311.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120431">JOST24120431</td>
+                        <td title="CC06-001-P03-04">CC06-001-P03-04</td>
+                        <td title="AL">AL</td>
+                        <td title="DRY-1">DRY-1</td>
+                        <td title="1">1</td>
+                        <td title="43210">43210</td>
+                        <td title="780">780</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="43210">43210</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="1311.3">1311.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120431">JOST24120431</td>
+                        <td title="CC06-001-P02-04">CC06-001-P02-04</td>
+                        <td title="AL">AL</td>
+                        <td title="TP08">TP08</td>
+                        <td title="1">1</td>
+                        <td title="43210">43210</td>
+                        <td title="600">600</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="43210">43210</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1312.3">1312.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120431">JOST24120431</td>
+                        <td title="CC06-001-P01-04">CC06-001-P01-04</td>
+                        <td title="ST-2">ST-2</td>
+                        <td title="PP06-040T">PP06-040T</td>
+                        <td title="1">1</td>
+                        <td title="43210">43210</td>
+                        <td title="2220">2220</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="43210">43210</td>
+                        <td title="2025-03-25 13:44">2025-03-25 13:44</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="1313.3">1313.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120253">JOST24120253</td>
+                        <td title="CH04-002-P06-07">CH04-002-P06-07</td>
+                        <td title="ST-1">ST-1</td>
+                        <td title="OPT PAINTING">OPT PAINTING</td>
+                        <td title="1">1</td>
+                        <td title="5100">5100</td>
+                        <td title="120">120</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5100">5100</td>
+                        <td title="2025-03-26 00:44">2025-03-26 00:44</td>
+                        <td title="2025-03-26 01:44">2025-03-26 01:44</td>
+                        <td title="1302.3">1302.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120253">JOST24120253</td>
+                        <td title="CH04-002-P05-07">CH04-002-P05-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="SW01">SW01</td>
+                        <td title="1">1</td>
+                        <td title="5100">5100</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5100">5100</td>
+                        <td title="2025-03-25 22:44">2025-03-25 22:44</td>
+                        <td title="2025-03-25 23:44">2025-03-25 23:44</td>
+                        <td title="1304.3">1304.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120253">JOST24120253</td>
+                        <td title="CH04-002-P04-07">CH04-002-P04-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="5100">5100</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5100">5100</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="1306.3">1306.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120253">JOST24120253</td>
+                        <td title="CH04-002-P03-07">CH04-002-P03-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP20">PP20</td>
+                        <td title="1">1</td>
+                        <td title="5100">5100</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5100">5100</td>
+                        <td title="2025-03-25 18:44">2025-03-25 18:44</td>
+                        <td title="2025-03-25 19:44">2025-03-25 19:44</td>
+                        <td title="1308.3">1308.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120253">JOST24120253</td>
+                        <td title="CH04-002-P02-07">CH04-002-P02-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP26-110T">PP26-110T</td>
+                        <td title="1">1</td>
+                        <td title="5100">5100</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5100">5100</td>
+                        <td title="2025-03-25 16:44">2025-03-25 16:44</td>
+                        <td title="2025-03-25 17:44">2025-03-25 17:44</td>
+                        <td title="1310.3">1310.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120253">JOST24120253</td>
+                        <td title="CH04-002-P01-07">CH04-002-P01-07</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP25">PP25</td>
+                        <td title="1">1</td>
+                        <td title="5100">5100</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="5100">5100</td>
+                        <td title="2025-03-25 14:44">2025-03-25 14:44</td>
+                        <td title="2025-03-25 15:44">2025-03-25 15:44</td>
+                        <td title="1312.3">1312.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOST24120373">JOST24120373</td>
+                        <td title="CP08-522-P01-02">CP08-522-P01-02</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP01-110T">PP01-110T</td>
+                        <td title="1">1</td>
+                        <td title="3646">3646</td>
+                        <td title="3000">3000</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="3646">3646</td>
+                        <td title="2025-03-26 02:44">2025-03-26 02:44</td>
+                        <td title="2025-03-26 03:44">2025-03-26 03:44</td>
+                        <td title="1300.3">1300.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="2025-05-19 08:00">2025-05-19 08:00</td>
+                        <td title="JOTP25010064">JOTP25010064</td>
+                        <td title="CP08-427-P01-03">CP08-427-P01-03</td>
+                        <td title="TR">TR</td>
+                        <td title="TM06">TM06</td>
+                        <td title="1">1</td>
+                        <td title="550">550</td>
+                        <td title="28">28</td>
+                        <td title="3">3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title="0.0">0.0</td>
+                        <td title=""></td>
+                        <td title="nan">nan</td>
+                        <td title="550">550</td>
+                        <td title="2025-03-25 20:44">2025-03-25 20:44</td>
+                        <td title="2025-03-25 21:44">2025-03-25 21:44</td>
+                        <td title="1306.3">1306.3</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.25/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.10.25/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.2.2/js/dataTables.buttons.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/buttons/2.2.2/js/buttons.html5.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.2.9/js/dataTables.responsive.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Initialize DataTables with improved options
+            $('#scheduleTable').DataTable({
+                order: [[0, 'asc']], // Sort by LCD_DATE by default
+                pageLength: 25,
+                lengthMenu: [10, 25, 50, 100, 200],
+                responsive: true,
+                scrollX: true,  // Enable horizontal scrolling
+                scrollCollapse: true,
+                autoWidth: false, // Don't auto-calculate widths
+                columnDefs: [
+                    // Set column visibility and width options
+                    { "width": "90px", "targets": 0 }, // LCD_DATE
+                    { "width": "95px", "targets": 1 }, // JOB
+                    { "width": "120px", "targets": 2 }, // PROCESS_CODE
+                    { "width": "65px", "targets": 3 }, // RSC_LOCATION
+                    { "width": "80px", "targets": 4 }, // RSC_CODE
+                    { "width": "60px", "targets": 5 }, // NUMBER_OPERATOR
+                    { "width": "70px", "targets": 6 }, // JOB_QUANTITY
+                    { "width": "75px", "targets": 7 }, // EXPECT_OUTPUT_PER_HOUR
+                    { "width": "50px", "targets": 8 }, // PRIORITY
+                    { "width": "60px", "targets": 9 }, // HOURS_NEED
+                    { "width": "65px", "targets": 10 }, // SETTING_HOURS
+                    { "width": "65px", "targets": 11 }, // BREAK_HOURS
+                    { "width": "50px", "targets": 12 }, // NO_PROD
+                    { "width": "90px", "targets": 13 }, // START_DATE
+                    { "width": "80px", "targets": 14 }, // ACCUMULATED_DAILY_OUTPUT
+                    { "width": "70px", "targets": 15 }, // BALANCE_QUANTITY
+                    { "width": "90px", "targets": 16 }, // START_TIME
+                    { "width": "90px", "targets": 17 }, // END_TIME
+                    { "width": "50px", "targets": 18 }, // BAL_HR
+                    { "width": "70px", "targets": 19 }  // BUFFER_STATUS
+                ],
+                dom: 'Bfrtip',
+                buttons: [
+                    {
+                        extend: 'colvis',
+                        text: '<i class="bi bi-eye me-1"></i> Show/Hide Columns',
+                        className: 'btn btn-sm btn-secondary mb-2',
+                        // Show this button first
+                        postfixButtons: ['colvisRestore']
+                    },
+                    {
+                        extend: 'excel',
+                        text: '<i class="bi bi-file-earmark-excel me-1"></i> Excel',
+                        className: 'btn btn-sm btn-success',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+                    {
+                        extend: 'csv',
+                        text: '<i class="bi bi-file-earmark-text me-1"></i> CSV',
+                        className: 'btn btn-sm btn-info',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    },
+                    {
+                        extend: 'pdf',
+                        text: '<i class="bi bi-file-earmark-pdf me-1"></i> PDF',
+                        className: 'btn btn-sm btn-danger',
+                        exportOptions: {
+                            columns: ':visible'
+                        }
+                    }
+                ],
+                initComplete: function () {
+                    // Add a legend at the top
+                    var legendHtml = '<div class="mb-3 p-2 bg-white rounded shadow-sm" style="font-size: 11px;">' +
+                        '<h5 class="border-bottom pb-2 mb-2" style="font-size: 14px;"><i class="bi bi-info-circle me-2"></i>Buffer Status Legend:</h5>' +
+                        '<div class="d-flex flex-wrap gap-2">' +
+                        '<div class="status-badge badge-critical">Critical (&lt;8h)</div>' +
+                        '<div class="status-badge badge-warning">Warning (&lt;24h)</div>' +
+                        '<div class="status-badge badge-caution">Caution (&lt;72h)</div>' +
+                        '<div class="status-badge badge-ok">OK (&gt;72h)</div>' +
+                        '</div></div>';
+                    $('.dataTables_wrapper').prepend(legendHtml);
+                }
+            });
+        });
+        
+        function exportTableToCSV(filename) {
+            var csv = [];
+            var rows = document.querySelectorAll("table tr");
+            
+            for (var i = 0; i < rows.length; i++) {
+                var row = [], cols = rows[i].querySelectorAll("td, th");
+                
+                for (var j = 0; j < cols.length; j++) {
+                    // Get the text content, handling the case of the status badge
+                    var text = cols[j].innerText;
+                    if (cols[j].querySelector('.status-badge')) {
+                        text = cols[j].querySelector('.status-badge').innerText;
+                    }
+                    row.push('"' + text.replace(/"/g, '""') + '"');
+                }
+                
+                csv.push(row.join(","));
+            }
+            
+            // Download CSV file
+            downloadCSV(csv.join("\n"), filename);
+        }
+        
+        function downloadCSV(csv, filename) {
+            var csvFile = new Blob([csv], {type: "text/csv"});
+            var downloadLink = document.createElement("a");
+            
+            // File name
+            downloadLink.download = filename;
+            
+            // Create a link to the file
+            downloadLink.href = window.URL.createObjectURL(csvFile);
+            
+            // Hide download link
+            downloadLink.style.display = "none";
+            
+            // Add the link to DOM
+            document.body.appendChild(downloadLink);
+            
+            // Click download link
+            downloadLink.click();
+            
+            // Remove the link
+            document.body.removeChild(downloadLink);
+        }
+    </script>
+</body>
+</html>
