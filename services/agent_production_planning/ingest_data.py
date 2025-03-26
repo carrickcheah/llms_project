@@ -21,14 +21,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Use UTC for timestamp conversion to avoid timezone issues
-# The Excel file already has times in local timezone, so we want to preserve them exactly
 
 # No hardcoded values - all times will come from Excel directly
 DATE_COLUMNS_CONFIG = {}
 
 # Default time for date columns not specifically configured
-DEFAULT_TIME = (0, 0)  # Default to midnight
+DEFAULT_TIME = (8, 0)  # Default to 8am
 
 def get_column_time(column_name):
     """
@@ -67,18 +65,7 @@ def detect_date_format(date_value):
         return lambda x: pd.to_datetime(x), False
     
     # Look for common date patterns
-    # Format: 2023-12-31 23:59:59 (ISO format with time)
-    if re.match(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', date_value):
-        return lambda x: pd.to_datetime(x, format='%Y-%m-%d %H:%M:%S'), True
-    
-    # Format: 2023-12-31 23:59 (ISO format with time, no seconds)
-    if re.match(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}', date_value):
-        return lambda x: pd.to_datetime(x, format='%Y-%m-%d %H:%M'), True
-    
-    # Format: 31/12/2023 23:59:59 (European format with time)
-    if re.match(r'\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}:\d{2}', date_value):
-        return lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M:%S'), True
-    
+
     # Format: 31/12/2023 23:59 (European format with time, no seconds)
     if re.match(r'\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}', date_value):
         return lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M'), True
@@ -100,16 +87,6 @@ def detect_date_format(date_value):
     # Format: 31/12/2023 (European format without time)
     if re.match(r'\d{2}/\d{2}/\d{4}$', date_value):
         return lambda x: pd.to_datetime(x, format='%d/%m/%Y'), False
-    
-    # Format: 12/31/2023 (US format without time)
-    if re.match(r'\d{2}/\d{2}/\d{4}$', date_value):
-        # Try to distinguish between US and European format
-        parts = date_value.split('/')
-        if int(parts[0]) <= 12:  # Might be month in US format
-            try:
-                return lambda x: pd.to_datetime(x, format='%m/%d/%Y'), False
-            except:
-                return lambda x: pd.to_datetime(x, format='%d/%m/%Y'), False
     
     # Default: Let pandas try to figure it out
     return lambda x: pd.to_datetime(x), False
@@ -201,24 +178,6 @@ def convert_column_to_dates(df, column_name, base_col=None):
         return None
         
     df[epoch_col_name] = df[column_name].apply(convert_to_sg_timestamp)
-    
-    # Log sample values for debugging
-    if 'LCD_DATE' in column_name.upper():
-        logger.info(f"Adjusted LCD_DATE times to match Excel exactly (with -1 hour timezone correction)")
-        sample = df[[column_name, epoch_col_name]].head(2)
-        for idx, row in sample.iterrows():
-            date_val = row[column_name]
-            epoch = row[epoch_col_name]
-            if pd.notna(date_val) and epoch is not None:
-                logger.info(f"Sample: Excel={date_val}, Epoch={epoch}, Back to datetime={datetime.fromtimestamp(epoch)}")
-    
-    # For debugging START_DATE columns
-    if 'START_DATE' in column_name.upper():
-        sample_values = df[column_name].dropna().head(3).tolist()
-        logger.info(f"Sample {column_name} values: {sample_values}")
-        sample_epochs = df[epoch_col_name].dropna().head(3).tolist()
-        logger.info(f"Sample {epoch_col_name} values: {sample_epochs}")
-        logger.info(f"These represent: {[datetime.fromtimestamp(e).strftime('%Y-%m-%d %H:%M') for e in sample_epochs]}")
     
     # Create a standardized version of the field (no spaces)
     standard_epoch_name = epoch_col_name.replace(" ", "")
