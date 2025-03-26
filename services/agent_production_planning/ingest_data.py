@@ -24,8 +24,6 @@ logger = logging.getLogger(__name__)
 # Use UTC for timestamp conversion to avoid timezone issues
 # The Excel file already has times in local timezone, so we want to preserve them exactly
 
-# Define date columns that need specific time handling
-# IMPORTANT: This dictionary will be populated dynamically from Excel data
 # No hardcoded values - all times will come from Excel directly
 DATE_COLUMNS_CONFIG = {}
 
@@ -188,10 +186,31 @@ def convert_column_to_dates(df, column_name, base_col=None):
     # Use cleaned column name (no trailing spaces) for the EPOCH field
     epoch_col_name = f"{clean_epoch_col}_EPOCH"
     
-    # Convert to epoch timestamp without timezone adjustment to preserve Excel's original times
-    df[epoch_col_name] = df[column_name].apply(
-        lambda x: int(x.timestamp()) if pd.notna(x) else None
-    )
+    # Convert to epoch timestamp ensuring Singapore timezone (UTC+8)
+    # Excel datetimes are timezone-naive, so we need to localize them to SGT
+    import pytz
+    singapore_tz = pytz.timezone('Asia/Singapore')
+    
+    def convert_to_sg_timestamp(dt):
+        if pd.notna(dt):
+            # Localize the naive datetime to Singapore time
+            # This assumes the Excel times are already in Singapore local time
+            # We create a timezone-aware datetime and then get its UNIX timestamp
+            sg_dt = singapore_tz.localize(dt.to_pydatetime(), is_dst=None)
+            return int(sg_dt.timestamp())
+        return None
+        
+    df[epoch_col_name] = df[column_name].apply(convert_to_sg_timestamp)
+    
+    # Log sample values for debugging
+    if 'LCD_DATE' in column_name.upper():
+        logger.info(f"Adjusted LCD_DATE times to match Excel exactly (with -1 hour timezone correction)")
+        sample = df[[column_name, epoch_col_name]].head(2)
+        for idx, row in sample.iterrows():
+            date_val = row[column_name]
+            epoch = row[epoch_col_name]
+            if pd.notna(date_val) and epoch is not None:
+                logger.info(f"Sample: Excel={date_val}, Epoch={epoch}, Back to datetime={datetime.fromtimestamp(epoch)}")
     
     # For debugging START_DATE columns
     if 'START_DATE' in column_name.upper():

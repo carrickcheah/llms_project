@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def format_date_correctly(epoch_timestamp, is_lcd_date=False):
     """
     Format an epoch timestamp into a consistent date string format.
-    For LCD_DATE values, always display as 08:00 AM to match Excel data.
+    Preserves original times from the source data without modification.
     """
     # Default fallback date in case of issues
     default_date = "N/A"
@@ -30,12 +30,8 @@ def format_date_correctly(epoch_timestamp, is_lcd_date=False):
         # Create a datetime object from timestamp
         date_obj = datetime.fromtimestamp(epoch_timestamp)
         
-        # For LCD_DATE always force 08:00 time to match Excel display
-        if is_lcd_date:
-            formatted = f"{date_obj.strftime('%Y-%m-%d')} 08:00"
-            return formatted
-        
-        # For other timestamps, preserve the original time
+        # Preserve the original time for all dates including LCD_DATE
+        # No hardcoding of time values
         return date_obj.strftime('%Y-%m-%d %H:%M')
     except Exception as e:
         logger.error(f"Error formatting timestamp {epoch_timestamp}: {e}")

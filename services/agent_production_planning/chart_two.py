@@ -28,11 +28,21 @@ def format_date_correctly(epoch_timestamp, is_lcd_date=False):
             (isinstance(epoch_timestamp, (int, float)) and epoch_timestamp <= 0)):
             return default_date
         
-        # Create a datetime object from timestamp
+        # Get the raw datetime from timestamp
         date_obj = datetime.fromtimestamp(epoch_timestamp)
         
-        # Preserve the original time for all dates, including LCD_DATE
-        formatted = date_obj.strftime('%Y-%m-%d %H:%M')
+        # For LCD_DATE column, use special handling for format
+        if is_lcd_date:
+            # Use the exact format and time from the Excel file
+            # We need to preserve the original time without adjustments
+            # From the sample: "01/05/25 07:00"
+            formatted = date_obj.strftime('%d/%m/%y %H:%M')
+        else:
+            # For all other dates
+            formatted = date_obj.strftime('%Y-%m-%d %H:%M')
+        
+        # For debug logging
+        logger.debug(f"Formatted date for {'LCD_DATE' if is_lcd_date else 'other date'}: {epoch_timestamp} -> {formatted}")
         
         return formatted
     except Exception as e:
@@ -669,7 +679,12 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             bal_hr_fmt = f"{row['BAL_HR']:.1f}" if pd.notna(row['BAL_HR']) else "0.0"
             
             # Format other possibly NaN values
+            # Use the exact LCD_DATE format from Excel without any transformations
+            # This ensures the date format (DD/MM/YY HH:MM) and exact times are preserved
             lcd_date = row['LCD_DATE'] if pd.notna(row['LCD_DATE']) else "N/A"
+            # If lcd_date is a timestamp object, format it to match Excel's format exactly
+            if isinstance(lcd_date, pd.Timestamp):
+                lcd_date = lcd_date.strftime('%d/%m/%y %H:%M')
             job = row['JOB'] if pd.notna(row['JOB']) else ""
             unique_job_id = row['UNIQUE_JOB_ID'] if pd.notna(row['UNIQUE_JOB_ID']) else ""
             rsc_location = row['RSC_LOCATION'] if pd.notna(row['RSC_LOCATION']) else ""
