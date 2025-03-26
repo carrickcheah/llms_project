@@ -55,11 +55,25 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
     schedule = {machine: [] for machine in machines}
     machine_availability = {machine: current_time for machine in machines}
     
-    # Validate jobs
+    # Validate jobs and fix any issues
     for job in jobs:
+        # Check for valid processing_time
         if not isinstance(job.get('processing_time', 0), (int, float)) or job.get('processing_time', 0) <= 0:
-            logger.error(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}: {job.get('processing_time')}")
-            raise ValueError(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}")
+            logger.warning(f"Invalid processing_time for job {job.get('PROCESS_CODE', 'Unknown')}: {job.get('processing_time')}")
+            # Set a default processing time instead of raising an error (more robust)
+            job['processing_time'] = 3600  # Default to 1 hour
+            logger.info(f"Set default processing_time of 3600 seconds (1 hour) for job {job.get('PROCESS_CODE', 'Unknown')}")
+        
+        # Ensure machine ID is available
+        if not job.get('RSC_LOCATION') and not job.get('MACHINE_ID'):
+            logger.warning(f"No machine assignment for job {job.get('PROCESS_CODE', 'Unknown')}")
+            # Skip jobs without machine assignments
+            continue
+        
+        # Ensure PRIORITY is valid
+        if not isinstance(job.get('PRIORITY'), (int, float)) or not 1 <= job.get('PRIORITY', 3) <= 5:
+            logger.warning(f"Invalid priority for job {job.get('PROCESS_CODE', 'Unknown')}: {job.get('PRIORITY')}")
+            job['PRIORITY'] = 3  # Default to medium priority
 
     # Step 1: Group jobs by family and process number
     family_groups = {}

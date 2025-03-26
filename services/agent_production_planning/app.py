@@ -158,7 +158,14 @@ with tab1:
                 )
                 
                 # Generate schedule
-                schedule = greedy_schedule(jobs, machines, setup_times)
+                try:
+                    schedule = greedy_schedule(jobs, machines, setup_times)
+                    if not schedule:
+                        st.error("Failed to generate a valid schedule. Please check your input data.")
+                        schedule = {}  # Empty schedule to prevent further errors
+                except Exception as e:
+                    st.error(f"Error generating schedule: {str(e)}")
+                    schedule = {}  # Empty schedule to prevent further errors
                 
                 # Enable export button
                 st.sidebar.button("Export Schedule", key="export_enabled", disabled=False)
@@ -223,21 +230,37 @@ with tab1:
                 # Generate interactive Gantt chart
                 html_file = os.path.join(tempfile.gettempdir(), 'gantt_chart.html')
                 try:
-                    create_interactive_gantt(schedule, jobs, output_file=html_file)
-                    
-                    if os.path.exists(html_file):
-                        with open(html_file, 'r') as f:
-                            html_content = f.read()
+                    # Check if we have a valid schedule with data
+                    if schedule and any(jobs_list for jobs_list in schedule.values()):
+                        success = create_interactive_gantt(schedule, jobs, output_file=html_file)
                         
-                        # Create Gantt chart display container with professional styling
-                        st.markdown('<div class="card">', unsafe_allow_html=True)
-                        st.markdown('<div class="sub-header">Production Schedule Gantt Chart</div>', unsafe_allow_html=True)
-                        components.html(html_content, height=800, scrolling=True)
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        if success and os.path.exists(html_file):
+                            with open(html_file, 'r') as f:
+                                html_content = f.read()
+                            
+                            # Create Gantt chart display container with professional styling
+                            st.markdown('<div class="card">', unsafe_allow_html=True)
+                            st.markdown('<div class="sub-header">Production Schedule Gantt Chart</div>', unsafe_allow_html=True)
+                            components.html(html_content, height=800, scrolling=True)
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        else:
+                            st.error('Failed to generate Gantt chart file')
+                            # Display placeholder message
+                            st.markdown('<div class="card">', unsafe_allow_html=True)
+                            st.markdown('<div class="sub-header">No valid schedule data available</div>', unsafe_allow_html=True)
+                            st.info("The system could not generate a valid production schedule. Please check your input data and try again.")
+                            st.markdown('</div>', unsafe_allow_html=True)
                     else:
-                        st.error('Failed to generate Gantt chart file')
+                        st.warning('No scheduling data available to display')
+                        # Display placeholder message
+                        st.markdown('<div class="card">', unsafe_allow_html=True)
+                        st.markdown('<div class="sub-header">No schedule data available</div>', unsafe_allow_html=True)
+                        st.info("Upload production data and ensure it contains valid job information with machine assignments.")
+                        st.markdown('</div>', unsafe_allow_html=True)
                 except Exception as e:
                     st.error(f'Gantt chart generation failed: {str(e)}')
+                    # Log detailed error information
+                    logging.error(f"Error generating Gantt chart: {str(e)}", exc_info=True)
 
         except Exception as e:
             st.error(f"Error processing data: {e}")

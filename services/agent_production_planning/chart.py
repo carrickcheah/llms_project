@@ -71,11 +71,21 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
     job_lookup = {}
     if jobs:
         for job in jobs:
-            job_lookup[job['PROCESS_CODE']] = job
+            if 'PROCESS_CODE' in job:
+                job_lookup[job['PROCESS_CODE']] = job
 
+    # Validate schedule structure
+    if not isinstance(schedule, dict):
+        logger.error(f"Invalid schedule type: {type(schedule)}. Expected dictionary.")
+        schedule = {}  # Convert to empty dict to prevent further errors
+    
     logger.info(f"Schedule contains {len(schedule)} machines")
     for machine, jobs_list in schedule.items():
-        logger.info(f"Machine {machine}: {len(jobs_list)} jobs")
+        if not isinstance(jobs_list, list):
+            logger.error(f"Invalid jobs list for machine {machine}: {type(jobs_list)}. Expected list.")
+            schedule[machine] = []  # Convert to empty list
+        else:
+            logger.info(f"Machine {machine}: {len(jobs_list)} jobs")
 
     if not schedule or not any(schedule.values()):
         logger.warning("Empty schedule received, creating placeholder task")
@@ -95,25 +105,45 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         # First pass - collect all process data and organize by family
         for machine, jobs in schedule.items():
             for job_data in jobs:
-                if len(job_data) < 4:
-                    logger.warning(f"Invalid job data for machine {machine}: {job_data}")
-                    continue
+                try:
+                    if not isinstance(job_data, (list, tuple)) or len(job_data) < 4:
+                        logger.warning(f"Invalid job data for machine {machine}: {job_data}")
+                        continue
+                        
+                    process_code, start, end, priority = job_data
                     
-                process_code, start, end, priority = job_data
-                
-                # Calculate duration
-                duration = end - start
-                process_durations[process_code] = duration
-                
-                # Group by family
-                family = extract_job_family(process_code)
-                seq_num = extract_process_number(process_code)
-                
-                if family not in family_processes:
-                    family_processes[family] = []
-                
-                # Use original schedule times first
-                family_processes[family].append((seq_num, process_code, machine, start, end, priority))
+                    # Validate data types
+                    if not isinstance(process_code, str):
+                        logger.warning(f"Invalid process_code type ({type(process_code)}) for job {job_data}")
+                        process_code = str(process_code)
+                        
+                    # Ensure timestamps are valid numbers
+                    if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+                        logger.warning(f"Invalid timestamp types for job {process_code}: start={type(start)}, end={type(end)}")
+                        continue
+                        
+                    # Ensure priority is a number
+                    if not isinstance(priority, (int, float)):
+                        logger.warning(f"Invalid priority type ({type(priority)}) for job {process_code}")
+                        priority = 3  # Default to medium priority
+                    
+                    # Calculate duration
+                    duration = end - start
+                    process_durations[process_code] = duration
+                    
+                    # Group by family
+                    family = extract_job_family(process_code)
+                    
+                    seq_num = extract_process_number(process_code)
+                    
+                    if family not in family_processes:
+                        family_processes[family] = []
+                    
+                    # Use original schedule times first
+                    family_processes[family].append((seq_num, process_code, machine, start, end, priority))
+                except Exception as e:
+                    logger.error(f"Error processing job data {job_data}: {str(e)}")
+                    continue
         
         # Sort processes within each family by sequence number
         for family in family_processes:
@@ -209,13 +239,28 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             logger.debug(f"Processing task: {process_code} on {machine} from {start} to {end}")
             
             try:
-                start_date = datetime.utcfromtimestamp(start)
-                end_date = datetime.utcfromtimestamp(end)
-                duration_hours = (end - start) / 3600
+                # Ensure timestamps are numbers before conversion
+                start_num = float(start) if start is not None else current_time
+                end_num = float(end) if end is not None else (current_time + 3600)
+                
+                # Validate timestamps
+                if start_num <= 0 or end_num <= 0:
+                    logger.warning(f"Invalid timestamps for {process_code}: Start={start_num}, End={end_num}")
+                    start_num = current_time
+                    end_num = current_time + 3600
+                
+                # Convert to datetime objects
+                start_date = datetime.utcfromtimestamp(start_num)
+                end_date = datetime.utcfromtimestamp(end_num)
+                duration_hours = (end_num - start_num) / 3600
             except Exception as e:
                 logger.error(f"Error converting timestamps for {process_code}: {e}")
                 logger.error(f"Start: {start}, End: {end}")
-                continue
+                # Use current time as fallback
+                start_date = datetime.utcfromtimestamp(current_time)
+                end_date = datetime.utcfromtimestamp(current_time + 3600)
+                duration_hours = 1.0
+                logger.warning(f"Using fallback time values for {process_code}")
 
             job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
             priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"

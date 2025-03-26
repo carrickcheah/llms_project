@@ -77,12 +77,24 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     # Create CP-SAT model
     model = cp_model.CpModel()
     solver = cp_model.CpSolver()
+    
+    # Optimize solver parameters for production scheduling
     solver.parameters.max_time_in_seconds = time_limit_seconds
     solver.parameters.log_search_progress = True
-    solver.parameters.num_search_workers = 16
+    
+    # Determine optimal number of search workers based on available threads
+    import multiprocessing
+    available_cpus = multiprocessing.cpu_count()
+    optimal_workers = min(available_cpus, 16)  # Use up to 16 workers, but not more than available CPUs
+    solver.parameters.num_search_workers = optimal_workers
+    logger.info(f"Using {optimal_workers} parallel search workers for CP-SAT solver")
     
     # Use a more relaxed linearization level to improve solver flexibility
     solver.parameters.linearization_level = 2
+    
+    # Add additional solver parameters to improve performance
+    solver.parameters.optimize_with_core = True  # Use core-based optimization
+    solver.parameters.use_lns = True  # Use Large Neighborhood Search for better solutions
 
     # Check for jobs with START_DATE constraints (both formats)
     start_date_jobs = [job for job in jobs if 
@@ -184,34 +196,47 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         # Constraint: end = start + duration (using integer duration)
         model.Add(end_var == start_var + int_duration)
 
-    # Add machine no-overlap constraints with duplicate job detection
+    # Add machine no-overlap constraints with duplicate job detection and better error handling
     for machine in machines:
         # Create a set of unique job signatures to prevent duplicates
         unique_job_signatures = set()
         machine_intervals = []
         
         for job in jobs:
-            if job.get('RSC_LOCATION') == machine or job.get('MACHINE_ID') == machine:
-                job_id = job['PROCESS_CODE']
-                interval_key = (job_id, job.get('RSC_LOCATION', job.get('MACHINE_ID')))
-                
-                # Create a unique signature using JOB, PROCESS_CODE, RSC_LOCATION, and RSC_CODE
-                job_signature = (
-                    job.get('JOB', ''),
-                    job['PROCESS_CODE'],
-                    job.get('RSC_LOCATION', job.get('MACHINE_ID', '')),
-                    job.get('RSC_CODE', '')
-                )
-                
-                # Only add the interval if this exact job hasn't been seen before
-                if job_signature not in unique_job_signatures:
-                    unique_job_signatures.add(job_signature)
-                    machine_intervals.append(intervals[interval_key])
-                else:
-                    logger.warning(f"Skipping duplicate job {job_id} on machine {machine} with signature {job_signature} to prevent constraint conflicts")
+            try:
+                if job.get('RSC_LOCATION') == machine or job.get('MACHINE_ID') == machine:
+                    job_id = job['PROCESS_CODE']
+                    interval_key = (job_id, job.get('RSC_LOCATION', job.get('MACHINE_ID')))
+                    
+                    # Verify the interval key exists in intervals dictionary
+                    if interval_key not in intervals:
+                        logger.warning(f"Missing interval for job {job_id} on machine {machine}. Skipping.")
+                        continue
+                    
+                    # Create a unique signature using JOB, PROCESS_CODE, RSC_LOCATION, and RSC_CODE
+                    job_signature = (
+                        job.get('JOB', ''),
+                        job['PROCESS_CODE'],
+                        job.get('RSC_LOCATION', job.get('MACHINE_ID', '')),
+                        job.get('RSC_CODE', '')
+                    )
+                    
+                    # Only add the interval if this exact job hasn't been seen before
+                    if job_signature not in unique_job_signatures:
+                        unique_job_signatures.add(job_signature)
+                        machine_intervals.append(intervals[interval_key])
+                    else:
+                        logger.warning(f"Skipping duplicate job {job_id} on machine {machine} with signature {job_signature} to prevent constraint conflicts")
+            except Exception as e:
+                logger.error(f"Error adding job to machine {machine}: {str(e)}")
+                continue
         
         if machine_intervals:
-            model.AddNoOverlap(machine_intervals)
+            try:
+                model.AddNoOverlap(machine_intervals)
+                logger.info(f"Added no-overlap constraint for machine {machine} with {len(machine_intervals)} jobs")
+            except Exception as e:
+                logger.error(f"Failed to add no-overlap constraint for machine {machine}: {str(e)}")
 
     # Add sequence constraints if enforced
     if enforce_sequence:

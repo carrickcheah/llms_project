@@ -318,34 +318,111 @@ def main():
                     del job['START_DATE _EPOCH']
                     logger.debug(f"Removed empty START_DATE _EPOCH for {job['PROCESS_CODE']}")
 
-    # Schedule jobs
+    # Schedule jobs with improved error handling and performance monitoring
     start_time = time.time()
     schedule = None
+
+    # Step 1: Try CP-SAT solver first (if not forced to use greedy)
     if not args.force_greedy:
         logger.info("Attempting to create schedule with CP-SAT solver...")
+        cp_sat_start_time = time.time()
         try:
-            schedule = schedule_jobs(jobs, machines, setup_times, enforce_sequence=args.enforce_sequence, time_limit_seconds=600)
-            if not schedule or not any(schedule.values()):
-                logger.warning("CP-SAT solver returned an empty schedule.")
+            # Set a reasonable timeout for CP-SAT based on job count
+            # More jobs need more time to solve
+            if len(jobs) > 200:
+                time_limit = 900  # 15 minutes for large job sets
+            elif len(jobs) > 100:
+                time_limit = 600  # 10 minutes for medium job sets
+            else:
+                time_limit = 300  # 5 minutes for small job sets
+                
+            logger.info(f"Using {time_limit} seconds time limit for CP-SAT solver with {len(jobs)} jobs")
+            
+            # Validate input data before passing to solver
+            valid_jobs = []
+            for job in jobs:
+                if 'PROCESS_CODE' not in job:
+                    logger.warning(f"Job missing PROCESS_CODE field, skipping: {job}")
+                    continue
+                    
+                if not job.get('RSC_LOCATION') and not job.get('MACHINE_ID'):
+                    logger.warning(f"Job {job['PROCESS_CODE']} has no machine assignment, skipping")
+                    continue
+                    
+                if not isinstance(job.get('processing_time', 0), (int, float)) or job.get('processing_time', 0) <= 0:
+                    logger.warning(f"Job {job['PROCESS_CODE']} has invalid processing time, defaulting to 3600 seconds (1 hour)")
+                    job['processing_time'] = 3600
+                    
+                valid_jobs.append(job)
+                
+            if len(valid_jobs) < len(jobs):
+                logger.warning(f"Filtered out {len(jobs) - len(valid_jobs)} invalid jobs before scheduling")
+                
+            # Try CP-SAT with validated data
+            schedule = schedule_jobs(valid_jobs, machines, setup_times, enforce_sequence=args.enforce_sequence, time_limit_seconds=time_limit)
+            
+            # Verify schedule is valid and not empty
+            if not schedule:
+                logger.warning("CP-SAT solver returned None instead of a schedule dictionary")
                 schedule = None
+            elif not any(schedule.values()):
+                logger.warning("CP-SAT solver returned an empty schedule (no jobs scheduled)")
+                schedule = None
+            else:
+                total_jobs = sum(len(jobs_list) for jobs_list in schedule.values())
+                cp_sat_time = time.time() - cp_sat_start_time
+                logger.info(f"CP-SAT solver successfully scheduled {total_jobs} jobs in {cp_sat_time:.2f} seconds")
         except Exception as e:
             logger.error(f"CP-SAT solver failed: {e}")
+            logger.error(f"Stack trace:", exc_info=True)
             schedule = None
 
+    # Step 2: Fall back to greedy scheduler if CP-SAT failed or was skipped
     if not schedule or not any(schedule.values()):
         logger.info("Falling back to greedy scheduler...")
+        greedy_start_time = time.time()
         try:
             # Ensure START_DATE constraints are properly passed to the greedy scheduler
-            start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']) and job['START_DATE_EPOCH'] > current_time]
+            start_date_jobs = [job for job in jobs if 
+                              ('START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']) and job['START_DATE_EPOCH'] > current_time) or
+                              ('START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None and not pd.isna(job['START_DATE _EPOCH']) and job['START_DATE _EPOCH'] > current_time)]
+            
             if start_date_jobs:
                 logger.info(f"Passing {len(start_date_jobs)} START_DATE constraints to greedy scheduler:")
                 for job in start_date_jobs:
-                    start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-                    logger.info(f"  Constraint: {job['PROCESS_CODE']} must start EXACTLY at {start_date}")
+                    # Get START_DATE from either field format
+                    start_date_epoch = job.get('START_DATE_EPOCH')
+                    if start_date_epoch is None or pd.isna(start_date_epoch):
+                        start_date_epoch = job.get('START_DATE _EPOCH')
+                        
+                    if start_date_epoch is not None and not pd.isna(start_date_epoch):
+                        start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
+                        logger.info(f"  Constraint: {job['PROCESS_CODE']} must start EXACTLY at {start_date}")
             
-            schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=args.enforce_sequence)
+            # Apply same validation as CP-SAT for consistency
+            valid_jobs = []
+            for job in jobs:
+                if 'PROCESS_CODE' not in job:
+                    logger.warning(f"Job missing PROCESS_CODE field, skipping: {job}")
+                    continue
+                    
+                if not job.get('RSC_LOCATION') and not job.get('MACHINE_ID'):
+                    logger.warning(f"Job {job['PROCESS_CODE']} has no machine assignment, skipping")
+                    continue
+                    
+                valid_jobs.append(job)
+                
+            schedule = greedy_schedule(valid_jobs, machines, setup_times, enforce_sequence=args.enforce_sequence)
+            
+            if schedule and any(schedule.values()):
+                total_jobs = sum(len(jobs_list) for jobs_list in schedule.values())
+                greedy_time = time.time() - greedy_start_time
+                logger.info(f"Greedy scheduler successfully scheduled {total_jobs} jobs in {greedy_time:.2f} seconds")
+            else:
+                logger.error("Greedy scheduler returned an empty schedule")
         except Exception as e:
             logger.error(f"Greedy scheduler failed: {e}")
+            logger.error(f"Stack trace:", exc_info=True)
             schedule = None
 
     if not schedule or not any(schedule.values()):
