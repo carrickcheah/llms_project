@@ -25,14 +25,9 @@ logger = logging.getLogger(__name__)
 # The Excel file already has times in local timezone, so we want to preserve them exactly
 
 # Define date columns that need specific time handling
-DATE_COLUMNS_CONFIG = {
-    # Column name (without trailing spaces) : (hour, minute)
-    'START_DATE': (13, 0),  # Set START_DATE to 13:00 (1 PM)
-    'PLANNED_END': (16, 0),  # Set PLANNED_END to 16:00 (4 PM)
-    'LATEST_COMPLETION_DATE': (16, 0),  # Set LATEST_COMPLETION_DATE to 16:00 (4 PM)
-    # Removed hardcoded time for LCD_DATE to use the original time from Excel
-    # Add more columns as needed
-}
+# IMPORTANT: This dictionary will be populated dynamically from Excel data
+# No hardcoded values - all times will come from Excel directly
+DATE_COLUMNS_CONFIG = {}
 
 # Default time for date columns not specifically configured
 DEFAULT_TIME = (0, 0)  # Default to midnight
@@ -173,36 +168,38 @@ def convert_column_to_dates(df, column_name, base_col=None):
             return df
     
     # Apply time component if needed
-    # Option 1: Use time from the original data if it exists
+    # Option 1: Always use time from the original data if it exists
     if has_time:
         logger.info(f"Column '{column_name}' already has time component, preserving original times")
-    # Option 2: For dates without time or with midnight default time, apply configured time
+    # Option 2: For dates without time or with midnight default time, don't modify - keep as is
     else:
-        # Get the configured time for this column
+        # Get the configured time for this column - but DON'T apply it, just log it
         if base_col is None:
             base_col = column_name
-        
+            
+        # IMPORTANT: We're not modifying times anymore, just logging for debugging
         hour, minute = get_column_time(base_col)
+        logger.info(f"Column '{column_name}' has no time component. Original values will be preserved.")
         
-        # Apply the configured time to each non-null date
-        logger.info(f"Setting time to {hour:02d}:{minute:02d} for column '{column_name}'")
-        
-        # Only apply configured time if the original doesn't have a time component
-        # or if the original time is midnight (00:00)
-        df[column_name] = df[column_name].apply(
-            lambda x: x.replace(hour=hour, minute=minute) 
-            if pd.notna(x) and (not has_time or (x.hour == 0 and x.minute == 0)) 
-            else x
-        )
+        # We leave all dates as they come from Excel, even if they don't have a time component
+        # This ensures we never impose any hardcoded times
     
     # Create epoch timestamp column for all dates
     # Use cleaned column name (no trailing spaces) for the EPOCH field
     epoch_col_name = f"{clean_epoch_col}_EPOCH"
     
-    # Account for 8-hour timezone difference to preserve Excel's original times
+    # Convert to epoch timestamp without timezone adjustment to preserve Excel's original times
     df[epoch_col_name] = df[column_name].apply(
-        lambda x: int(int(x.timestamp()) - (8 * 3600)) if pd.notna(x) else None
+        lambda x: int(x.timestamp()) if pd.notna(x) else None
     )
+    
+    # For debugging START_DATE columns
+    if 'START_DATE' in column_name.upper():
+        sample_values = df[column_name].dropna().head(3).tolist()
+        logger.info(f"Sample {column_name} values: {sample_values}")
+        sample_epochs = df[epoch_col_name].dropna().head(3).tolist()
+        logger.info(f"Sample {epoch_col_name} values: {sample_epochs}")
+        logger.info(f"These represent: {[datetime.fromtimestamp(e).strftime('%Y-%m-%d %H:%M') for e in sample_epochs]}")
     
     # Create a standardized version of the field (no spaces)
     standard_epoch_name = epoch_col_name.replace(" ", "")
@@ -218,10 +215,13 @@ def convert_column_to_dates(df, column_name, base_col=None):
     
     return df
 
+
+
 def load_jobs_planning_data(excel_file):
     """
     Load job planning data from an Excel file.
     This handles multiple date columns with configurable time settings.
+    Adds UNIQUE_JOB_ID as JOB + PROCESS_CODE for each job.
     
     Args:
         excel_file (str): Path to the Excel file
@@ -232,19 +232,15 @@ def load_jobs_planning_data(excel_file):
     logger.info(f"Loading job planning data from {excel_file}")
     
     try:
-        # Check if file exists
         if not os.path.exists(excel_file):
             raise FileNotFoundError(f"Excel file not found: {excel_file}")
         
-        # First try reading with header at row 0 (one-indexed row 1)
         try:
             logger.info("Trying to read Excel with header at row 0 (Excel row 1)")
             df = pd.read_excel(excel_file, header=0)
-            # Check if we got what looks like header rows
             if not df.empty and all(isinstance(col, str) for col in df.columns):
                 logger.info("Successfully read Excel file with header at row 0")
             else:
-                # Fall back to row 4
                 logger.info("Header not found at row 0, falling back to row 4 (Excel row 5)")
                 df = pd.read_excel(excel_file, header=4)
         except Exception as e:
@@ -252,82 +248,58 @@ def load_jobs_planning_data(excel_file):
             logger.info("Falling back to header at row 4 (Excel row 5)")
             df = pd.read_excel(excel_file, header=4)
         
-        # Basic validation of required columns
-        required_cols = ['PROCESS_CODE', 'PRIORITY', 'RSC_LOCATION']
+        required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_LOCATION']
         missing_cols = [col for col in required_cols if col not in df.columns]
-        
-        # Try alternative column names if some are missing
-        if 'RSC_LOCATION' in missing_cols and 'MACHINE_ID' in df.columns:
-            logger.info("Using 'MACHINE_ID' as alternative for 'RSC_LOCATION'")
-            missing_cols.remove('RSC_LOCATION')
-            
-        if 'PROCESS_NUMBER' in df.columns and 'PROCESS_CODE' in missing_cols:
-            # Use PROCESS_NUMBER as PROCESS_CODE
-            logger.info("Using 'PROCESS_NUMBER' as 'PROCESS_CODE'")
-            df['PROCESS_CODE'] = df['PROCESS_NUMBER']
-            missing_cols.remove('PROCESS_CODE')
-        
-        if 'JOB_ID' in df.columns and 'PROCESS_CODE' in missing_cols:
-            # Use JOB_ID as PROCESS_CODE
-            logger.info("Using 'JOB_ID' as 'PROCESS_CODE'")
-            df['PROCESS_CODE'] = df['JOB_ID']
-            missing_cols.remove('PROCESS_CODE')
         
         if missing_cols:
             raise ValueError(f"Required columns are missing: {missing_cols}")
         
-        # Filter out rows without a valid PROCESS_CODE or with COMPLETED flag
-        df = df[df['PROCESS_CODE'].notna()]
+        df = df[df['JOB'].notna() & df['PROCESS_CODE'].notna()]
+        
+        # Create UNIQUE_JOB_ID as JOB + PROCESS_CODE
+        df['UNIQUE_JOB_ID'] = df['JOB'].astype(str) + '_' + df['PROCESS_CODE'].astype(str)
+        
+        duplicates = df.duplicated(subset=['UNIQUE_JOB_ID']).sum()
+        if duplicates > 0:
+            logger.warning(f"Found {duplicates} duplicate jobs based on UNIQUE_JOB_ID")
+            df = df.drop_duplicates(subset=['UNIQUE_JOB_ID'], keep='first')
+            logger.info(f"Removed duplicates, keeping first occurrence. Remaining: {len(df)} jobs")
+        
         if 'COMPLETED' in df.columns:
             df = df[~df['COMPLETED'].fillna(False).astype(bool)]
             logger.info(f"Filtered out completed jobs. Remaining: {len(df)} jobs")
             
-        # Handle date columns
         date_columns = [col for col in df.columns if any(date_key in col.upper() for date_key in ['DATE', 'DUE', 'TARGET', 'COMPLETION'])]
         logger.info(f"Found {len(date_columns)} potential date columns: {date_columns}")
         
         for col in date_columns:
-            # Skip columns that are entirely empty
             if df[col].isna().all():
                 logger.info(f"Skipping empty date column '{col}'")
                 continue
             convert_column_to_dates(df, col)
         
-        # Get machine list
         if 'RSC_LOCATION' in df.columns:
             machines = df['RSC_LOCATION'].dropna().unique().tolist()
-        elif 'MACHINE_ID' in df.columns:
-            machines = df['MACHINE_ID'].dropna().unique().tolist()
         else:
             machines = []
-            logger.warning("No machine column found (RSC_LOCATION or MACHINE_ID)")
+            logger.warning("No machine column found (RSC_LOCATION)")
         
-        # Get processing time in seconds
         if 'HOURS_NEED' in df.columns:
-            # Use HOURS_NEED directly from Excel and convert to seconds
             logger.info("Using HOURS_NEED from Excel for job durations")
             df['processing_time'] = df['HOURS_NEED'] * 3600
         elif 'PROCESSING_TIME_HR' in df.columns:
-            # Convert hours to seconds
             df['processing_time'] = df['PROCESSING_TIME_HR'] * 3600
         elif 'PROC_TIME_HR' in df.columns:
-            # Convert hours to seconds
             df['processing_time'] = df['PROC_TIME_HR'] * 3600
         elif 'PROCESSING_TIME_MIN' in df.columns:
-            # Convert minutes to seconds
             df['processing_time'] = df['PROCESSING_TIME_MIN'] * 60
         else:
-            # Default to 1 hour if no processing time
             df['processing_time'] = 3600
             logger.warning("No processing time column found, defaulting to 1 hour per job")
         
-        # Replace zero or negative processing times with 1 hour
         df.loc[df['processing_time'] <= 0, 'processing_time'] = 3600
         
-        # Convert to list of dictionaries (more convenient for scheduling algorithms)
         jobs = df.to_dict('records')
-        
-        # Default setup times (empty dictionary means no setup time between jobs)
         setup_times = {}
         
         logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines")

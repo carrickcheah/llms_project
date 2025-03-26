@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import logging
 from dotenv import load_dotenv
 from ingest_data import load_jobs_planning_data
-from greedy import greedy_schedule, extract_job_family, extract_process_number
+from greedy import greedy_schedule
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -52,22 +52,43 @@ def get_buffer_status_color(buffer_hours):
     else:
         return "green"
 
-def extract_job_family(process_code):
-    """Extract the job family (e.g., 'CP08-231B') from the process code."""
+def extract_job_family(unique_job_id):
+    """
+    Extract the job family (e.g., 'CP08-231B' from 'JOB_CP08-231B-P01-06') from the UNIQUE_JOB_ID.
+    UNIQUE_JOB_ID is in the format JOB_PROCESS_CODE.
+    """
+    try:
+        process_code = unique_job_id.split('_', 1)[1]  # Split on first underscore to get PROCESS_CODE
+    except IndexError:
+        logger.warning(f"Could not extract PROCESS_CODE from UNIQUE_JOB_ID {unique_job_id}")
+        return unique_job_id
+
     process_code = str(process_code).upper()
     match = re.search(r'(.*?)-P\d+', process_code)
     if match:
         family = match.group(1)
+        logger.debug(f"Extracted family {family} from {unique_job_id}")
         return family
     parts = process_code.split("-P")
     if len(parts) >= 2:
-        return parts[0]
+        family = parts[0]
+        logger.debug(f"Extracted family {family} from {unique_job_id} (using split)")
+        return family
+    logger.warning(f"Could not extract family from {unique_job_id}, using full code")
     return process_code
 
-def extract_process_number(process_code):
-    """Extract the process sequence number (e.g., 1 from 'P01-06') or return 999 if not found."""
-    process_code = str(process_code).upper()
-    match = re.search(r'P(\d{2})', process_code)  # Match exactly two digits after P
+def extract_process_number(unique_job_id):
+    """
+    Extract the process sequence number (e.g., 1 from 'P01-06' in 'JOB_P01-06') or return 999 if not found.
+    UNIQUE_JOB_ID is in the format JOB_PROCESS_CODE.
+    """
+    try:
+        process_code = unique_job_id.split('_', 1)[1]  # Split on first underscore to get PROCESS_CODE
+    except IndexError:
+        logger.warning(f"Could not extract PROCESS_CODE from UNIQUE_JOB_ID {unique_job_id}")
+        return 999
+
+    match = re.search(r'P(\d{2})', str(process_code).upper())  # Match exactly two digits after P
     if match:
         seq = int(match.group(1))
         return seq
@@ -79,7 +100,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
     
     Args:
         jobs (list): List of job dictionaries with buffer information
-        schedule (dict): Schedule as {machine: [(process_code, start, end, priority), ...]}
+        schedule (dict): Schedule as {machine: [(unique_job_id, start, end, priority), ...]}
         output_file (str): Path to save the HTML file
         
     Returns:
@@ -89,14 +110,14 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         # Step 1: Create a mapping of job families and their processes in sequence
         family_processes = {}
         for job in jobs:
-            process_code = job['PROCESS_CODE']
-            family = extract_job_family(process_code)
-            seq_num = extract_process_number(process_code)
+            unique_job_id = job['UNIQUE_JOB_ID']
+            family = extract_job_family(unique_job_id)
+            seq_num = extract_process_number(unique_job_id)
             
             if family not in family_processes:
                 family_processes[family] = []
             
-            family_processes[family].append((seq_num, process_code, job))
+            family_processes[family].append((seq_num, unique_job_id, job))
         
         # Sort processes within each family by sequence number
         for family in family_processes:
@@ -107,9 +128,9 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         start_times = {}
         for machine, tasks in schedule.items():
             for task in tasks:
-                process_code, start, end, priority = task
-                end_times[process_code] = end
-                start_times[process_code] = start
+                unique_job_id, start, end, priority = task
+                end_times[unique_job_id] = end
+                start_times[unique_job_id] = start
         
         # Step 2: Apply time shifts from jobs to their visualization times
         adjusted_times = {}
@@ -117,16 +138,16 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         
         # FIRST PRIORITY: EXPLICIT START_DATE OVERRIDES
         for job in jobs:
-            process_code = job['PROCESS_CODE']
-            # Ensure all process codes have entries in the times dictionaries
-            if process_code not in start_times and process_code not in end_times:
-                logger.warning(f"Process {process_code} missing from schedule, will not be visualized properly")
+            unique_job_id = job['UNIQUE_JOB_ID']
+            # Ensure all unique_job_ids have entries in the times dictionaries
+            if unique_job_id not in start_times and unique_job_id not in end_times:
+                logger.warning(f"Job {unique_job_id} missing from schedule, will not be visualized properly")
                 continue
                 
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] and process_code in start_times:
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] and unique_job_id in start_times:
                 # For START_DATE jobs, always use exactly the requested START_DATE for visualization
-                original_start = start_times[process_code]
-                original_end = end_times[process_code]
+                original_start = start_times[unique_job_id]
+                original_end = end_times[unique_job_id]
                 duration = original_end - original_start
                 
                 # Set the visualization start time exactly to START_DATE
@@ -135,16 +156,16 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 adjusted_end = adjusted_start + duration
                 
                 # Store the adjusted times
-                adjusted_times[process_code] = (adjusted_start, adjusted_end)
+                adjusted_times[unique_job_id] = (adjusted_start, adjusted_end)
                 
                 start_date_str = format_date_correctly(adjusted_start)
-                logger.info(f"Job {process_code} visualization using exact START_DATE: {start_date_str}")
+                logger.info(f"Job {unique_job_id} visualization using exact START_DATE: {start_date_str}")
         
         # SECOND PRIORITY: FAMILY-WIDE TIME SHIFTS        
         for family, processes in family_processes.items():
             # Check if any job in this family has a time shift
             family_time_shift = 0
-            for seq_num, process_code, job in processes:
+            for seq_num, unique_job_id, job in processes:
                 if 'family_time_shift' in job and abs(job['family_time_shift']) > 60:  # More than a minute
                     family_time_shift = job['family_time_shift']
                     break
@@ -152,39 +173,39 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             # If family has time shift, apply to all processes in family
             if family_time_shift != 0:
                 logger.info(f"Applying time shift of {family_time_shift/3600:.1f} hours to family {family} for visualization")
-                for seq_num, process_code, job in processes:
+                for seq_num, unique_job_id, job in processes:
                     # Skip if already processed by START_DATE override
-                    if process_code in adjusted_times:
+                    if unique_job_id in adjusted_times:
                         continue
                         
-                    if process_code in start_times and process_code in end_times:
-                        original_start = start_times[process_code]
-                        original_end = end_times[process_code]
+                    if unique_job_id in start_times and unique_job_id in end_times:
+                        original_start = start_times[unique_job_id]
+                        original_end = end_times[unique_job_id]
                         
                         # Apply the time shift
                         adjusted_start = original_start - family_time_shift
                         adjusted_end = original_end - family_time_shift
                         
                         # Store the adjusted times
-                        adjusted_times[process_code] = (adjusted_start, adjusted_end)
+                        adjusted_times[unique_job_id] = (adjusted_start, adjusted_end)
                         
-                        logger.info(f"Adjusted {process_code}: START={format_date_correctly(adjusted_start)}, "
+                        logger.info(f"Adjusted {unique_job_id}: START={format_date_correctly(adjusted_start)}, "
                                   f"END={format_date_correctly(adjusted_end)}")
         
         # Step 3: Process each job and create schedule data
         schedule_data = []
         
         for job in jobs:
-            process_code = job['PROCESS_CODE']
-            if process_code in end_times:
+            unique_job_id = job['UNIQUE_JOB_ID']
+            if unique_job_id in end_times:
                 # Get original scheduled times
-                original_start = start_times[process_code]
-                original_end = end_times[process_code]
+                original_start = start_times[unique_job_id]
+                original_end = end_times[unique_job_id]
                 due_time = job.get('LCD_DATE_EPOCH', 0)
                 
                 # Use adjusted times if available, otherwise use original times
-                if process_code in adjusted_times:
-                    job_start, job_end = adjusted_times[process_code]
+                if unique_job_id in adjusted_times:
+                    job_start, job_end = adjusted_times[unique_job_id]
                 else:
                     job_start, job_end = original_start, original_end
                 
@@ -193,14 +214,14 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     # For display purposes
                     user_start_date = format_date_correctly(job['START_DATE_EPOCH'])
                     
-                    # Find the family this process belongs to
-                    family = extract_job_family(process_code)
-                    seq_num = extract_process_number(process_code)
+                    # Find the family this job belongs to
+                    family = extract_job_family(unique_job_id)
+                    seq_num = extract_process_number(unique_job_id)
                     
                     # Check if this is the first process in the family
                     is_first_process = False
                     if family in family_processes and len(family_processes[family]) > 0:
-                        is_first_process = (family_processes[family][0][1] == process_code)
+                        is_first_process = (family_processes[family][0][1] == unique_job_id)
                     
                     # For jobs with START_DATE constraints, prioritize using the exact date
                     # IMPORTANT: We store the START_DATE_EPOCH value for display in the START_DATE column
@@ -217,7 +238,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         # Adjust end time to maintain the same duration
                         original_duration = original_end - original_start
                         job_end = job_start + original_duration
-                        logger.info(f"Using START_DATE={user_start_date} for {process_code} in visualization")
+                        logger.info(f"Using START_DATE={user_start_date} for {unique_job_id} in visualization")
                 
                 # Format the dates for display
                 # Always format job_start and job_end for display even if START_DATE is provided
@@ -227,8 +248,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 
                 # IMPORTANT: Also update the original dictionaries to ensure data is preserved
                 # This ensures that all jobs (not just START_DATE jobs) have proper START_TIME and END_TIME
-                start_times[process_code] = job_start
-                end_times[process_code] = job_end
+                start_times[unique_job_id] = job_start
+                end_times[unique_job_id] = job_end
                 
                 # Get START_DATE for display
                 user_start_date = ""
@@ -254,17 +275,17 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 if 'HOURS_NEED' in job and job['HOURS_NEED'] is not None and not pd.isna(job['HOURS_NEED']) and isinstance(job['HOURS_NEED'], (int, float)):
                     # Use the HOURS_NEED value directly from Excel
                     hours_need = job['HOURS_NEED']
-                    logger.info(f"Using HOURS_NEED={hours_need} directly from Excel for {process_code}")
+                    logger.info(f"Using HOURS_NEED={hours_need} directly from Excel for {unique_job_id}")
                 # Fallback only if HOURS_NEED is not available in Excel
                 elif valid_times:
                     # Fallback to scheduled duration if HOURS_NEED not found
                     duration_seconds = job_end - job_start
                     hours_need = duration_seconds / 3600
-                    logger.info(f"HOURS_NEED not found in Excel for {process_code}, using calculated duration: {hours_need:.2f} hours")
+                    logger.info(f"HOURS_NEED not found in Excel for {unique_job_id}, using calculated duration: {hours_need:.2f} hours")
                 else:
                     # Default if no valid data available
                     hours_need = 1.0
-                    logger.info(f"HOURS_NEED not found in Excel for {process_code} and times invalid, using default: 1.0 hour")
+                    logger.info(f"HOURS_NEED not found in Excel for {unique_job_id} and times invalid, using default: 1.0 hour")
                 
                 # Calculate duration only with valid times
                 if valid_times:
@@ -289,10 +310,10 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         buffer_seconds = 0
                         buffer_hours = 0
                         valid_due_time = True
-                        logger.warning(f"Chart: Job {process_code} will be LATE! Due at {datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')} but ends at {datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')}")
+                        logger.warning(f"Chart: Job {unique_job_id} will be LATE! Due at {datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')} but ends at {datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')}")
                     else:
                         # Due date too far in future, might be incorrect
-                        logger.warning(f"Chart: Due date for {process_code} is too far in future, might be incorrect")
+                        logger.warning(f"Chart: Due date for {unique_job_id} is too far in future, might be incorrect")
                 
                 if not valid_due_time:
                     if 'BAL_HR' in job and job['BAL_HR'] is not None and not pd.isna(job['BAL_HR']) and isinstance(job['BAL_HR'], (int, float)):
@@ -304,12 +325,12 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 
                 # No capping - return true buffer value regardless of size
                 if buffer_hours > 720:  # Just log large values (over 30 days) but don't cap them
-                    logger.info(f"Chart: Job {process_code} has a large buffer of {buffer_hours:.1f} hours ({buffer_hours/24:.1f} days)")
+                    logger.info(f"Chart: Job {unique_job_id} has a large buffer of {buffer_hours:.1f} hours ({buffer_hours/24:.1f} days)")
                 
                 # Job family and sequence
                 # Use RSC_CODE if available, fall back to legacy ways of determining job code
                 job_code = job.get('RSC_CODE', job.get('JOB_CODE', 
-                           process_code.split('-P')[0] if '-P' in process_code else process_code))
+                           unique_job_id.split('_', 1)[1].split('-P')[0] if '-P' in unique_job_id.split('_', 1)[1] else unique_job_id))
                 
                 # Get resource location
                 resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
@@ -359,7 +380,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 schedule_data.append({
                     'LCD_DATE': due_date,
                     'JOB': job_name,
-                    'PROCESS_CODE': process_code,
+                    'UNIQUE_JOB_ID': unique_job_id,
                     'RSC_LOCATION': resource_location,
                     'RSC_CODE': job_code,
                     'NUMBER_OPERATOR': job.get('NUMBER_OPERATOR', 1),
@@ -464,7 +485,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         /* Set specific column widths based on content - reduced to fit all columns */
         table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 65px; }} /* LCD_DATE */
         table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 65px; }} /* JOB */
-        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 80px; }} /* PROCESS_CODE */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 80px; }} /* UNIQUE_JOB_ID */
         table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 40px; }} /* RSC_LOCATION */
         table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) {{ width: 55px; }} /* RSC_CODE */
         table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) {{ width: 35px; }} /* NUMBER_OPERATOR */
@@ -595,7 +616,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     <tr>
                         <th>LCD_DATE</th>
                         <th>JOB</th>
-                        <th>PROCESS_CODE</th>
+                        <th>UNIQUE_JOB_ID</th>
                         <th>RSC_LOCATION</th>
                         <th>RSC_CODE</th>
                         <th>NUMBER_OPERATOR</th>
@@ -650,7 +671,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             # Format other possibly NaN values
             lcd_date = row['LCD_DATE'] if pd.notna(row['LCD_DATE']) else "N/A"
             job = row['JOB'] if pd.notna(row['JOB']) else ""
-            process_code = row['PROCESS_CODE'] if pd.notna(row['PROCESS_CODE']) else ""
+            unique_job_id = row['UNIQUE_JOB_ID'] if pd.notna(row['UNIQUE_JOB_ID']) else ""
             rsc_location = row['RSC_LOCATION'] if pd.notna(row['RSC_LOCATION']) else ""
             rsc_code = row['RSC_CODE'] if pd.notna(row['RSC_CODE']) else ""
             number_operator = row['NUMBER_OPERATOR'] if pd.notna(row['NUMBER_OPERATOR']) else 1
@@ -668,17 +689,17 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             
             # Enhanced debugging for START_TIME and END_TIME values
             if pd.isna(start_time) or start_time == "" or start_time is None:
-                logger.warning(f"Missing START_TIME for job {process_code}")
+                logger.warning(f"Missing START_TIME for job {unique_job_id}")
                 start_time = "N/A"
             if pd.isna(end_time) or end_time == "" or end_time is None:
-                logger.warning(f"Missing END_TIME for job {process_code}")
+                logger.warning(f"Missing END_TIME for job {unique_job_id}")
                 end_time = "N/A"
             
             html_content += f"""
                     <tr class="{buffer_class}">
                         <td title="{lcd_date}">{lcd_date}</td>
                         <td title="{job}">{job}</td>
-                        <td title="{process_code}">{process_code}</td>
+                        <td title="{unique_job_id}">{unique_job_id}</td>
                         <td title="{rsc_location}">{rsc_location}</td>
                         <td title="{rsc_code}">{rsc_code}</td>
                         <td title="{number_operator}">{number_operator}</td>
@@ -729,7 +750,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     // Set column visibility and width options
                     { "width": "90px", "targets": 0 }, // LCD_DATE
                     { "width": "95px", "targets": 1 }, // JOB
-                    { "width": "120px", "targets": 2 }, // PROCESS_CODE
+                    { "width": "120px", "targets": 2 }, // UNIQUE_JOB_ID
                     { "width": "65px", "targets": 3 }, // RSC_LOCATION
                     { "width": "80px", "targets": 4 }, // RSC_CODE
                     { "width": "60px", "targets": 5 }, // NUMBER_OPERATOR
@@ -787,10 +808,10 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     var legendHtml = '<div class="mb-3 p-2 bg-white rounded shadow-sm" style="font-size: 11px;">' +
                         '<h5 class="border-bottom pb-2 mb-2" style="font-size: 14px;"><i class="bi bi-info-circle me-2"></i>Buffer Status Legend:</h5>' +
                         '<div class="d-flex flex-wrap gap-2">' +
-                        '<div class="status-badge badge-critical">Critical (&lt;8h)</div>' +
-                        '<div class="status-badge badge-warning">Warning (&lt;24h)</div>' +
-                        '<div class="status-badge badge-caution">Caution (&lt;72h)</div>' +
-                        '<div class="status-badge badge-ok">OK (&gt;72h)</div>' +
+                        '<div class="status-badge badge-critical">Critical (<8h)</div>' +
+                        '<div class="status-badge badge-warning">Warning (<24h)</div>' +
+                        '<div class="status-badge badge-caution">Caution (<72h)</div>' +
+                        '<div class="status-badge badge-ok">OK (>72h)</div>' +
                         '</div></div>';
                     $('.dataTables_wrapper').prepend(legendHtml);
                 }
