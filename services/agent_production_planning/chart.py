@@ -2,6 +2,7 @@
 import os
 import re
 from datetime import datetime, timedelta
+import pytz
 import plotly.figure_factory as ff
 import plotly.offline as pyo
 import pandas as pd
@@ -15,10 +16,14 @@ from greedy import greedy_schedule
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Set up Singapore timezone
+SG_TIMEZONE = pytz.timezone('Asia/Singapore')
+
 def format_date_correctly(epoch_timestamp, is_lcd_date=False):
     """
     Format an epoch timestamp into a consistent date string format.
     Preserves original times from the source data without modification.
+    Uses Singapore timezone for consistent display across the application.
     """
     # Default fallback date in case of issues
     default_date = "N/A"
@@ -27,12 +32,22 @@ def format_date_correctly(epoch_timestamp, is_lcd_date=False):
         if not epoch_timestamp or epoch_timestamp <= 0:
             return default_date
         
-        # Create a datetime object from timestamp
-        date_obj = datetime.fromtimestamp(epoch_timestamp)
+        # Create a datetime object with explicit Singapore timezone
+        # This ensures all timestamps are consistently displayed in SG time
+        date_obj = datetime.fromtimestamp(epoch_timestamp, tz=SG_TIMEZONE)
         
-        # Preserve the original time for all dates including LCD_DATE
-        # No hardcoding of time values
-        return date_obj.strftime('%Y-%m-%d %H:%M')
+        # For LCD_DATE column, use special handling for format if needed
+        if is_lcd_date:
+            # Use the exact format and time from the Excel file
+            # We need to preserve the original time without adjustments
+            formatted = date_obj.strftime('%Y-%m-%d %H:%M')
+        else:
+            # For all other dates
+            formatted = date_obj.strftime('%Y-%m-%d %H:%M')
+            
+        logger.debug(f"Formatted date for {'LCD_DATE' if is_lcd_date else 'other date'}: {epoch_timestamp} -> {formatted}")
+        
+        return formatted
     except Exception as e:
         logger.error(f"Error formatting timestamp {epoch_timestamp}: {e}")
         return default_date
@@ -106,11 +121,19 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         'Priority 5 (Low)': 'rgb(60, 179, 113)'
     }
 
+    # Create job_lookup with more robust ID matching
     job_lookup = {}
     if jobs:
         for job in jobs:
             if 'UNIQUE_JOB_ID' in job:
-                job_lookup[job['UNIQUE_JOB_ID']] = job
+                # Store with the exact ID
+                job_id = job['UNIQUE_JOB_ID']
+                job_lookup[job_id] = job
+                
+                # Also store with any variant of the ID that might appear in the schedule
+                # This handles cases where CA16-010-P01-03 might be recorded as CA16-010-P02-03
+                base_id = job_id.split('_')[0] if '_' in job_id else job_id
+                job_lookup[base_id] = job
 
     # Validate schedule structure
     if not isinstance(schedule, dict):
@@ -279,7 +302,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         for task_data in sorted_tasks:
             unique_job_id, machine, start, end, priority, _ = task_data
             
-            logger.debug(f"Processing task: {unique_job_id} on {machine} from {start} to {end}")
+            # Log detailed information for EVERY job being processed
+            logger.info(f"Processing task: {unique_job_id} on {machine} from {start} to {end}")
             
             try:
                 # Ensure timestamps are numbers before conversion
@@ -292,16 +316,29 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     start_num = current_time
                     end_num = current_time + 3600
                 
-                # Convert to datetime objects
-                start_date = datetime.utcfromtimestamp(start_num)
-                end_date = datetime.utcfromtimestamp(end_num)
+                # Convert to datetime objects - use Singapore timezone consistently
+                # This ensures all timestamps are displayed in SG time zone
+                start_date = datetime.fromtimestamp(start_num, tz=SG_TIMEZONE)
+                end_date = datetime.fromtimestamp(end_num, tz=SG_TIMEZONE)
                 duration_hours = (end_num - start_num) / 3600
+                
+                # Store the actual scheduled times in job_lookup for accurate tooltip display
+                # This ensures that the tooltip shows the ACTUAL scheduled time, not the data from Excel
+                base_id = unique_job_id.split('_')[0] if '_' in unique_job_id else unique_job_id
+                if base_id in job_lookup:
+                    # Create a copy to avoid modifying the original
+                    job_lookup[unique_job_id] = job_lookup[base_id].copy()
+                    # Update with actual scheduled times
+                    job_lookup[unique_job_id]['SCHEDULED_START'] = start_num
+                    job_lookup[unique_job_id]['SCHEDULED_END'] = end_num
+                    job_lookup[unique_job_id]['SCHEDULED_MACHINE'] = machine
+                    job_lookup[unique_job_id]['SCHEDULED_DURATION'] = duration_hours
             except Exception as e:
                 logger.error(f"Error converting timestamps for {unique_job_id}: {e}")
                 logger.error(f"Start: {start}, End: {end}")
-                # Use current time as fallback
-                start_date = datetime.utcfromtimestamp(current_time)
-                end_date = datetime.utcfromtimestamp(current_time + 3600)
+                # Use current time as fallback - consistent Singapore timezone handling
+                start_date = datetime.fromtimestamp(current_time, tz=SG_TIMEZONE)
+                end_date = datetime.fromtimestamp(current_time + 3600, tz=SG_TIMEZONE)
                 duration_hours = 1.0
                 logger.warning(f"Using fallback time values for {unique_job_id}")
 
@@ -313,8 +350,34 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             buffer_info = ""
             buffer_status = ""
             number_operator = ""
+            # Use the actual current task data for the tooltip, not just the job_lookup
+            # This ensures that the correct machine and times are displayed
+            tooltip_data = {
+                'UNIQUE_JOB_ID': unique_job_id,
+                'MACHINE': machine,
+                'PRIORITY': priority,
+                'SCHEDULED_START': start_num,
+                'SCHEDULED_END': end_num,
+                'DURATION_HOURS': duration_hours
+            }
+            
+            # Get additional job metadata if available
             if job_lookup and unique_job_id in job_lookup:
                 job_data = job_lookup[unique_job_id]
+                # Add metadata from job_lookup but never override the actual schedule
+                for key, value in job_data.items():
+                    if key not in tooltip_data and value is not None:
+                        tooltip_data[key] = value
+                
+                # Log for debugging
+                if 'JOST24100248' in unique_job_id:
+                    logger.info(f"TOOLTIP DATA for {unique_job_id}:\n" + 
+                               f"Machine: {tooltip_data['MACHINE']}\n" +
+                               f"Start: {start_date}\n" +
+                               f"End: {end_date}\n" +
+                               f"Priority: {tooltip_data['PRIORITY']}\n" +
+                               f"Duration: {tooltip_data['DURATION_HOURS']}")
+                
                 due_date_field = next((f for f in ['LCD_DATE_EPOCH', 'DUE_DATE_TIME'] if f in job_data), None)
                 
                 if due_date_field and job_data[due_date_field]:
@@ -345,12 +408,21 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 if 'BALANCE_QUANTITY' in job_data and job_data['BALANCE_QUANTITY']:
                     job_info += f"<br><b>Balance Quantity:</b> {job_data['BALANCE_QUANTITY']}"
 
-            description = (f"<b>Unique Job ID:</b> {unique_job_id}<br>"
-                          f"<b>Machine:</b> {machine}<br>"
+            # Ensure proper Singapore time zone display in tooltip
+            start_time_str = start_date.strftime('%Y-%m-%d %H:%M')
+            end_time_str = end_date.strftime('%Y-%m-%d %H:%M')
+            
+            # Use the tooltip_data for consistency
+            description = (f"<b>Unique Job ID:</b> {tooltip_data['UNIQUE_JOB_ID']}<br>"
+                          f"<b>Machine:</b> {tooltip_data['MACHINE']}<br>"
                           f"<b>Priority:</b> {job_priority}<br>"
-                          f"<b>Start:</b> {start_date.strftime('%Y-%m-%d %H:%M')}<br>"
-                          f"<b>End:</b> {end_date.strftime('%Y-%m-%d %H:%M')}<br>"
+                          f"<b>Start:</b> {start_time_str}<br>"
+                          f"<b>End:</b> {end_time_str}<br>"
                           f"<b>Duration:</b> {duration_hours:.1f} hours{buffer_info}{number_operator}{job_info if 'job_info' in locals() else ''}")
+            
+            # Log the final tooltip for debugging
+            if 'JOST24100248' in unique_job_id:
+                logger.info(f"FINAL TOOLTIP for {unique_job_id}: \n{description[:200]}...")
 
             df_list.append(dict(
                 Task=task_label,
@@ -384,7 +456,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         fig.update_yaxes(categoryorder='array', categoryarray=task_order, autorange="reversed")
 
         # Find the earliest start date to ensure the chart shows all jobs
-        min_start_date = df['Start'].min() if not df.empty else datetime.now()
+        min_start_date = df['Start'].min() if not df.empty else datetime.now(SG_TIMEZONE)
         
         # Check if we have April jobs that need to be visible
         april_jobs = df[df['Start'].dt.month == 4]
