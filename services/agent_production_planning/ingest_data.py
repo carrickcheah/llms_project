@@ -226,7 +226,7 @@ def load_jobs_planning_data(excel_file):
             logger.info("Falling back to header at row 4 (Excel row 5)")
             df = pd.read_excel(excel_file, header=4)
         
-        required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_LOCATION']
+        required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_LOCATION', 'HOURS_NEED', 'SETTING_HOURS', 'BREAK_HOURS', 'NO_PROD', 'LCD_DATE']
         missing_cols = [col for col in required_cols if col not in df.columns]
         
         if missing_cols:
@@ -262,25 +262,89 @@ def load_jobs_planning_data(excel_file):
             machines = []
             logger.warning("No machine column found (RSC_LOCATION)")
         
+        # Process HOURS_NEED for job processing time
         if 'HOURS_NEED' in df.columns:
             logger.info("Using HOURS_NEED from Excel for job durations")
+            # Check for missing values
+            missing_hours = df['HOURS_NEED'].isna().sum()
+            if missing_hours > 0:
+                logger.info(f"Missing HOURS_NEED values for {missing_hours} jobs")
             df['processing_time'] = df['HOURS_NEED'] * 3600
-        elif 'PROCESSING_TIME_HR' in df.columns:
-            df['processing_time'] = df['PROCESSING_TIME_HR'] * 3600
-        elif 'PROC_TIME_HR' in df.columns:
-            df['processing_time'] = df['PROC_TIME_HR'] * 3600
-        elif 'PROCESSING_TIME_MIN' in df.columns:
-            df['processing_time'] = df['PROCESSING_TIME_MIN'] * 60
+            # Set a minimum processing time but don't default missing values
+            df.loc[(df['processing_time'] <= 0) & df['processing_time'].notna(), 'processing_time'] = 3600
+        
+        # Process SETTING_HOURS for setup times
+        if 'SETTING_HOURS' in df.columns:
+            logger.info("Using SETTING_HOURS from Excel for machine setup times")
+            # Check for missing values
+            missing_setting = df['SETTING_HOURS'].isna().sum()
+            if missing_setting > 0:
+                logger.info(f"Missing SETTING_HOURS values for {missing_setting} jobs")
+            df['setup_time'] = df['SETTING_HOURS'] * 3600
         else:
-            df['processing_time'] = 3600
-            logger.warning("No processing time column found, defaulting to 1 hour per job")
+            logger.info("SETTING_HOURS column required but not found")
+            df['setup_time'] = None
         
-        df.loc[df['processing_time'] <= 0, 'processing_time'] = 3600
+
+        # Process BREAK_HOURS for breaks during production
+        if 'BREAK_HOURS' in df.columns:
+            logger.info("Using BREAK_HOURS from Excel for production breaks")
+            # Check for missing values
+            missing_break = df['BREAK_HOURS'].isna().sum()
+            if missing_break > 0:
+                logger.info(f"Missing BREAK_HOURS values for {missing_break} jobs")
+            df['break_time'] = df['BREAK_HOURS'] * 3600
+        else:
+            logger.info("BREAK_HOURS column required but not found")
+            df['break_time'] = None
         
+        # Process NO_PROD for non-production hours
+        if 'NO_PROD' in df.columns:
+            logger.info("Using NO_PROD from Excel for non-production hours")
+            # Check for missing values
+            missing_no_prod = df['NO_PROD'].isna().sum()
+            if missing_no_prod > 0:
+                logger.info(f"Missing NO_PROD values for {missing_no_prod} jobs")
+            df['no_prod_time'] = df['NO_PROD'] * 3600
+        else:
+            logger.info("NO_PROD column required but not found")
+            df['no_prod_time'] = None
+        
+        # HOURS_NEED is now mandatory, so we've removed JOB_QUANTITY and EXPECT_OUTPUT_PER_HOUR processing
+        # as they're redundant when HOURS_NEED is provided directly
+        
+        # Check that all mandatory LCD_DATE fields are present
+        if 'LCD_DATE' in df.columns:
+            missing_lcd_date = df['LCD_DATE'].isna().sum()
+            if missing_lcd_date > 0:
+                logger.info(f"Missing LCD_DATE values for {missing_lcd_date} jobs")
+        else:
+            logger.info("LCD_DATE column required but not found")
+        
+        # Convert to dictionary records
         jobs = df.to_dict('records')
+        
+        # Create setup times dictionary for OR-Tools
         setup_times = {}
+        if 'SETTING_HOURS' in df.columns and df['SETTING_HOURS'].notna().any():
+            # Group by machine to create setup times matrix
+            for machine in machines:
+                machine_jobs = df[df['RSC_LOCATION'] == machine]
+                if len(machine_jobs) > 1:
+                    # For each job transition on the same machine, record setup time
+                    for _, job1 in machine_jobs.iterrows():
+                        for _, job2 in machine_jobs.iterrows():
+                            if job1['UNIQUE_JOB_ID'] != job2['UNIQUE_JOB_ID']:
+                                job1_id = job1['UNIQUE_JOB_ID']
+                                job2_id = job2['UNIQUE_JOB_ID']
+                                # Use job2's setup time as the transition time
+                                setup_time_sec = int(job2['setup_time'])
+                                if setup_time_sec > 0:
+                                    setup_times[(job1_id, job2_id)] = setup_time_sec
         
         logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines")
+        if setup_times:
+            logger.info(f"Created {len(setup_times)} setup time entries from SETTING_HOURS")
         return jobs, machines, setup_times
         
     except Exception as e:

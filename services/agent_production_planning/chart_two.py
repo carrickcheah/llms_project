@@ -292,18 +292,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     duration_seconds = job_end - job_start
                     hours_need = duration_seconds / 3600
                     logger.info(f"HOURS_NEED not found in Excel for {unique_job_id}, using calculated duration: {hours_need:.2f} hours")
-                else:
-                    # Default if no valid data available
-                    hours_need = 1.0
-                    logger.info(f"HOURS_NEED not found in Excel for {unique_job_id} and times invalid, using default: 1.0 hour")
                 
-                # Calculate duration only with valid times
-                if valid_times:
-                    duration_seconds = job_end - job_start
-                    duration_hours = duration_seconds / 3600
-                else:
-                    duration_seconds = 3600  # Default to 1 hour
-                    duration_hours = 1.0
+
                 
                 # Calculate buffer only with valid times and due time
                 valid_due_time = False

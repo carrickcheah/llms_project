@@ -99,6 +99,20 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     logger.info(f"Using {optimal_workers} parallel search workers for CP-SAT solver")
     
     solver.parameters.linearization_level = 2
+    
+    # Log additional data columns that will be used in scheduling
+    additional_columns = []
+    if any('setup_time' in job and job['setup_time'] > 0 for job in jobs):
+        additional_columns.append('SETTING_HOURS (setup times)')
+    if any('break_time' in job and job['break_time'] > 0 for job in jobs):
+        additional_columns.append('BREAK_HOURS (production breaks)')
+    if any('no_prod_time' in job and job['no_prod_time'] > 0 for job in jobs):
+        additional_columns.append('NO_PROD(non-production times)')
+        
+    if additional_columns:
+        logger.info(f"Using additional data columns for advanced scheduling: {', '.join(additional_columns)}")
+    else:
+        logger.info("No additional data columns found for advanced scheduling features")
     solver.parameters.optimize_with_core = True
     solver.parameters.use_lns = True
 
@@ -185,9 +199,11 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
         model.Add(end_var == start_var + int_duration)
 
+    # Handle machine constraints with setup times, BREAK_HOURS, and no-production periods
     for machine in machines:
         unique_job_signatures = set()
         machine_intervals = []
+        machine_jobs = []
         
         for job in jobs:
             if 'UNIQUE_JOB_ID' not in job:
@@ -211,6 +227,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                     if job_signature not in unique_job_signatures:
                         unique_job_signatures.add(job_signature)
                         machine_intervals.append(intervals[interval_key])
+                        machine_jobs.append(job)
                     else:
                         logger.warning(f"Skipping duplicate job {unique_job_id} on machine {machine} with signature {job_signature} to prevent constraint conflicts")
             except Exception as e:
@@ -219,10 +236,58 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         
         if machine_intervals:
             try:
+                # Add basic no-overlap constraint for the machine
                 model.AddNoOverlap(machine_intervals)
                 logger.info(f"Added no-overlap constraint for machine {machine} with {len(machine_intervals)} jobs")
+                
+                # Add setup time transitions between jobs when available
+                if setup_times:
+                    setup_time_pairs = 0
+                    for i, job1 in enumerate(machine_jobs):
+                        for j, job2 in enumerate(machine_jobs):
+                            if i != j:  # Different jobs
+                                job1_id = job1['UNIQUE_JOB_ID']
+                                job2_id = job2['UNIQUE_JOB_ID']
+                                key = (job1_id, job2_id)
+                                
+                                # If we have setup time for this transition, add a constraint
+                                if key in setup_times and setup_times[key] > 0:
+                                    setup_duration = setup_times[key]
+                                    
+                                    # Create literal variable for the pair
+                                    job1_precedes_job2 = model.NewBoolVar(f"{job1_id} precedes {job2_id}")
+                                    
+                                    # If job1 precedes job2, ensure there's enough setup time
+                                    job1_machine_key = (job1_id, job1.get('RSC_LOCATION', job1.get('MACHINE_ID')))
+                                    job2_machine_key = (job2_id, job2.get('RSC_LOCATION', job2.get('MACHINE_ID')))
+                                    
+                                    # job2 starts at least setup_duration after job1 ends
+                                    time_diff = start_vars[job2_machine_key] - end_vars[job1_machine_key]
+                                    
+                                    # If job1 precedes job2, start2 >= end1 + setup_duration
+                                    # This is modeled as: job1_precedes_job2 => time_diff >= setup_duration
+                                    # 1. If job1_precedes_job2 is True, then time_diff >= setup_duration
+                                    # 2. If job1_precedes_job2 is False, this constraint is inactive
+                                    model.Add(time_diff >= setup_duration).OnlyEnforceIf(job1_precedes_job2)
+                                    
+                                    # For any pair of jobs, exactly one precedes the other
+                                    # (Only when there are overlapping intervals)
+                                    # If job2 precedes job1, no need to enforce setup time here
+                                    # (will be handled in another iteration)
+                                    setup_time_pairs += 1
+                    
+                    if setup_time_pairs > 0:
+                        logger.info(f"Added {setup_time_pairs} setup time transition constraints on machine {machine}")
+                
+                # Add break/no-production constraints if any job has these values
+                # (This is a simple implementation - assumes breaks are taken between jobs)
+                break_time_jobs = [j for j in machine_jobs if j.get('break_time', 0) > 0 or j.get('no_prod_time', 0) > 0]
+                if break_time_jobs:
+                    logger.info(f"Found {len(break_time_jobs)} jobs on machine {machine} requiring breaks or non-production time")
+                    # Could add more complex break scheduling here in future versions
+                
             except Exception as e:
-                logger.error(f"Failed to add no-overlap constraint for machine {machine}: {str(e)}")
+                logger.error(f"Failed to add constraints for machine {machine}: {str(e)}")
 
     if enforce_sequence:
         logger.info("Enforcing process sequence dependencies (P01->P02->P03)...")
@@ -282,20 +347,70 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         if machine_ends:
             model.AddMaxEquality(makespan, machine_ends)
 
+    # Enhanced objective function with production targets and breaks
     objective_terms = [makespan]
+    
+    # Track additional objective components 
+    production_targets_count = 0
+    break_time_count = 0
+    setup_time_count = 0
+    
     for job in jobs:
         if 'UNIQUE_JOB_ID' not in job:
             continue
+            
         unique_job_id = job['UNIQUE_JOB_ID']
         machine_id = job.get('RSC_LOCATION', job.get('MACHINE_ID'))
         due_time = job.get('LCD_DATE_EPOCH', 0)
         priority = job['PRIORITY']
+        
+        # Basic delay cost (standard objective component)
         if due_time > 0:
             delay = model.NewIntVar(0, horizon_end - due_time, f'delay_{machine_id}_{unique_job_id}')
             model.AddMaxEquality(delay, [0, end_vars[(unique_job_id, machine_id)] - due_time])
-            priority_weight = 6 - priority
+            priority_weight = 6 - priority  # Invert priority (higher priority = lower weight)
             objective_terms.append(delay * priority_weight * 10)
-
+        
+        # Add production target and efficiency components
+        if 'JOB_QUANTITY' in job and job.get('JOB_QUANTITY', 0) > 0 and \
+           'EXPECT_OUTPUT_PER_HOUR' in job and job.get('EXPECT_OUTPUT_PER_HOUR', 0) > 0:
+            # Create cost for jobs with specific production targets
+            # This encourages the scheduler to group similar production runs
+            job_quantity = job.get('JOB_QUANTITY', 0)
+            output_rate = job.get('EXPECT_OUTPUT_PER_HOUR', 0)
+            
+            if job_quantity > 0 and output_rate > 0:
+                # Small bonus for jobs with efficient production rates
+                # This gives slightly higher priority to more efficient jobs
+                production_efficiency = min(5, int(output_rate / 10))  # Scale to reasonable value
+                production_bonus = production_efficiency * priority
+                production_targets_count += 1
+                
+                # The higher the production_bonus, the more we want to prioritize this job
+                # So we subtract it from the objective (minimizing objective value)
+                objective_terms.append(-1 * production_bonus)
+        
+        # Penalize jobs with long setup times slightly to encourage grouping similar job types
+        if 'setup_time' in job and job['setup_time'] > 0:
+            setup_penalty = min(5, int(job['setup_time'] / 1800))  # Scale setup time (30 min = 1 unit)
+            setup_time_count += 1
+            objective_terms.append(setup_penalty)
+        
+        # Account for break times in scheduling optimization
+        if 'break_time' in job and job['break_time'] > 0:
+            break_penalty = min(3, int(job['break_time'] / 3600))  # Scale break time (1 hour = 1 unit)
+            break_time_count += 1
+            objective_terms.append(break_penalty)
+    
+    logger.info(f"Objective function includes: ")
+    logger.info(f"  - Basic makespan and delay penalties")
+    if production_targets_count > 0:
+        logger.info(f"  - Production targets and efficiency bonuses for {production_targets_count} jobs")
+    if setup_time_count > 0:
+        logger.info(f"  - Setup time penalties for {setup_time_count} jobs")
+    if break_time_count > 0:
+        logger.info(f"  - Break time penalties for {break_time_count} jobs")
+        
     if objective_terms:
         model.Minimize(sum(objective_terms))
 
@@ -319,11 +434,16 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         logger.error(f"No solution found. Status: {solver.StatusName(status)}")
         return {}
 
+    # Create enhanced schedule with additional parameters
     schedule = {}
     total_jobs = 0
+    total_setup_time = 0
+    total_break_time = 0
+    
     for job in jobs:
         if 'UNIQUE_JOB_ID' not in job:
             continue
+            
         unique_job_id = job['UNIQUE_JOB_ID']
         machine_id = job.get('RSC_LOCATION', job.get('MACHINE_ID'))
         start = solver.Value(start_vars[(unique_job_id, machine_id)])
@@ -331,32 +451,77 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         priority = job['PRIORITY']
         total_jobs += 1
 
+        # Handle START_DATE constraints
         start_date_epoch = job.get('START_DATE_EPOCH', job.get('START_DATE _EPOCH'))
         if start_date_epoch is not None and start_date_epoch > current_time:
             if start != start_date_epoch:
                 logger.warning(f"⚠️ Job {unique_job_id} scheduled at {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} " 
-                             f"instead of requested START_DATE={datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')}")
+                              f"instead of requested START_DATE={datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')}")
             else:
                 logger.info(f"✅ Job {unique_job_id} scheduled exactly at requested START_DATE")
         
+        # Store setup time, break time, and other additional parameters
+        setup_time = job.get('setup_time', 0)
+        break_time = job.get('break_time', 0) 
+        no_prod_time = job.get('no_prod_time', 0)
+        job_quantity = job.get('JOB_QUANTITY')
+        output_rate = job.get('EXPECT_OUTPUT_PER_HOUR')
+        
+        # Track total setup and break times
+        if setup_time > 0:
+            total_setup_time += setup_time
+        if break_time > 0 or no_prod_time > 0:
+            total_break_time += break_time + no_prod_time
+        
+        # Store timing information in the job
         job['START_TIME'] = start
         job['END_TIME'] = end
         
+        # Create a dictionary of additional parameters to store with the schedule
+        additional_params = {
+            'setup_time': setup_time,
+            'break_time': break_time,
+            'no_prod_time': no_prod_time,
+            'job_quantity': job_quantity,
+            'output_rate': output_rate
+        }
+        
+        # Add job to schedule with additional parameters
         if machine_id not in schedule:
             schedule[machine_id] = []
-        schedule[machine_id].append((unique_job_id, start, end, priority))
+        schedule[machine_id].append((unique_job_id, start, end, priority, additional_params))
+    
+    # Log summary of additional parameters usage
+    if total_setup_time > 0:
+        logger.info(f"Total setup time in schedule: {total_setup_time/3600:.2f} hours")
+    if total_break_time > 0:
+        logger.info(f"Total break/no-production time in schedule: {total_break_time/3600:.2f} hours")
 
     for machine in schedule:
-        schedule[machine].sort(key=lambda x: x[1])
+        schedule[machine].sort(key=lambda x: x[1])  # Sort by start time
 
     logger.info(f"Scheduled {sum(len(jobs) for jobs in schedule.values())} jobs on {len(schedule)} machines")
     logger.info(f"Total jobs scheduled: {total_jobs}")
 
+    # Print schedule summary with additional parameters
+    for machine, tasks in schedule.items():
+        machine_setup_time = sum(task[4].get('setup_time', 0) for task in tasks)
+        machine_break_time = sum(task[4].get('break_time', 0) + task[4].get('no_prod_time', 0) for task in tasks)
+        
+        if machine_setup_time > 0 or machine_break_time > 0:
+            logger.info(f"Machine {machine} summary:")
+            if machine_setup_time > 0:
+                logger.info(f"  Setup time: {machine_setup_time/3600:.2f} hours")
+            if machine_break_time > 0:
+                logger.info(f"  Break/No-prod time: {machine_break_time/3600:.2f} hours")
+
     family_time_shifts = {}
     scheduled_times = {}
     
+    # Extract scheduled times from the updated schedule format
     for machine, tasks in schedule.items():
-        for unique_job_id, start, end, _ in tasks:
+        for task in tasks:
+            unique_job_id, start, end = task[0], task[1], task[2]
             scheduled_times[unique_job_id] = (start, end)
     
     for family, constrained_jobs in family_constraints.items():

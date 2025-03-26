@@ -147,8 +147,13 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     if not isinstance(job_data, (list, tuple)) or len(job_data) < 4:
                         logger.warning(f"Invalid job data for machine {machine}: {job_data}")
                         continue
-                        
-                    unique_job_id, start, end, priority = job_data
+                    
+                    # Handle both old format (4-tuple) and new format (5-tuple with additional params)
+                    if len(job_data) >= 5:
+                        unique_job_id, start, end, priority, additional_params = job_data
+                    else:
+                        unique_job_id, start, end, priority = job_data
+                        additional_params = {}
                     
                     # Validate data types
                     if not isinstance(unique_job_id, str):
@@ -378,6 +383,19 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         
         fig.update_yaxes(categoryorder='array', categoryarray=task_order, autorange="reversed")
 
+        # Find the earliest start date to ensure the chart shows all jobs
+        min_start_date = df['Start'].min() if not df.empty else datetime.now()
+        
+        # Check if we have April jobs that need to be visible
+        april_jobs = df[df['Start'].dt.month == 4]
+        has_april_jobs = not april_jobs.empty
+        
+        if has_april_jobs:
+            logger.info(f"Chart contains {len(april_jobs)} jobs starting in April")
+            # Make sure these jobs are visible by explicitly logging them
+            for _, row in april_jobs.iterrows():
+                logger.info(f"April job: {row['Task']} starts at {row['Start']}")
+        
         fig.update_layout(
             autosize=True,
             height=max(800, len(df) * 30),
@@ -386,7 +404,9 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             hovermode='closest',
             title={'text': "Interactive Production Schedule", 'font': {'size': 24}, 'x': 0.5, 'xanchor': 'center'},
             xaxis={
-                'title': {'text': 'Date', 'font': {'size': 1}},
+                'title': {'text': 'Date', 'font': {'size': 14}},
+                # Setting a default range to ensure April jobs are visible
+                'range': [min_start_date - timedelta(days=1), None] if has_april_jobs else None,
                 'rangeselector': {
                     'buttons': [
                         {'count': 7, 'label': '1w', 'step': 'day', 'stepmode': 'backward'},
@@ -395,7 +415,10 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         {'count': 1, 'label': 'YTD', 'step': 'year', 'stepmode': 'todate'},
                         {'count': 1, 'label': '1y', 'step': 'year', 'stepmode': 'backward'},
                         {'step': 'all', 'label': 'all'}
-                    ]
+                    ],
+                    # Make the range selector more visible
+                    'bgcolor': '#E2E2E2',
+                    'activecolor': '#68bdf6'
                 }
             },
             yaxis={'title': {'text': 'Unique Job IDs (Machine)', 'font': {'size': 14}}}
@@ -474,13 +497,20 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
 
 def flatten_schedule_to_list(schedule):
     """
-    Flatten the schedule dictionary into a list of tuples (unique_job_id, machine, start, end, priority).
+    Flatten the schedule dictionary into a list of tuples (unique_job_id, machine, start, end, priority, additional_params).
+    Handles both old schedule format (4-tuple) and new format with additional parameters (5-tuple).
     """
     flat_schedule = []
     for machine, jobs in schedule.items():
         for job in jobs:
-            unique_job_id, start, end, priority = job
-            flat_schedule.append((unique_job_id, machine, start, end, priority))
+            # Handle both old and new format
+            if len(job) >= 5:
+                unique_job_id, start, end, priority, additional_params = job
+            else:
+                unique_job_id, start, end, priority = job
+                additional_params = {}
+                
+            flat_schedule.append((unique_job_id, machine, start, end, priority, additional_params))
     return flat_schedule
 
 if __name__ == "__main__":

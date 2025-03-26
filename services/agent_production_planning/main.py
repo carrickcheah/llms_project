@@ -30,8 +30,25 @@ def add_schedule_times_and_buffer(jobs, schedule):
     times = {}
     for machine, tasks in schedule.items():
         for task in tasks:
-            unique_job_id, start, end, _ = task
+            # Handle both old format (4-tuple) and new format (5-tuple with additional params)
+            if len(task) >= 5:
+                unique_job_id, start, end, _, additional_params = task
+            else:
+                unique_job_id, start, end, _ = task
+                additional_params = {}
+                
             times[unique_job_id] = (start, end)
+            
+            # Store additional parameters in the job object if available
+            if additional_params:
+                for job in jobs:
+                    if job.get('UNIQUE_JOB_ID') == unique_job_id:
+                        if 'setup_time' in additional_params and additional_params['setup_time'] > 0:
+                            job['ACTUAL_SETUP_TIME'] = additional_params['setup_time']
+                        if 'break_time' in additional_params and additional_params['break_time'] > 0:
+                            job['ACTUAL_BREAK_TIME'] = additional_params['break_time']
+                        if 'no_prod_time' in additional_params and additional_params['no_prod_time'] > 0:
+                            job['ACTUAL_NO_PROD_TIME'] = additional_params['no_prod_time']
     
     family_processes = {}
     for job in jobs:
@@ -337,9 +354,9 @@ def main():
                     logger.warning(f"Job {job['UNIQUE_JOB_ID']} has no machine assignment, skipping")
                     continue
                     
-                if not isinstance(job.get('processing_time', 0), (int, float)) or job.get('processing_time', 0) <= 0:
-                    logger.warning(f"Job {job['UNIQUE_JOB_ID']} has invalid processing time, defaulting to 3600 seconds (1 hour)")
-                    job['processing_time'] = 3600
+                if job.get('processing_time') is None or not isinstance(job.get('processing_time'), (int, float)) or job.get('processing_time') <= 0:
+                    logger.warning(f"Job {job['UNIQUE_JOB_ID']} has missing or invalid processing time (HOURS_NEED)")
+                    job['processing_time'] = 3600  # Still provide a default for the scheduler
                     
                 valid_jobs.append(job)
                 
