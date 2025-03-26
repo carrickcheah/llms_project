@@ -9,19 +9,10 @@ import re
 from dotenv import load_dotenv
 from ingest_data import load_jobs_planning_data
 from sch_jobs import schedule_jobs
-from greedy import greedy_schedule, extract_job_family, extract_process_number
+from greedy import greedy_schedule
 from chart import create_interactive_gantt
 from chart_two import export_schedule_html
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 def add_schedule_times_and_buffer(jobs, schedule):
     """
@@ -190,6 +181,48 @@ def get_buffer_status(buffer_hours):
     else:
         return "OK"
 
+def extract_job_family(unique_job_id):
+    """
+    Extract the job family (e.g., 'CP08-231B' from 'JOB_CP08-231B-P01-06') from the UNIQUE_JOB_ID.
+    UNIQUE_JOB_ID is in the format JOB_PROCESS_CODE.
+    """
+    try:
+        process_code = unique_job_id.split('_', 1)[1]  # Split on first underscore to get PROCESS_CODE
+    except IndexError:
+        logger.warning(f"Could not extract PROCESS_CODE from UNIQUE_JOB_ID {unique_job_id}")
+        return unique_job_id
+
+    process_code = str(process_code).upper()
+    match = re.search(r'(.*?)-P\d+', process_code)
+    if match:
+        family = match.group(1)
+        logger.debug(f"Extracted family {family} from {unique_job_id}")
+        return family
+    parts = process_code.split("-P")
+    if len(parts) >= 2:
+        family = parts[0]
+        logger.debug(f"Extracted family {family} from {unique_job_id} (using split)")
+        return family
+    logger.warning(f"Could not extract family from {unique_job_id}, using full code")
+    return process_code
+
+def extract_process_number(unique_job_id):
+    """
+    Extract the process sequence number (e.g., 1 from 'P01-06' in 'JOB_P01-06') or return 999 if not found.
+    UNIQUE_JOB_ID is in the format JOB_PROCESS_CODE.
+    """
+    try:
+        process_code = unique_job_id.split('_', 1)[1]  # Split on first underscore to get PROCESS_CODE
+    except IndexError:
+        logger.warning(f"Could not extract PROCESS_CODE from UNIQUE_JOB_ID {unique_job_id}")
+        return 999
+
+    match = re.search(r'P(\d{2})', str(process_code).upper())  # Match exactly two digits after P
+    if match:
+        seq = int(match.group(1))
+        return seq
+    return 999  # Default if parsing fails
+
 def main():
     print("Production Planning Scheduler")
 
@@ -201,7 +234,19 @@ def main():
     parser.add_argument("--force-greedy", action="store_true", help="Force the use of the greedy scheduler")
     parser.add_argument("--output", default="interactive_schedule.html", help="Output file for the Gantt chart")
     parser.add_argument("--enforce-sequence", action="store_true", default=True, help="Enforce process sequence dependencies (default: True)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging (show debug messages)")
     args = parser.parse_args()
+
+    # Set up logging based on whether --verbose was used
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
 
     if not args.file:
         logger.error("No file path provided. Set --file argument or file_path in .env file.")
@@ -266,12 +311,12 @@ def main():
                     del job['START_DATE _EPOCH']
                     logger.debug(f"Removed empty START_DATE _EPOCH for {job['UNIQUE_JOB_ID']}")
 
-    start_time = time.time()
+    start_time = time.perf_counter()
     schedule = None
 
     if not args.force_greedy:
         logger.info("Attempting to create schedule with CP-SAT solver...")
-        cp_sat_start_time = time.time()
+        cp_sat_start_time = time.perf_counter()
         try:
             if len(jobs) > 200:
                 time_limit = 900
@@ -311,7 +356,7 @@ def main():
                 schedule = None
             else:
                 total_jobs = sum(len(jobs_list) for jobs_list in schedule.values())
-                cp_sat_time = time.time() - cp_sat_start_time
+                cp_sat_time = max(0, time.perf_counter() - cp_sat_start_time)
                 logger.info(f"CP-SAT solver successfully scheduled {total_jobs} jobs in {cp_sat_time:.2f} seconds")
         except Exception as e:
             logger.error(f"CP-SAT solver failed: {e}")
@@ -320,7 +365,7 @@ def main():
 
     if not schedule or not any(schedule.values()):
         logger.info("Falling back to greedy scheduler...")
-        greedy_start_time = time.time()
+        greedy_start_time = time.perf_counter()
         try:
             start_date_jobs = [job for job in jobs if 
                               ('START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']) and job['START_DATE_EPOCH'] > current_time) or
@@ -353,7 +398,7 @@ def main():
             
             if schedule and any(schedule.values()):
                 total_jobs = sum(len(jobs_list) for jobs_list in schedule.values())
-                greedy_time = time.time() - greedy_start_time
+                greedy_time = max(0, time.perf_counter() - greedy_start_time)
                 logger.info(f"Greedy scheduler successfully scheduled {total_jobs} jobs in {greedy_time:.2f} seconds")
             else:
                 logger.error("Greedy scheduler returned an empty schedule")
@@ -470,7 +515,8 @@ def main():
     print(f"- All jobs will complete by: {datetime.fromtimestamp(max((end for machine, tasks in schedule.items() for _, _, end, _ in tasks), default=current_time)).strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"- Total production time: {total_duration/3600:.1f} hours")
     print(f"- Schedule span: {schedule_span/3600:.1f} hours")
-    print(f"Scheduling completed in {time.time() - start_time:.2f} seconds")
+    elapsed_time = max(0, time.perf_counter() - start_time)  # Ensure non-negative
+    print(f"Scheduling completed in {elapsed_time:.2f} seconds")
     
     start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH'])]
     future_date_jobs = [job for job in start_date_jobs if job['START_DATE_EPOCH'] > current_time]
