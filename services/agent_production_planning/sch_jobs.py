@@ -126,7 +126,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             if start_date_epoch is None:
                 start_date_epoch = job.get('START_DATE _EPOCH')
             start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
-            resource_location = job.get('RSC_LOCATION', 'Unknown')
+            resource_location = job.get('RSC_CODE', 'Unknown')
             logger.info(f"  Job {job['UNIQUE_JOB_ID']} on {resource_location}: MUST start EXACTLY at {start_date}")
         logger.info("START_DATE constraints will be strictly enforced in the model")
 
@@ -165,7 +165,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         if 'UNIQUE_JOB_ID' not in job:
             continue
         unique_job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_LOCATION')
+        machine_id = job.get('RSC_CODE')
         duration = job['processing_time']
         due_time = job.get('LCD_DATE_EPOCH', horizon_end - duration)
         priority = job['PRIORITY']
@@ -209,9 +209,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             if 'UNIQUE_JOB_ID' not in job:
                 continue
             try:
-                if job.get('RSC_LOCATION') == machine:
+                if job.get('RSC_CODE') == machine:
                     unique_job_id = job['UNIQUE_JOB_ID']
-                    interval_key = (unique_job_id, job.get('RSC_LOCATION', 'Unknown'))
+                    interval_key = (unique_job_id, job.get('RSC_CODE', 'Unknown'))
                     
                     if interval_key not in intervals:
                         logger.warning(f"Missing interval for job {unique_job_id} on machine {machine}. Skipping.")
@@ -220,8 +220,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                     job_signature = (
                         job.get('JOB', ''),
                         job['UNIQUE_JOB_ID'],
-                        job.get('RSC_LOCATION', ''),
-                        job.get('RSC_CODE', '')
+                        job.get('RSC_CODE', ''),
                     )
                     
                     if job_signature not in unique_job_signatures:
@@ -258,8 +257,8 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                                     job1_precedes_job2 = model.NewBoolVar(f"{job1_id} precedes {job2_id}")
                                     
                                     # If job1 precedes job2, ensure there's enough setup time
-                                    job1_machine_key = (job1_id, job1.get('RSC_LOCATION', 'Unknown'))
-                                    job2_machine_key = (job2_id, job2.get('RSC_LOCATION', 'Unknown'))
+                                    job1_machine_key = (job1_id, job1.get('RSC_CODE', 'Unknown'))
+                                    job2_machine_key = (job2_id, job2.get('RSC_CODE', 'Unknown'))
                                     
                                     # job2 starts at least setup_duration after job1 ends
                                     time_diff = start_vars[job2_machine_key] - end_vars[job1_machine_key]
@@ -297,8 +296,8 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             for i in range(len(sorted_jobs) - 1):
                 job1 = sorted_jobs[i]
                 job2 = sorted_jobs[i + 1]
-                machine_id1 = job1.get('RSC_LOCATION', 'Unknown')
-                machine_id2 = job2.get('RSC_LOCATION', 'Unknown')
+                machine_id1 = job1.get('RSC_CODE', 'Unknown')
+                machine_id2 = job2.get('RSC_CODE', 'Unknown')
                 
                 job1_start_time = job1.get('START_DATE_EPOCH', 0)
                 job2_start_time = job2.get('START_DATE_EPOCH', 0)
@@ -341,9 +340,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
     makespan = model.NewIntVar(current_time, horizon_end, 'makespan')
     for machine in machines:
-        machine_ends = [end_vars[(job['UNIQUE_JOB_ID'], job.get('RSC_LOCATION', 'Unknown'))] 
+        machine_ends = [end_vars[(job['UNIQUE_JOB_ID'], job.get('RSC_CODE', 'Unknown'))] 
                       for job in jobs 
-                      if job.get('RSC_LOCATION') == machine and 'UNIQUE_JOB_ID' in job]
+                      if job.get('RSC_CODE') == machine and 'UNIQUE_JOB_ID' in job]
         if machine_ends:
             model.AddMaxEquality(makespan, machine_ends)
 
@@ -360,7 +359,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             continue
             
         unique_job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_LOCATION')
+        machine_id = job.get('RSC_CODE')
         due_time = job.get('LCD_DATE_EPOCH', 0)
         priority = job['PRIORITY']
         
@@ -445,7 +444,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             continue
             
         unique_job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_LOCATION')
+        machine_id = job.get('RSC_CODE')
         start = solver.Value(start_vars[(unique_job_id, machine_id)])
         end = solver.Value(end_vars[(unique_job_id, machine_id)])
         priority = job['PRIORITY']
@@ -589,7 +588,7 @@ if __name__ == "__main__":
                 logger.info(f"Summary of {len(start_date_jobs)} jobs with START_DATE constraints:")
                 for job in start_date_jobs:
                     unique_job_id = job['UNIQUE_JOB_ID']
-                    resource_location = job.get('RSC_LOCATION', 'Unknown')
+                    resource_location = job.get('RSC_CODE', 'Unknown')
                     requested_time = job.get('START_DATE_EPOCH', job.get('START_DATE _EPOCH'))
                     start_time = job.get('START_TIME')
                     

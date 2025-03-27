@@ -85,7 +85,7 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
             logger.info(f"Set default processing_time of 3600 seconds (1 hour) for job {job['UNIQUE_JOB_ID']}")
         
         # Ensure machine ID is available
-        if not job.get('RSC_LOCATION') and not job.get('MACHINE_ID'):
+        if not job.get('RSC_CODE') and not job.get('MACHINE_ID'):
             logger.warning(f"No machine assignment for job {job['UNIQUE_JOB_ID']}")
             continue
         
@@ -149,7 +149,7 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         if 'UNIQUE_JOB_ID' not in job:
             continue
         unique_job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_LOCATION', job.get('MACHINE_ID'))
+        machine_id = job.get('RSC_CODE', job.get('MACHINE_ID'))
         duration = job['processing_time']
         due_time = job.get('LCD_DATE_EPOCH', current_time + 30 * 24 * 3600)
         family = extract_job_family(unique_job_id)

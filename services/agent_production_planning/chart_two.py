@@ -333,7 +333,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                            unique_job_id.split('_', 1)[1].split('-P')[0] if '-P' in unique_job_id.split('_', 1)[1] else unique_job_id))
                 
                 # Get resource location
-                resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
+                resource_location = job.get('RSC_LOCATION', 'Unknown')
                 
                 # Get job name
                 job_name = job.get('JOB', job_code)

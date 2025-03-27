@@ -84,7 +84,7 @@ def main():
                 start_date_epoch = job.get('START_DATE _EPOCH')
                 
             start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M') if start_date_epoch is not None else 'INVALID DATE'
-            resource_location = job.get('RSC_LOCATION') or job.get('MACHINE_ID')
+            resource_location = job.get('RSC_CODE')
             logger.info(f"  Job {job['UNIQUE_JOB_ID']} (Resource: {resource_location}): MUST start EXACTLY at {start_date}")
         
         logger.info("Ensuring START_DATE constraints are enforced...")
@@ -129,7 +129,7 @@ def main():
                     logger.warning(f"Job missing UNIQUE_JOB_ID field, skipping: {job}")
                     continue
                     
-                if not job.get('RSC_LOCATION') and not job.get('MACHINE_ID'):
+                if not job.get('RSC_CODE'):
                     logger.warning(f"Job {job['UNIQUE_JOB_ID']} has no machine assignment, skipping")
                     continue
                     
@@ -184,7 +184,7 @@ def main():
                     logger.warning(f"Job missing UNIQUE_JOB_ID field, skipping: {job}")
                     continue
                     
-                if not job.get('RSC_LOCATION') and not job.get('MACHINE_ID'):
+                if not job.get('RSC_CODE'):
                     logger.warning(f"Job {job['UNIQUE_JOB_ID']} has no machine assignment, skipping")
                     continue
                     
@@ -229,11 +229,11 @@ def main():
             start_time = job_entry['START_TIME'] if job_entry and 'START_TIME' in job_entry else start
             end_time = job_entry['END_TIME'] if job_entry and 'END_TIME' in job_entry else end
             
-            resource_location = job_entry.get('RSC_LOCATION', job_entry.get('MACHINE_ID', machine))
+            resource_location = job_entry.get('RSC_CODE', machine)
             
             flat_schedule.append({
                 'UNIQUE_JOB_ID': unique_job_id,
-                'RSC_LOCATION': resource_location,
+                'RSC_CODE': resource_location,
                 'START_TIME': start_time,
                 'END_TIME': end_time,
                 'PRIORITY': priority
@@ -286,7 +286,7 @@ def main():
             print("\nCritical jobs with minimal buffer:")
             for job in sorted(critical_jobs, key=lambda x: x['BAL_HR'])[:5]:
                 unique_job_id = job['UNIQUE_JOB_ID']
-                resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
+                resource_location = job.get('RSC_CODE', 'Unknown')
                 buffer = job['BAL_HR']
                 lcd_epoch = job.get('LCD_DATE_EPOCH', 0)
                 dt = datetime.fromtimestamp(lcd_epoch)
@@ -321,7 +321,7 @@ def main():
         print("\nSTART_DATE constraints:")
         for job in start_date_jobs:
             unique_job_id = job['UNIQUE_JOB_ID']
-            resource_location = job.get('RSC_LOCATION', job.get('MACHINE_ID', 'Unknown'))
+            resource_location = job.get('RSC_CODE', 'Unknown')
             start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
             is_future = job['START_DATE_EPOCH'] > current_time
             

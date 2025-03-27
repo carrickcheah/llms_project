@@ -226,7 +226,7 @@ def load_jobs_planning_data(excel_file):
             logger.info("Falling back to header at row 4 (Excel row 5)")
             df = pd.read_excel(excel_file, header=4)
         
-        required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_LOCATION', 'HOURS_NEED', 'SETTING_HOURS', 'BREAK_HOURS', 'NO_PROD', 'LCD_DATE']
+        required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_CODE', 'HOURS_NEED', 'SETTING_HOURS', 'BREAK_HOURS', 'NO_PROD', 'LCD_DATE']
         missing_cols = [col for col in required_cols if col not in df.columns]
         
         if missing_cols:
@@ -256,11 +256,11 @@ def load_jobs_planning_data(excel_file):
                 continue
             convert_column_to_dates(df, col)
         
-        if 'RSC_LOCATION' in df.columns:
-            machines = df['RSC_LOCATION'].dropna().unique().tolist()
+        if 'RSC_CODE' in df.columns:
+            machines = df['RSC_CODE'].dropna().unique().tolist()
         else:
             machines = []
-            logger.warning("No machine column found (RSC_LOCATION)")
+            logger.warning("No machine column found (RSC_CODE)")
         
         # Process HOURS_NEED for job processing time
         if 'HOURS_NEED' in df.columns:
@@ -337,6 +337,19 @@ def load_jobs_planning_data(excel_file):
                 logger.info(f"Missing LCD_DATE values for {missing_lcd_date} jobs")
         else:
             logger.info("LCD_DATE column required but not found")
+            
+        # Process PLAN_DATE column if present (for display only, not used in scheduling)
+        if 'PLAN_DATE' in df.columns:
+            logger.info("Found PLAN_DATE column in Excel, processing for display")
+            # Check if it's a date column that needs conversion
+            if df['PLAN_DATE'].dtype == 'object' or pd.api.types.is_datetime64_any_dtype(df['PLAN_DATE']):
+                # Convert to datetime format if it's a date
+                convert_column_to_dates(df, 'PLAN_DATE')
+                logger.info(f"Converted PLAN_DATE to datetime format for {len(df)} jobs")
+            else:
+                logger.info(f"PLAN_DATE doesn't appear to be a date column, keeping as is")
+        else:
+            logger.info("PLAN_DATE column not found, this is optional")
         
         # Convert to dictionary records
         jobs = df.to_dict('records')
@@ -346,7 +359,7 @@ def load_jobs_planning_data(excel_file):
         if 'SETTING_HOURS' in df.columns and df['SETTING_HOURS'].notna().any():
             # Group by machine to create setup times matrix
             for machine in machines:
-                machine_jobs = df[df['RSC_LOCATION'] == machine]
+                machine_jobs = df[df['RSC_CODE'] == machine]
                 if len(machine_jobs) > 1:
                     # For each job transition on the same machine, record setup time
                     for _, job1 in machine_jobs.iterrows():
