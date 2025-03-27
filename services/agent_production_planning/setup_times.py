@@ -1,10 +1,60 @@
 """
 Functions for handling setup times and schedule time adjustments.
+
+This module manages the critical timing aspects of the production planning system:
+1. Standardized field access for start date epochs (handling name inconsistencies)  
+2. Schedule time calculations and adjustments based on constraints
+3. Buffer time calculations between job completion and deadlines
+4. Schedule visualization preparation
+
+The overall workflow is:
+- Extract scheduled times from the optimized solution
+- Group jobs by family and process sequence
+- Apply time shifts based on START_DATE constraints
+- Calculate buffer hours between job completion and deadline
+- Categorize buffer status for visualization
 """
 import pandas as pd
 from datetime import datetime
 import re
 from loguru import logger
+
+
+def get_start_date_epoch(job):
+    """
+    Standardized accessor for START_DATE_EPOCH field that handles both naming variants.
+    Always use this function instead of accessing START_DATE_EPOCH or START_DATE _EPOCH directly.
+    
+    Args:
+        job (dict): Job dictionary
+        
+    Returns:
+        int/float/None: The start date epoch value or None if not present/valid
+    """
+    # Check standard field name first
+    if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']):
+        return job['START_DATE_EPOCH']
+    
+    # Check alternate field name (with space)
+    if 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None and not pd.isna(job['START_DATE _EPOCH']):
+        return job['START_DATE _EPOCH']
+    
+    return None
+
+
+def is_valid_timestamp(timestamp):
+    """
+    Check if a timestamp is valid for calculations.
+    
+    Args:
+        timestamp: Value to check
+        
+    Returns:
+        bool: True if timestamp is valid, False otherwise
+    """
+    return (timestamp is not None and 
+            not pd.isna(timestamp) and 
+            isinstance(timestamp, (int, float)))
 
 def get_buffer_status(buffer_hours):
     """Get status category based on buffer hours."""
@@ -112,21 +162,13 @@ def add_schedule_times_and_buffer(jobs, schedule):
     family_time_shifts = {}
     for family, processes in family_processes.items():
         for seq_num, unique_job_id, job in processes:
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']) and unique_job_id in times:
+            # Use helper function to get START_DATE_EPOCH consistently
+            start_date_epoch = get_start_date_epoch(job)
+            
+            # Check if this job has a start date constraint and is in the schedule
+            if start_date_epoch is not None and unique_job_id in times:
                 scheduled_start = times[unique_job_id][0]
-                
-                requested_start = None
-                if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None:
-                    if isinstance(job['START_DATE_EPOCH'], float) and not pd.isna(job['START_DATE_EPOCH']):
-                        requested_start = job['START_DATE_EPOCH']
-                    elif not isinstance(job['START_DATE_EPOCH'], float):
-                        requested_start = job['START_DATE_EPOCH']
-                        
-                if requested_start is None and 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None:
-                    if isinstance(job['START_DATE _EPOCH'], float) and not pd.isna(job['START_DATE _EPOCH']):
-                        requested_start = job['START_DATE _EPOCH']
-                    elif not isinstance(job['START_DATE _EPOCH'], float):
-                        requested_start = job['START_DATE _EPOCH']
+                requested_start = start_date_epoch
                         
                 time_shift = None
                 if requested_start is not None:
@@ -176,11 +218,8 @@ def add_schedule_times_and_buffer(jobs, schedule):
                 job_start = original_start
                 job_end = original_end
             
-            start_date_epoch = None
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']):
-                start_date_epoch = job['START_DATE_EPOCH']
-            elif 'START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None and not pd.isna(job['START_DATE _EPOCH']):
-                start_date_epoch = job['START_DATE _EPOCH']
+            # Use helper function to get START_DATE_EPOCH value regardless of field name format
+            start_date_epoch = get_start_date_epoch(job)
                 
             if start_date_epoch is not None:
                 job_start = start_date_epoch
@@ -189,13 +228,15 @@ def add_schedule_times_and_buffer(jobs, schedule):
                 start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
                 logger.info(f"Setting START_TIME to match START_DATE ({start_date}) for job {unique_job_id}")
             
-            if job_start is not None and not pd.isna(job_start) and isinstance(job_start, (int, float)):
+            # Validate start time using helper function
+            if is_valid_timestamp(job_start):
                 job['START_TIME'] = job_start
             else:
                 job['START_TIME'] = int(datetime.now().timestamp())
                 logger.warning(f"Set default START_TIME for job {unique_job_id} due to invalid value: {job_start}")
                 
-            if job_end is not None and not pd.isna(job_end) and isinstance(job_end, (int, float)):
+            # Validate end time using helper function
+            if is_valid_timestamp(job_end):
                 job['END_TIME'] = job_end
             else:
                 job['END_TIME'] = job['START_TIME'] + 3600
@@ -205,19 +246,28 @@ def add_schedule_times_and_buffer(jobs, schedule):
             job_end = job['END_TIME']
             
             valid_due_time = False
-            if due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)):
+            # Validate due time using our helper function
+            if is_valid_timestamp(due_time):
                 current_time = int(datetime.now().timestamp())
-                if job_end <= due_time <= (current_time + 365 * 24 * 3600):
+                one_year_future = current_time + 365 * 24 * 3600
+                
+                # Check if due time is within reasonable range (between job end and one year from now)
+                if job_end <= due_time <= one_year_future:
                     buffer_seconds = max(0, due_time - job_end)
                     buffer_hours = buffer_seconds / 3600
                     valid_due_time = True
+                # Job will be late
                 elif due_time < job_end:
                     buffer_seconds = 0
                     buffer_hours = 0
                     valid_due_time = True
-                    logger.warning(f"Job {unique_job_id} will be LATE! Due at {datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')} but ends at {datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')}")
+                    due_date_str = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
+                    end_date_str = datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')
+                    logger.warning(f"Job {unique_job_id} will be LATE! Due at {due_date_str} but ends at {end_date_str}")
+                # Due time is too far in the future
                 else:
-                    logger.warning(f"Due date for {unique_job_id} is too far in future ({datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')}), might be incorrect")
+                    due_date_str = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
+                    logger.warning(f"Due date for {unique_job_id} is too far in future ({due_date_str}), might be incorrect")
             
             if not valid_due_time:
                 buffer_seconds = 24 * 3600
