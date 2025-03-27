@@ -307,10 +307,11 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                         valid_due_time = True
                     elif due_time < job_end:
                         # Due date is before job end - LATE!
-                        buffer_seconds = 0
-                        buffer_hours = 0
+                        # Calculate negative buffer to show how many hours the job exceeds its deadline
+                        buffer_seconds = due_time - job_end  # This will be negative
+                        buffer_hours = buffer_seconds / 3600  # Negative hours
                         valid_due_time = True
-                        logger.warning(f"Chart: Job {unique_job_id} will be LATE! Due at {datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')} but ends at {datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')}")
+                        logger.warning(f"Chart: Job {unique_job_id} will be LATE! Due at {datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')} but ends at {datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')}, BAL_HR={buffer_hours:.1f}")
                     else:
                         # Due date too far in future, might be incorrect
                         logger.warning(f"Chart: Due date for {unique_job_id} is too far in future, might be incorrect")
@@ -345,7 +346,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 # Get buffer status
                 buffer_status = ""
                 if buffer_hours < 8:
-                    buffer_status = "Critical"
+                    buffer_status = "Late"
                 elif buffer_hours < 24:
                     buffer_status = "Warning"
                 elif buffer_hours < 72:
@@ -428,7 +429,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         
         # Calculate percentages safely to avoid division by zero
         total_jobs = len(df) if not df.empty else 1  # Avoid division by zero
-        critical_percent = len(df[df['BUFFER_STATUS'] == 'Critical']) / total_jobs * 100 if not df.empty else 0
+        critical_percent = len(df[df['BUFFER_STATUS'] == 'Late']) / total_jobs * 100 if not df.empty else 0
         warning_percent = len(df[df['BUFFER_STATUS'] == 'Warning']) / total_jobs * 100 if not df.empty else 0
         caution_percent = len(df[df['BUFFER_STATUS'] == 'Caution']) / total_jobs * 100 if not df.empty else 0
         ok_percent = len(df[df['BUFFER_STATUS'] == 'OK']) / total_jobs * 100 if not df.empty else 0
@@ -584,13 +585,13 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 <h3>Buffer Status</h3>
                 <div class="d-flex flex-column gap-2">
                     <div class="d-flex align-items-center">
-                        <div class="status-badge badge-critical me-2" style="width: 80px;">Critical</div>
+                        <div class="status-badge badge-critical me-2" style="width: 80px;">Late</div>
                         <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar bg-danger" role="progressbar" 
                                 style="width: {critical_percent}%;" 
-                                aria-valuenow="{len(df[df['BUFFER_STATUS'] == 'Critical']) if not df.empty else 0}" 
+                                aria-valuenow="{len(df[df['BUFFER_STATUS'] == 'Late']) if not df.empty else 0}" 
                                 aria-valuemin="0" aria-valuemax="{len(df) if not df.empty else 0}">
-                                {len(df[df['BUFFER_STATUS'] == 'Critical']) if not df.empty else 0} jobs
+                                {len(df[df['BUFFER_STATUS'] == 'Late']) if not df.empty else 0} jobs
                             </div>
                         </div>
                     </div>
@@ -664,7 +665,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         # Add rows for each job
         for _, row in df.iterrows():
             buffer_class = ""
-            if row['BUFFER_STATUS'] == 'Critical':
+            if row['BUFFER_STATUS'] == 'Late':
                 buffer_class = "status-critical"
             elif row['BUFFER_STATUS'] == 'Warning':
                 buffer_class = "status-warning"
@@ -674,7 +675,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 buffer_class = "status-ok"
                 
             buffer_badge_class = ""
-            if row['BUFFER_STATUS'] == 'Critical':
+            if row['BUFFER_STATUS'] == 'Late':
                 buffer_badge_class = "badge-critical"
             elif row['BUFFER_STATUS'] == 'Warning':
                 buffer_badge_class = "badge-warning"
@@ -847,7 +848,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                     var legendHtml = '<div class="mb-3 p-2 bg-white rounded shadow-sm" style="font-size: 11px;">' +
                         '<h5 class="border-bottom pb-2 mb-2" style="font-size: 14px;"><i class="bi bi-info-circle me-2"></i>Buffer Status Legend:</h5>' +
                         '<div class="d-flex flex-wrap gap-2">' +
-                        '<div class="status-badge badge-critical">Critical (<8h)</div>' +
+                        '<div class="status-badge badge-critical">Late (<8h)</div>' +
                         '<div class="status-badge badge-warning">Warning (<24h)</div>' +
                         '<div class="status-badge badge-caution">Caution (<72h)</div>' +
                         '<div class="status-badge badge-ok">OK (>72h)</div>' +

@@ -57,8 +57,23 @@ def is_valid_timestamp(timestamp):
             isinstance(timestamp, (int, float)))
 
 def get_buffer_status(buffer_hours):
-    """Get status category based on buffer hours."""
-    if buffer_hours < 8:
+    """Get status category based on buffer hours.
+    
+    Args:
+        buffer_hours (float): The buffer time in hours between job completion and deadline.
+            Negative values indicate the job will be late by that many hours.
+    
+    Returns:
+        str: Status category for visualization:
+            "Late" - Job will be late (negative buffer)
+            "Critical" - Less than 8 hours buffer
+            "Warning" - Less than 24 hours buffer
+            "Caution" - Less than 72 hours buffer
+            "OK" - 72 hours or more buffer
+    """
+    if buffer_hours < 0:
+        return "Late"
+    elif buffer_hours < 8:
         return "Critical"
     elif buffer_hours < 24:
         return "Warning"
@@ -219,56 +234,83 @@ def add_schedule_times_and_buffer(jobs, schedule):
                 else:
                     logger.info(f"Family {family} has START_DATE constraint for {unique_job_id}, but no valid time shift calculated")
     
-    job_adjustments = {}
+    # STEP 4: Apply time shifts to jobs to meet fixed start date constraints
+    # We adjust the visualization times for all jobs in a family to maintain dependencies
+    # This is critical for the Gantt chart visualization to accurately represent the schedule
+    job_adjustments = {}  # Will store adjusted times for jobs that need to be shifted
+    
     for family, time_shift in family_time_shifts.items():
+        # Skip negligible time shifts (less than 1 minute)
         if abs(time_shift) < 60:
             continue
             
         logger.info(f"Applying time shift of {time_shift/3600:.1f} hours to family {family} for visualization")
         
+        # Process all jobs in this family
         for seq_num, unique_job_id, job in family_processes[family]:
             if unique_job_id in times:
+                # Get the original scheduled times from the optimizer
                 original_start, original_end = times[unique_job_id]
                 
+                # Validate the time shift value before applying
                 if time_shift is None or (isinstance(time_shift, float) and (pd.isna(time_shift) or not pd.notna(time_shift))):
                     logger.warning(f"Skipping time shift for {unique_job_id} due to invalid shift value: {time_shift}")
                     continue
                     
                 try:
+                    # Apply the time shift - subtract because positive shift means job is scheduled too late
+                    # and we need to move it earlier
                     adjusted_start = original_start - time_shift
                     adjusted_end = original_end - time_shift
+                    
+                    # Store the adjusted times for this job
                     job_adjustments[unique_job_id] = (adjusted_start, adjusted_end)
-                    logger.info(f"  Adjusted {unique_job_id}: START={datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')}, "
-                              f"END={datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')}")
+                    
+                    # Log the adjusted times for debugging and verification
+                    start_str = datetime.fromtimestamp(adjusted_start).strftime('%Y-%m-%d %H:%M')
+                    end_str = datetime.fromtimestamp(adjusted_end).strftime('%Y-%m-%d %H:%M')
+                    logger.info(f"  Adjusted {unique_job_id}: START={start_str}, END={end_str}")
                 except Exception as e:
                     logger.warning(f"Error adjusting time for {unique_job_id}: {e}")
     
+    # STEP 5: Update each job with its final scheduling times
+    # Either from the adjusted times (if family was shifted) or original optimizer times
+    # Also prioritize explicit START_DATE constraints over calculated times
     for job in jobs:
         unique_job_id = job['UNIQUE_JOB_ID']
         if unique_job_id in times:
+            # Get the original times from the optimizer solution
             original_start, original_end = times[unique_job_id]
+            # Get the job's deadline from LCD_DATE_EPOCH field (or 0 if not available)
             due_time = job.get('LCD_DATE_EPOCH', 0)
             
+            # Use adjusted times if available (from time shifts), otherwise use original times
             if unique_job_id in job_adjustments:
                 job_start, job_end = job_adjustments[unique_job_id]
             else:
                 job_start = original_start
                 job_end = original_end
             
+            # START_DATE constraints take absolute priority over calculated times
             # Use helper function to get START_DATE_EPOCH value regardless of field name format
             start_date_epoch = get_start_date_epoch(job)
                 
             if start_date_epoch is not None:
+                # Override the start time with the explicit constraint
                 job_start = start_date_epoch
+                # Maintain the same duration as originally calculated
                 duration = original_end - original_start
                 job_end = job_start + duration
+                # Log this override for debugging purposes
                 start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
                 logger.info(f"Setting START_TIME to match START_DATE ({start_date}) for job {unique_job_id}")
             
+            # Ensure we have valid timestamps before updating the job
             # Validate start time using helper function
             if is_valid_timestamp(job_start):
                 job['START_TIME'] = job_start
             else:
+                # Use current time as a fallback for invalid start times
                 job['START_TIME'] = int(datetime.now().timestamp())
                 logger.warning(f"Set default START_TIME for job {unique_job_id} due to invalid value: {job_start}")
                 
@@ -276,45 +318,63 @@ def add_schedule_times_and_buffer(jobs, schedule):
             if is_valid_timestamp(job_end):
                 job['END_TIME'] = job_end
             else:
+                # Add a default 1-hour duration for invalid end times
                 job['END_TIME'] = job['START_TIME'] + 3600
                 logger.warning(f"Set default END_TIME for job {unique_job_id} due to invalid value: {job_end}")
             
+            # STEP 6: Calculate buffer time between job completion and deadline
+            # Re-get the final start/end times from the job dictionary
             job_start = job['START_TIME'] 
             job_end = job['END_TIME']
             
+            # Default to invalid due time (will be set to valid if checks pass)
             valid_due_time = False
+            
             # Validate due time using our helper function
             if is_valid_timestamp(due_time):
                 current_time = int(datetime.now().timestamp())
-                one_year_future = current_time + 365 * 24 * 3600
+                one_year_future = current_time + 365 * 24 * 3600  # One year from now is reasonable max
                 
-                # Check if due time is within reasonable range (between job end and one year from now)
+                # CASE 1: Due time is in reasonable future range after job completion
+                # This is the normal case - job will complete before deadline with some buffer
                 if job_end <= due_time <= one_year_future:
+                    # Calculate buffer in seconds, then convert to hours for display
                     buffer_seconds = max(0, due_time - job_end)
                     buffer_hours = buffer_seconds / 3600
                     valid_due_time = True
-                # Job will be late
+                
+                # CASE 2: Job is scheduled to complete after its deadline
+                # This is a problem case that needs user attention - job will be late
                 elif due_time < job_end:
-                    buffer_seconds = 0
-                    buffer_hours = 0
+                    # Calculate negative buffer to show how many hours the job is over the deadline
+                    buffer_seconds = due_time - job_end  # This will be negative
+                    buffer_hours = buffer_seconds / 3600  # Negative hours
                     valid_due_time = True
+                    # Format timestamps for readable logging
                     due_date_str = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
                     end_date_str = datetime.fromtimestamp(job_end).strftime('%Y-%m-%d %H:%M')
-                    logger.warning(f"Job {unique_job_id} will be LATE! Due at {due_date_str} but ends at {end_date_str}")
-                # Due time is too far in the future
+                    logger.warning(f"Job {unique_job_id} will be LATE! Due at {due_date_str} but ends at {end_date_str}, BAL_HR={buffer_hours:.1f}")
+                
+                # CASE 3: Due time is unreasonably far in the future (might be data error)
                 else:
                     due_date_str = datetime.fromtimestamp(due_time).strftime('%Y-%m-%d %H:%M')
                     logger.warning(f"Due date for {unique_job_id} is too far in future ({due_date_str}), might be incorrect")
             
+            # Handle case where due time is invalid or missing
             if not valid_due_time:
+                # Default to 24 hours buffer for invalid/missing due dates
                 buffer_seconds = 24 * 3600
                 buffer_hours = 24.0
                 logger.warning(f"Set default BAL_HR for job {unique_job_id} due to invalid LCD_DATE_EPOCH: {due_time}")
             
-            if buffer_hours > 720:
+            # Log excessively large buffers (might indicate scheduling inefficiency or data errors)
+            if buffer_hours > 720:  # More than 30 days buffer
                 logger.info(f"Job {unique_job_id} has a large buffer of {buffer_hours:.1f} hours ({buffer_hours/24:.1f} days)")
             
+            # STEP 7: Store buffer information and status for visualization
+            # Add buffer hours to job dictionary for Gantt chart visualization
             job['BAL_HR'] = buffer_hours
+            # Add status category based on buffer size (Critical, Warning, Caution, OK)
             job['BUFFER_STATUS'] = get_buffer_status(buffer_hours)
     
     return jobs
