@@ -377,7 +377,20 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 # Add to schedule data
                 # IMPORTANT: We're keeping job_start_date and end_date in the schedule_data
                 # even when START_DATE is specified to ensure they appear in the HTML output
+                # Get PLAN_DATE from the job data if available (directly from Excel)
+                plan_date = 'N/A'
+                if 'PLAN_DATE' in job and job['PLAN_DATE'] is not None and not pd.isna(job['PLAN_DATE']):
+                    # If PLAN_DATE is a timestamp, format it appropriately
+                    if isinstance(job['PLAN_DATE'], pd.Timestamp):
+                        plan_date = job['PLAN_DATE'].strftime('%d/%m/%y %H:%M')
+                    elif isinstance(job['PLAN_DATE'], (int, float)) and job['PLAN_DATE'] > 0:
+                        # If it's an epoch timestamp
+                        plan_date = datetime.fromtimestamp(job['PLAN_DATE']).strftime('%d/%m/%y %H:%M')
+                    else:
+                        plan_date = str(job['PLAN_DATE'])
+                
                 schedule_data.append({
+                    'PLAN_DATE': plan_date,
                     'LCD_DATE': due_date,
                     'JOB': job_name,
                     'UNIQUE_JOB_ID': unique_job_id,
@@ -483,26 +496,27 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         }}
         
         /* Set specific column widths based on content - reduced to fit all columns */
-        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 65px; }} /* LCD_DATE */
-        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 65px; }} /* JOB */
-        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 80px; }} /* UNIQUE_JOB_ID */
-        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 40px; }} /* RSC_LOCATION */
-        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) {{ width: 55px; }} /* RSC_CODE */
-        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) {{ width: 35px; }} /* NUMBER_OPERATOR */
-        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) {{ width: 45px; }} /* JOB_QUANTITY */
-        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) {{ width: 45px; }} /* EXPECT_OUTPUT_PER_HOUR */
-        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) {{ width: 30px; }} /* PRIORITY */
-        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) {{ width: 40px; }} /* HOURS_NEED */
-        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) {{ width: 45px; }} /* SETTING_HOURS */
-        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) {{ width: 45px; }} /* BREAK_HOURS */
-        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) {{ width: 35px; }} /* NO_PROD */
-        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) {{ width: 65px; }} /* START_DATE */
-        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) {{ width: 55px; }} /* ACCUMULATED_DAILY_OUTPUT */
-        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) {{ width: 45px; }} /* BALANCE_QUANTITY */
-        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) {{ width: 65px; }} /* START_TIME */
-        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) {{ width: 65px; }} /* END_TIME */
-        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) {{ width: 35px; }} /* BAL_HR */
-        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) {{ width: 50px; }} /* BUFFER_STATUS */
+        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 65px; }} /* PLAN_DATE */
+        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 65px; }} /* LCD_DATE */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 65px; }} /* JOB */
+        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 80px; }} /* UNIQUE_JOB_ID */
+        table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) {{ width: 40px; }} /* RSC_LOCATION */
+        table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) {{ width: 55px; }} /* RSC_CODE */
+        table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) {{ width: 35px; }} /* NUMBER_OPERATOR */
+        table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) {{ width: 45px; }} /* JOB_QUANTITY */
+        table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) {{ width: 45px; }} /* EXPECT_OUTPUT_PER_HOUR */
+        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) {{ width: 30px; }} /* PRIORITY */
+        table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) {{ width: 40px; }} /* HOURS_NEED */
+        table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) {{ width: 45px; }} /* SETTING_HOURS */
+        table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) {{ width: 45px; }} /* BREAK_HOURS */
+        table.dataTable th:nth-child(14), table.dataTable td:nth-child(14) {{ width: 35px; }} /* NO_PROD */
+        table.dataTable th:nth-child(15), table.dataTable td:nth-child(15) {{ width: 65px; }} /* START_DATE */
+        table.dataTable th:nth-child(16), table.dataTable td:nth-child(16) {{ width: 55px; }} /* ACCUMULATED_DAILY_OUTPUT */
+        table.dataTable th:nth-child(17), table.dataTable td:nth-child(17) {{ width: 45px; }} /* BALANCE_QUANTITY */
+        table.dataTable th:nth-child(18), table.dataTable td:nth-child(18) {{ width: 65px; }} /* START_TIME */
+        table.dataTable th:nth-child(19), table.dataTable td:nth-child(19) {{ width: 65px; }} /* END_TIME */
+        table.dataTable th:nth-child(20), table.dataTable td:nth-child(20) {{ width: 35px; }} /* BAL_HR */
+        table.dataTable th:nth-child(21), table.dataTable td:nth-child(21) {{ width: 50px; }} /* BUFFER_STATUS */
         
         /* Make table container scrollable horizontally */
         .table-container {{
@@ -614,6 +628,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             <table id="scheduleTable" class="table table-striped table-bordered">
                 <thead>
                     <tr>
+                        <th>PLAN_DATE</th>
                         <th>LCD_DATE</th>
                         <th>JOB</th>
                         <th>UNIQUE_JOB_ID</th>
@@ -700,8 +715,12 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 logger.warning(f"Missing END_TIME for job {unique_job_id}")
                 end_time = "N/A"
             
+            # Get PLAN_DATE from the row data
+            plan_date = row['PLAN_DATE'] if pd.notna(row['PLAN_DATE']) else "N/A"
+            
             html_content += f"""
                     <tr class="{buffer_class}">
+                        <td title="{plan_date}">{plan_date}</td>
                         <td title="{lcd_date}">{lcd_date}</td>
                         <td title="{job}">{job}</td>
                         <td title="{unique_job_id}">{unique_job_id}</td>
@@ -744,7 +763,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         $(document).ready(function() {
             // Initialize DataTables with improved options
             $('#scheduleTable').DataTable({
-                order: [[0, 'asc']], // Sort by LCD_DATE by default
+                order: [[1, 'asc']], // Sort by LCD_DATE by default (column index 1 now that PLAN_DATE is first)
                 pageLength: 25,
                 lengthMenu: [10, 25, 50, 100, 200],
                 responsive: true,
