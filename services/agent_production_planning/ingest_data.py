@@ -272,6 +272,23 @@ def load_jobs_planning_data(excel_file):
             df['processing_time'] = df['HOURS_NEED'] * 3600
             # Set a minimum processing time but don't default missing values
             df.loc[(df['processing_time'] <= 0) & df['processing_time'].notna(), 'processing_time'] = 3600
+            
+            # Process NUMBER_OPERATOR to adjust processing times
+            if 'NUMBER_OPERATOR' in df.columns:
+                logger.info("Using NUMBER_OPERATOR from Excel to adjust job durations")
+                # Fill missing values with 1 (default to 1 operator)
+                df['NUMBER_OPERATOR'] = df['NUMBER_OPERATOR'].fillna(1)
+                # Ensure NUMBER_OPERATOR is at least 1
+                df.loc[df['NUMBER_OPERATOR'] < 1, 'NUMBER_OPERATOR'] = 1
+                
+                # Adjust processing time based on number of operators
+                # Formula: More operators decrease processing time with diminishing returns
+                # Using a square root function to model diminishing returns of adding more operators
+                import numpy as np
+                df['operator_efficiency'] = np.sqrt(df['NUMBER_OPERATOR']) / df['NUMBER_OPERATOR']
+                df['processing_time'] = df['processing_time'] * df['operator_efficiency']
+                
+                logger.info(f"Adjusted processing times based on NUMBER_OPERATOR for {len(df)} jobs")
         
         # Process SETTING_HOURS for setup times
         if 'SETTING_HOURS' in df.columns:
