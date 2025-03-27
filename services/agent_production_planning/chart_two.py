@@ -380,12 +380,15 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 # Get PLAN_DATE from the job data if available (directly from Excel)
                 plan_date = 'N/A'
                 if 'PLAN_DATE' in job and job['PLAN_DATE'] is not None and not pd.isna(job['PLAN_DATE']):
-                    # If PLAN_DATE is a timestamp, format it appropriately
+                    # If PLAN_DATE is a timestamp, always format it as dd/mm/yy
                     if isinstance(job['PLAN_DATE'], pd.Timestamp):
-                        plan_date = job['PLAN_DATE'].strftime('%d/%m/%y %H:%M')
+                        # Format as dd/mm/yy without time component
+                        plan_date = job['PLAN_DATE'].strftime('%d/%m/%y')
                     elif isinstance(job['PLAN_DATE'], (int, float)) and job['PLAN_DATE'] > 0:
                         # If it's an epoch timestamp
-                        plan_date = datetime.fromtimestamp(job['PLAN_DATE']).strftime('%d/%m/%y %H:%M')
+                        date_obj = datetime.fromtimestamp(job['PLAN_DATE'])
+                        # Always format as dd/mm/yy without time component
+                        plan_date = date_obj.strftime('%d/%m/%y')
                     else:
                         plan_date = str(job['PLAN_DATE'])
                 
@@ -416,8 +419,12 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         # Create DataFrame for easier HTML generation
         df = pd.DataFrame(schedule_data)
         
-        # Sort by LCD_DATE by default
-        df = df.sort_values(by='LCD_DATE')
+        # Convert LCD_DATE strings to datetime objects for proper chronological sorting
+        # This handles the formatted date strings like '15/04/25 08:00' properly
+        df['LCD_DATE_DT'] = pd.to_datetime(df['LCD_DATE'], format='%d/%m/%y %H:%M', errors='coerce')
+        
+        # Sort by the datetime objects in descending order (newest first)
+        df = df.sort_values(by='LCD_DATE_DT', ascending=True)  # True = newest first
         
         # Calculate percentages safely to avoid division by zero
         total_jobs = len(df) if not df.empty else 1  # Avoid division by zero
@@ -471,7 +478,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            font-size: 9px;  /* Smaller base font size */
+            font-size: 10px;  /* Smaller base font size */
             width: 100%;
             table-layout: fixed;  /* Fixed table layout for better control */
             margin: 0;
@@ -488,7 +495,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         }}
         
         table.dataTable td {{
-            font-size: 9px;  /* Extra small cell font */
+            font-size: 10px;  /* Extra small cell font */
             padding: 1px 2px !important;  /* Minimal padding */
             overflow: hidden;
             text-overflow: ellipsis;  /* Show ellipsis for overflow */
@@ -496,16 +503,16 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         }}
         
         /* Set specific column widths based on content - reduced to fit all columns */
-        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 65px; }} /* PLAN_DATE */
-        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 65px; }} /* LCD_DATE */
-        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 65px; }} /* JOB */
-        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 80px; }} /* UNIQUE_JOB_ID */
+        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) {{ width: 40px; }} /* PLAN_DATE */
+        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) {{ width: 55px; }} /* LCD_DATE */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) {{ width: 60px; }} /* JOB */
+        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) {{ width: 100px; }} /* UNIQUE_JOB_ID */
         table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) {{ width: 40px; }} /* RSC_LOCATION */
         table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) {{ width: 55px; }} /* RSC_CODE */
         table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) {{ width: 35px; }} /* NUMBER_OPERATOR */
         table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) {{ width: 45px; }} /* JOB_QUANTITY */
         table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) {{ width: 45px; }} /* EXPECT_OUTPUT_PER_HOUR */
-        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) {{ width: 30px; }} /* PRIORITY */
+        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) {{ width: 25px; }} /* PRIORITY */
         table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) {{ width: 40px; }} /* HOURS_NEED */
         table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) {{ width: 45px; }} /* SETTING_HOURS */
         table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) {{ width: 45px; }} /* BREAK_HOURS */
@@ -685,11 +692,15 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
             
             # Format other possibly NaN values
             # Use the exact LCD_DATE format from Excel without any transformations
-            # This ensures the date format (DD/MM/YY HH:MM) and exact times are preserved
+            # This ensures the date format (DD/MM/YY HH:MM) or (DD/MM/YY HH:MM:SS) and exact times are preserved
             lcd_date = row['LCD_DATE'] if pd.notna(row['LCD_DATE']) else "N/A"
             # If lcd_date is a timestamp object, format it to match Excel's format exactly
             if isinstance(lcd_date, pd.Timestamp):
-                lcd_date = lcd_date.strftime('%d/%m/%y %H:%M')
+                # Check if the timestamp has seconds component
+                if lcd_date.second != 0:
+                    lcd_date = lcd_date.strftime('%d/%m/%y %H:%M:%S')
+                else:
+                    lcd_date = lcd_date.strftime('%d/%m/%y %H:%M')
             job = row['JOB'] if pd.notna(row['JOB']) else ""
             unique_job_id = row['UNIQUE_JOB_ID'] if pd.notna(row['UNIQUE_JOB_ID']) else ""
             rsc_location = row['RSC_LOCATION'] if pd.notna(row['RSC_LOCATION']) else ""
@@ -715,8 +726,12 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
                 logger.warning(f"Missing END_TIME for job {unique_job_id}")
                 end_time = "N/A"
             
-            # Get PLAN_DATE from the row data
+            # Get PLAN_DATE from the row data and ensure proper formatting
             plan_date = row['PLAN_DATE'] if pd.notna(row['PLAN_DATE']) else "N/A"
+            # Format PLAN_DATE consistently if it's still a timestamp
+            if isinstance(plan_date, pd.Timestamp):
+                # Always format as dd/mm/yy without time component
+                plan_date = plan_date.strftime('%d/%m/%y')
             
             html_content += f"""
                     <tr class="{buffer_class}">
@@ -763,7 +778,7 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         $(document).ready(function() {
             // Initialize DataTables with improved options
             $('#scheduleTable').DataTable({
-                order: [[1, 'asc']], // Sort by LCD_DATE by default (column index 1 now that PLAN_DATE is first)
+                order: [[1, 'asc']], // Sort by LCD_DATE by default (column index 1), showing latest dates first
                 pageLength: 25,
                 lengthMenu: [10, 25, 50, 100, 200],
                 responsive: true,

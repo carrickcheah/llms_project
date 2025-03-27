@@ -67,11 +67,11 @@ def detect_date_format(date_value):
     # Look for common date patterns
 
     # Format: 31/12/2023 23:59 (European format with time, no seconds)
-    if re.match(r'\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}', date_value):
+    if re.match(r'\d{1,2}/\d{1,2}/\d{4}\s\d{1,2}:\d{2}', date_value):
         return lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M'), True
     
-    # Format: 12/31/2023 23:59:59 (US format with time)
-    if re.match(r'\d{2}/\d{2}/\d{4}\s\d{2}:\d{2}:\d{2}', date_value):
+    # Format: 12/31/2023 23:59:59 (US format with time) or 15/5/2025 1:00:00 (European format with time, single digits)
+    if re.match(r'\d{1,2}/\d{1,2}/\d{4}\s\d{1,2}:\d{2}:\d{2}', date_value):
         # Try to distinguish between US and European format
         parts = date_value.split()[0].split('/')
         if int(parts[0]) <= 12:  # Might be month in US format
@@ -79,13 +79,15 @@ def detect_date_format(date_value):
                 return lambda x: pd.to_datetime(x, format='%m/%d/%Y %H:%M:%S'), True
             except:
                 return lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M:%S'), True
+        else:
+            return lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M:%S'), True
     
     # Format: 2023-12-31 (ISO format without time)
     if re.match(r'\d{4}-\d{2}-\d{2}$', date_value):
         return lambda x: pd.to_datetime(x, format='%Y-%m-%d'), False
     
-    # Format: 31/12/2023 (European format without time)
-    if re.match(r'\d{2}/\d{2}/\d{4}$', date_value):
+    # Format: 31/12/2023 or 15/5/2025 (European format without time, possibly with single digits)
+    if re.match(r'\d{1,2}/\d{1,2}/\d{4}$', date_value):
         return lambda x: pd.to_datetime(x, format='%d/%m/%Y'), False
     
     # Default: Let pandas try to figure it out

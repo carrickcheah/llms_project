@@ -42,7 +42,7 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            font-size: 9px;  /* Smaller base font size */
+            font-size: 10px;  /* Smaller base font size */
             width: 100%;
             table-layout: fixed;  /* Fixed table layout for better control */
             margin: 0;
@@ -59,7 +59,7 @@
         }
         
         table.dataTable td {
-            font-size: 9px;  /* Extra small cell font */
+            font-size: 10px;  /* Extra small cell font */
             padding: 1px 2px !important;  /* Minimal padding */
             overflow: hidden;
             text-overflow: ellipsis;  /* Show ellipsis for overflow */
@@ -67,16 +67,16 @@
         }
         
         /* Set specific column widths based on content - reduced to fit all columns */
-        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) { width: 65px; } /* PLAN_DATE */
-        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) { width: 65px; } /* LCD_DATE */
-        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) { width: 65px; } /* JOB */
-        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) { width: 80px; } /* UNIQUE_JOB_ID */
+        table.dataTable th:nth-child(1), table.dataTable td:nth-child(1) { width: 40px; } /* PLAN_DATE */
+        table.dataTable th:nth-child(2), table.dataTable td:nth-child(2) { width: 55px; } /* LCD_DATE */
+        table.dataTable th:nth-child(3), table.dataTable td:nth-child(3) { width: 60px; } /* JOB */
+        table.dataTable th:nth-child(4), table.dataTable td:nth-child(4) { width: 100px; } /* UNIQUE_JOB_ID */
         table.dataTable th:nth-child(5), table.dataTable td:nth-child(5) { width: 40px; } /* RSC_LOCATION */
         table.dataTable th:nth-child(6), table.dataTable td:nth-child(6) { width: 55px; } /* RSC_CODE */
         table.dataTable th:nth-child(7), table.dataTable td:nth-child(7) { width: 35px; } /* NUMBER_OPERATOR */
         table.dataTable th:nth-child(8), table.dataTable td:nth-child(8) { width: 45px; } /* JOB_QUANTITY */
         table.dataTable th:nth-child(9), table.dataTable td:nth-child(9) { width: 45px; } /* EXPECT_OUTPUT_PER_HOUR */
-        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) { width: 30px; } /* PRIORITY */
+        table.dataTable th:nth-child(10), table.dataTable td:nth-child(10) { width: 25px; } /* PRIORITY */
         table.dataTable th:nth-child(11), table.dataTable td:nth-child(11) { width: 40px; } /* HOURS_NEED */
         table.dataTable th:nth-child(12), table.dataTable td:nth-child(12) { width: 45px; } /* SETTING_HOURS */
         table.dataTable th:nth-child(13), table.dataTable td:nth-child(13) { width: 45px; } /* BREAK_HOURS */
@@ -140,9 +140,9 @@
         <div class="dashboard row">
             <div class="col-md-6">
                 <h3>Schedule Overview</h3>
-                <p style="font-size: 12px;"><strong>Total Jobs:</strong> 95</p>
-                <p style="font-size: 12px;"><strong>Date Range:</strong> 2025-03-27 13:49 to 2025-05-31 22:25</p>
-                <p style="font-size: 12px;"><strong>Total Duration:</strong> 3422.2118687661346 hours</p>
+                <p style="font-size: 12px;"><strong>Total Jobs:</strong> 101</p>
+                <p style="font-size: 12px;"><strong>Date Range:</strong> 2025-03-27 15:07 to 2025-06-01 15:44</p>
+                <p style="font-size: 12px;"><strong>Total Duration:</strong> 3560.8031386074035 hours</p>
             </div>
             <div class="col-md-6">
                 <h3>Buffer Status</h3>
@@ -151,9 +151,9 @@
                         <div class="status-badge badge-critical me-2" style="width: 80px;">Critical</div>
                         <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar bg-danger" role="progressbar" 
-                                style="width: 60.0%;" 
+                                style="width: 56.43564356435643%;" 
                                 aria-valuenow="57" 
-                                aria-valuemin="0" aria-valuemax="95">
+                                aria-valuemin="0" aria-valuemax="101">
                                 57 jobs
                             </div>
                         </div>
@@ -162,20 +162,20 @@
                         <div class="status-badge badge-warning me-2" style="width: 80px;">Warning</div>
                         <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar bg-warning text-dark" role="progressbar" 
-                                style="width: 7.368421052631578%;" 
-                                aria-valuenow="7" 
-                                aria-valuemin="0" aria-valuemax="95">
-                                7 jobs
+                                style="width: 8.91089108910891%;" 
+                                aria-valuenow="9" 
+                                aria-valuemin="0" aria-valuemax="101">
+                                9 jobs
                             </div>
                         </div>
                     </div>
                     <div class="d-flex align-items-center">
                         <div class="status-badge badge-caution me-2" style="width: 80px;">Caution</div>
                         <div class="progress flex-grow-1" style="height: 16px;">
-                            <div class="progress-bar" role="progressbar" style="background-color: purple; width: 8.421052631578947%;" 
-                                aria-valuenow="8" 
-                                aria-valuemin="0" aria-valuemax="95">
-                                8 jobs
+                            <div class="progress-bar" role="progressbar" style="background-color: purple; width: 9.900990099009901%;" 
+                                aria-valuenow="10" 
+                                aria-valuemin="0" aria-valuemax="101">
+                                10 jobs
                             </div>
                         </div>
                     </div>
@@ -183,10 +183,10 @@
                         <div class="status-badge badge-ok me-2" style="width: 80px;">OK</div>
                         <div class="progress flex-grow-1" style="height: 16px;">
                             <div class="progress-bar bg-success" role="progressbar" 
-                                style="width: 24.210526315789473%;" 
-                                aria-valuenow="23" 
-                                aria-valuemin="0" aria-valuemax="95">
-                                23 jobs
+                                style="width: 24.752475247524753%;" 
+                                aria-valuenow="25" 
+                                aria-valuemin="0" aria-valuemax="101">
+                                25 jobs
                             </div>
                         </div>
                     </div>
@@ -224,8 +224,146 @@
                 </thead>
                 <tbody>
 
+                    <tr class="status-caution">
+                        <td title="15/03/25">15/03/25</td>
+                        <td title="15/04/25 17:00">15/04/25 17:00</td>
+                        <td title="JOST888001">JOST888001</td>
+                        <td title="JOST888001_CP88-888-P01-08">JOST888001_CP88-888-P01-08</td>
+                        <td title="TR">TR</td>
+                        <td title="PAINTING">PAINTING</td>
+                        <td title="1">1</td>
+                        <td title="10000">10000</td>
+                        <td title="500">500</td>
+                        <td title="2">2</td>
+                        <td title="20.0">20.0</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="6.0">6.0</td>
+                        <td title="2025-04-12 08:00">2025-04-12 08:00</td>
+                        <td title="1000.0">1000.0</td>
+                        <td title="9000">9000</td>
+                        <td title="2025-04-12 08:00">2025-04-12 08:00</td>
+                        <td title="2025-04-13 04:00">2025-04-13 04:00</td>
+                        <td title="61.0">61.0</td>
+                        <td><div class="status-badge badge-caution">Caution</div></td>
+                    </tr>
+                    <tr class="status-caution">
+                        <td title="15/03/25">15/03/25</td>
+                        <td title="15/04/25 17:00">15/04/25 17:00</td>
+                        <td title="JOST888002">JOST888002</td>
+                        <td title="JOST888002_CP88-888-P02-09">JOST888002_CP88-888-P02-09</td>
+                        <td title="TR">TR</td>
+                        <td title="PAINTING">PAINTING</td>
+                        <td title="2">2</td>
+                        <td title="20000">20000</td>
+                        <td title="600">600</td>
+                        <td title="2">2</td>
+                        <td title="33.3">33.3</td>
+                        <td title="2.0">2.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="7.0">7.0</td>
+                        <td title=""></td>
+                        <td title="2000.0">2000.0</td>
+                        <td title="18000">18000</td>
+                        <td title="2025-04-13 04:00">2025-04-13 04:00</td>
+                        <td title="2025-04-14 03:34">2025-04-14 03:34</td>
+                        <td title="37.4">37.4</td>
+                        <td><div class="status-badge badge-caution">Caution</div></td>
+                    </tr>
+                    <tr class="status-warning">
+                        <td title="15/03/25">15/03/25</td>
+                        <td title="15/04/25 17:00">15/04/25 17:00</td>
+                        <td title="JOST888003">JOST888003</td>
+                        <td title="JOST888003_CP88-888-P03-08">JOST888003_CP88-888-P03-08</td>
+                        <td title="TR">TR</td>
+                        <td title="PAINTING">PAINTING</td>
+                        <td title="1">1</td>
+                        <td title="10000">10000</td>
+                        <td title="700">700</td>
+                        <td title="2">2</td>
+                        <td title="14.3">14.3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="3000.0">3000.0</td>
+                        <td title="7000">7000</td>
+                        <td title="2025-04-14 03:34">2025-04-14 03:34</td>
+                        <td title="2025-04-14 17:51">2025-04-14 17:51</td>
+                        <td title="23.1">23.1</td>
+                        <td><div class="status-badge badge-warning">Warning</div></td>
+                    </tr>
+                    <tr class="status-warning">
+                        <td title="16/03/25">16/03/25</td>
+                        <td title="15/04/25 17:00">15/04/25 17:00</td>
+                        <td title="JOST888004">JOST888004</td>
+                        <td title="JOST888004_CP88-888-P04-10">JOST888004_CP88-888-P04-10</td>
+                        <td title="TR">TR</td>
+                        <td title="PAINTING">PAINTING</td>
+                        <td title="2">2</td>
+                        <td title="15000">15000</td>
+                        <td title="800">800</td>
+                        <td title="2">2</td>
+                        <td title="18.8">18.8</td>
+                        <td title="2.0">2.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="6.0">6.0</td>
+                        <td title=""></td>
+                        <td title="4000.0">4000.0</td>
+                        <td title="11000">11000</td>
+                        <td title="2025-04-14 17:51">2025-04-14 17:51</td>
+                        <td title="2025-04-15 07:06">2025-04-15 07:06</td>
+                        <td title="9.9">9.9</td>
+                        <td><div class="status-badge badge-warning">Warning</div></td>
+                    </tr>
                     <tr class="status-critical">
-                        <td title="12/05/25 07:00">12/05/25 07:00</td>
+                        <td title="16/03/25">16/03/25</td>
+                        <td title="15/04/25 17:00">15/04/25 17:00</td>
+                        <td title="JOST888005">JOST888005</td>
+                        <td title="JOST888005_CP88-888-P05-10">JOST888005_CP88-888-P05-10</td>
+                        <td title="TR">TR</td>
+                        <td title="CHECKING">CHECKING</td>
+                        <td title="1">1</td>
+                        <td title="20000">20000</td>
+                        <td title="900">900</td>
+                        <td title="2">2</td>
+                        <td title="22.2">22.2</td>
+                        <td title="3.0">3.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="7.0">7.0</td>
+                        <td title=""></td>
+                        <td title="5000.0">5000.0</td>
+                        <td title="15000">15000</td>
+                        <td title="2025-05-02 19:43">2025-05-02 19:43</td>
+                        <td title="2025-05-03 17:57">2025-05-03 17:57</td>
+                        <td title="0.0">0.0</td>
+                        <td><div class="status-badge badge-critical">Critical</div></td>
+                    </tr>
+                    <tr class="status-critical">
+                        <td title="16/03/25">16/03/25</td>
+                        <td title="15/04/25 17:00">15/04/25 17:00</td>
+                        <td title="JOST888006">JOST888006</td>
+                        <td title="JOST888006_CP88-888-P06-18">JOST888006_CP88-888-P06-18</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="TW01">TW01</td>
+                        <td title="3">3</td>
+                        <td title="30000">30000</td>
+                        <td title="1000">1000</td>
+                        <td title="2">2</td>
+                        <td title="30.0">30.0</td>
+                        <td title="4.0">4.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="6000.0">6000.0</td>
+                        <td title="24000">24000</td>
+                        <td title="2025-05-28 13:05">2025-05-28 13:05</td>
+                        <td title="2025-05-29 06:24">2025-05-29 06:24</td>
+                        <td title="0.0">0.0</td>
+                        <td><div class="status-badge badge-critical">Critical</div></td>
+                    </tr>
+                    <tr class="status-critical">
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 07:00">01/05/25 07:00</td>
                         <td title="JOAW24090215">JOAW24090215</td>
                         <td title="JOAW24090215_CD11-027-P05-06">JOAW24090215_CD11-027-P05-06</td>
@@ -242,13 +380,13 @@
                         <td title=""></td>
                         <td title="9969.0">9969.0</td>
                         <td title="31">31</td>
-                        <td title="2025-05-30 21:25">2025-05-30 21:25</td>
-                        <td title="2025-05-31 22:25">2025-05-31 22:25</td>
+                        <td title="2025-05-31 14:44">2025-05-31 14:44</td>
+                        <td title="2025-06-01 15:44">2025-06-01 15:44</td>
                         <td title="0.0">0.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="13/05/25 06:59">13/05/25 06:59</td>
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 08:00">01/05/25 08:00</td>
                         <td title="JOST24120021">JOST24120021</td>
                         <td title="JOST24120021_CM10-009-P04-05">JOST24120021_CM10-009-P04-05</td>
@@ -271,7 +409,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="14/05/25 06:59">14/05/25 06:59</td>
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 10:00">01/05/25 10:00</td>
                         <td title="JOAW24120118">JOAW24120118</td>
                         <td title="JOAW24120118_CD11-026-P05-06">JOAW24120118_CD11-026-P05-06</td>
@@ -288,13 +426,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="15000">15000</td>
-                        <td title="2025-05-28 13:05">2025-05-28 13:05</td>
-                        <td title="2025-05-29 09:42">2025-05-29 09:42</td>
+                        <td title="2025-05-29 06:24">2025-05-29 06:24</td>
+                        <td title="2025-05-30 03:02">2025-05-30 03:02</td>
                         <td title="0.0">0.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="15/05/25 06:59">15/05/25 06:59</td>
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 11:00">01/05/25 11:00</td>
                         <td title="JOAW24120201">JOAW24120201</td>
                         <td title="JOAW24120201_CM03-001-P02-04">JOAW24120201_CM03-001-P02-04</td>
@@ -311,13 +449,13 @@
                         <td title=""></td>
                         <td title="100806.0">100806.0</td>
                         <td title="0">0</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-04-04 23:26">2025-04-04 23:26</td>
-                        <td title="635.6">635.6</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-04-05 00:43">2025-04-05 00:43</td>
+                        <td title="634.3">634.3</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="16/05/25 06:59">16/05/25 06:59</td>
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 12:00">01/05/25 12:00</td>
                         <td title="JOAW24120201">JOAW24120201</td>
                         <td title="JOAW24120201_CM03-001-P03-04">JOAW24120201_CM03-001-P03-04</td>
@@ -334,13 +472,13 @@
                         <td title=""></td>
                         <td title="57547.0">57547.0</td>
                         <td title="43259">43259</td>
-                        <td title="2025-05-02 19:43">2025-05-02 19:43</td>
-                        <td title="2025-05-10 08:03">2025-05-10 08:03</td>
+                        <td title="2025-05-03 17:57">2025-05-03 17:57</td>
+                        <td title="2025-05-11 06:16">2025-05-11 06:16</td>
                         <td title="0.0">0.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-caution">
-                        <td title="17/05/25 06:59">17/05/25 06:59</td>
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 13:00">01/05/25 13:00</td>
                         <td title="JOST24120090">JOST24120090</td>
                         <td title="JOST24120090_CP08-544-P01-02">JOST24120090_CP08-544-P01-02</td>
@@ -363,7 +501,7 @@
                         <td><div class="status-badge badge-caution">Caution</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="18/05/25 06:59">18/05/25 06:59</td>
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 14:00">01/05/25 14:00</td>
                         <td title="JOST24120092">JOST24120092</td>
                         <td title="JOST24120092_CP08-545-P01-02">JOST24120092_CP08-545-P01-02</td>
@@ -386,7 +524,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="19/05/25 06:59">19/05/25 06:59</td>
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 15:00">01/05/25 15:00</td>
                         <td title="JOST24120047">JOST24120047</td>
                         <td title="JOST24120047_CP08-046-P03-04">JOST24120047_CP08-046-P03-04</td>
@@ -408,8 +546,8 @@
                         <td title="0.0">0.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
-                    <tr class="status-critical">
-                        <td title="20/05/25 06:59">20/05/25 06:59</td>
+                    <tr class="status-ok">
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 16:00">01/05/25 16:00</td>
                         <td title="JOTP24110201">JOTP24110201</td>
                         <td title="JOTP24110201_CP08-553-P05-07">JOTP24110201_CP08-553-P05-07</td>
@@ -423,16 +561,16 @@
                         <td title="5.0">5.0</td>
                         <td title="4.0">4.0</td>
                         <td title="8.0">8.0</td>
-                        <td title="2025-05-03 22:59">2025-05-03 22:59</td>
+                        <td title=""></td>
                         <td title="211.0">211.0</td>
                         <td title="41">41</td>
-                        <td title="2025-05-03 22:59">2025-05-03 22:59</td>
-                        <td title="2025-05-04 19:59">2025-05-04 19:59</td>
-                        <td title="0.0">0.0</td>
-                        <td><div class="status-badge badge-critical">Critical</div></td>
+                        <td title="2025-04-15 07:06">2025-04-15 07:06</td>
+                        <td title="2025-04-16 04:06">2025-04-16 04:06</td>
+                        <td title="371.9">371.9</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
-                    <tr class="status-critical">
-                        <td title="21/05/25 06:59">21/05/25 06:59</td>
+                    <tr class="status-ok">
+                        <td title="01/03/25">01/03/25</td>
                         <td title="01/05/25 17:00">01/05/25 17:00</td>
                         <td title="JOTP24110201">JOTP24110201</td>
                         <td title="JOTP24110201_CP08-553-P06-07">JOTP24110201_CP08-553-P06-07</td>
@@ -446,16 +584,16 @@
                         <td title="6.0">6.0</td>
                         <td title="5.0">5.0</td>
                         <td title="8.0">8.0</td>
-                        <td title="2025-05-05 18:59">2025-05-05 18:59</td>
+                        <td title=""></td>
                         <td title="182.0">182.0</td>
                         <td title="70">70</td>
-                        <td title="2025-05-05 18:59">2025-05-05 18:59</td>
-                        <td title="2025-05-06 15:59">2025-05-06 15:59</td>
-                        <td title="0.0">0.0</td>
-                        <td><div class="status-badge badge-critical">Critical</div></td>
+                        <td title="2025-04-16 04:06">2025-04-16 04:06</td>
+                        <td title="2025-04-17 01:06">2025-04-17 01:06</td>
+                        <td title="351.9">351.9</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="22/05/25 06:59">22/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="02/05/25 12:59">02/05/25 12:59</td>
                         <td title="JOST24120179">JOST24120179</td>
                         <td title="JOST24120179_CP08-289-P04-06">JOST24120179_CP08-289-P04-06</td>
@@ -478,7 +616,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="23/05/25 06:59">23/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="03/05/25 12:59">03/05/25 12:59</td>
                         <td title="JOST24120179">JOST24120179</td>
                         <td title="JOST24120179_CP08-289-P05-06">JOST24120179_CP08-289-P05-06</td>
@@ -501,7 +639,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-caution">
-                        <td title="24/05/25 06:59">24/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="04/05/25 12:59">04/05/25 12:59</td>
                         <td title="JOST24120433">JOST24120433</td>
                         <td title="JOST24120433_CH04-002-P01-07">JOST24120433_CH04-002-P01-07</td>
@@ -524,7 +662,7 @@
                         <td><div class="status-badge badge-caution">Caution</div></td>
                     </tr>
                     <tr class="status-caution">
-                        <td title="25/05/25 06:59">25/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="05/05/25 12:59">05/05/25 12:59</td>
                         <td title="JOST24120433">JOST24120433</td>
                         <td title="JOST24120433_CH04-002-P02-07">JOST24120433_CH04-002-P02-07</td>
@@ -547,7 +685,7 @@
                         <td><div class="status-badge badge-caution">Caution</div></td>
                     </tr>
                     <tr class="status-caution">
-                        <td title="26/05/25 06:59">26/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="06/05/25 12:59">06/05/25 12:59</td>
                         <td title="JOST24120433">JOST24120433</td>
                         <td title="JOST24120433_CH04-002-P03-07">JOST24120433_CH04-002-P03-07</td>
@@ -570,7 +708,7 @@
                         <td><div class="status-badge badge-caution">Caution</div></td>
                     </tr>
                     <tr class="status-warning">
-                        <td title="27/05/25 06:59">27/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="07/05/25 12:59">07/05/25 12:59</td>
                         <td title="JOST24120433">JOST24120433</td>
                         <td title="JOST24120433_CH04-002-P04-07">JOST24120433_CH04-002-P04-07</td>
@@ -593,7 +731,7 @@
                         <td><div class="status-badge badge-warning">Warning</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="28/05/25 06:59">28/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="08/05/25 12:59">08/05/25 12:59</td>
                         <td title="JOST24120433">JOST24120433</td>
                         <td title="JOST24120433_CH04-002-P05-07">JOST24120433_CH04-002-P05-07</td>
@@ -616,7 +754,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="29/05/25 06:59">29/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="09/05/25 12:59">09/05/25 12:59</td>
                         <td title="JOST24120433">JOST24120433</td>
                         <td title="JOST24120433_CH04-002-P06-07">JOST24120433_CH04-002-P06-07</td>
@@ -639,7 +777,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-caution">
-                        <td title="30/05/25 06:59">30/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="10/05/25 12:59">10/05/25 12:59</td>
                         <td title="JOST24120408">JOST24120408</td>
                         <td title="JOST24120408_CT10-001-P01-06">JOST24120408_CT10-001-P01-06</td>
@@ -662,7 +800,7 @@
                         <td><div class="status-badge badge-caution">Caution</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="31/05/25 06:59">31/05/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="11/05/25 12:59">11/05/25 12:59</td>
                         <td title="JOST24120408">JOST24120408</td>
                         <td title="JOST24120408_CT10-001-P02-06">JOST24120408_CT10-001-P02-06</td>
@@ -685,7 +823,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="01/06/25 06:59">01/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="12/05/25 12:59">12/05/25 12:59</td>
                         <td title="JOST24120408">JOST24120408</td>
                         <td title="JOST24120408_CT10-001-P03-06">JOST24120408_CT10-001-P03-06</td>
@@ -708,7 +846,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="02/06/25 06:59">02/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="13/05/25 12:59">13/05/25 12:59</td>
                         <td title="JOST24120408">JOST24120408</td>
                         <td title="JOST24120408_CT10-001-P04-06">JOST24120408_CT10-001-P04-06</td>
@@ -731,7 +869,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="03/06/25 06:59">03/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="14/05/25 13:00">14/05/25 13:00</td>
                         <td title="JOST24120408">JOST24120408</td>
                         <td title="JOST24120408_CT10-001-P05-06">JOST24120408_CT10-001-P05-06</td>
@@ -754,7 +892,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="04/06/25 06:59">04/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="14/05/25 13:00">14/05/25 13:00</td>
                         <td title="JOAW24120119">JOAW24120119</td>
                         <td title="JOAW24120119_CD11-026-P05-06">JOAW24120119_CD11-026-P05-06</td>
@@ -771,13 +909,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="15000">15000</td>
-                        <td title="2025-05-29 09:42">2025-05-29 09:42</td>
-                        <td title="2025-05-30 21:25">2025-05-30 21:25</td>
+                        <td title="2025-05-30 03:02">2025-05-30 03:02</td>
+                        <td title="2025-05-31 14:44">2025-05-31 14:44</td>
                         <td title="0.0">0.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="05/06/25 06:59">05/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="14/05/25 13:00">14/05/25 13:00</td>
                         <td title="JOAW24120383">JOAW24120383</td>
                         <td title="JOAW24120383_CP08-557-P08-09">JOAW24120383_CP08-557-P08-09</td>
@@ -800,7 +938,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="20/06/25 06:59">20/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120409">JOST24120409</td>
                         <td title="JOST24120409_CT10-001-P02-06">JOST24120409_CT10-001-P02-06</td>
@@ -823,7 +961,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="21/06/25 06:59">21/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120409">JOST24120409</td>
                         <td title="JOST24120409_CT10-001-P03-06">JOST24120409_CT10-001-P03-06</td>
@@ -846,7 +984,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="22/06/25 06:59">22/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120409">JOST24120409</td>
                         <td title="JOST24120409_CT10-001-P04-06">JOST24120409_CT10-001-P04-06</td>
@@ -869,7 +1007,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="23/06/25 06:59">23/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120409">JOST24120409</td>
                         <td title="JOST24120409_CT10-001-P05-06">JOST24120409_CT10-001-P05-06</td>
@@ -892,7 +1030,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="24/06/25 06:59">24/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOTP24120398">JOTP24120398</td>
                         <td title="JOTP24120398_CP08-587-P02-04">JOTP24120398_CP08-587-P02-04</td>
@@ -909,82 +1047,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="150">150</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-03-27 14:19">2025-03-27 14:19</td>
-                        <td title="1169.7">1169.7</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-03-27 15:37">2025-03-27 15:37</td>
+                        <td title="1168.4">1168.4</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="27/06/25 06:59">27/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOST24120366">JOST24120366</td>
-                        <td title="JOST24120366_CP08-513-P03-07">JOST24120366_CP08-513-P03-07</td>
-                        <td title="ST-4">ST-4</td>
-                        <td title="PP20-110T">PP20-110T</td>
-                        <td title="1">1</td>
-                        <td title="2450">2450</td>
-                        <td title="360">360</td>
-                        <td title="3">3</td>
-                        <td title="6.8">6.8</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title=""></td>
-                        <td title="1350.0">1350.0</td>
-                        <td title="1100">1100</td>
-                        <td title="2025-05-18 11:00">2025-05-18 11:00</td>
-                        <td title="2025-05-18 17:48">2025-05-18 17:48</td>
-                        <td title="0.0">0.0</td>
-                        <td><div class="status-badge badge-critical">Critical</div></td>
-                    </tr>
-                    <tr class="status-critical">
-                        <td title="26/06/25 06:59">26/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOST24120366">JOST24120366</td>
-                        <td title="JOST24120366_CP08-513-P02-07">JOST24120366_CP08-513-P02-07</td>
-                        <td title="ST-4">ST-4</td>
-                        <td title="PP25-160T">PP25-160T</td>
-                        <td title="1">1</td>
-                        <td title="2450">2450</td>
-                        <td title="360">360</td>
-                        <td title="3">3</td>
-                        <td title="6.8">6.8</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title=""></td>
-                        <td title="1350.0">1350.0</td>
-                        <td title="1100">1100</td>
-                        <td title="2025-05-16 19:00">2025-05-16 19:00</td>
-                        <td title="2025-05-17 01:48">2025-05-17 01:48</td>
-                        <td title="0.0">0.0</td>
-                        <td><div class="status-badge badge-critical">Critical</div></td>
-                    </tr>
-                    <tr class="status-caution">
-                        <td title="19/06/25 06:59">19/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOST24120409">JOST24120409</td>
-                        <td title="JOST24120409_CT10-001-P01-06">JOST24120409_CT10-001-P01-06</td>
-                        <td title="ST-3">ST-3</td>
-                        <td title="PP09-160T">PP09-160T</td>
-                        <td title="1">1</td>
-                        <td title="6080">6080</td>
-                        <td title="330">330</td>
-                        <td title="3">3</td>
-                        <td title="18.4">18.4</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title="2025-05-13 13:00">2025-05-13 13:00</td>
-                        <td title="0.0">0.0</td>
-                        <td title="6080">6080</td>
-                        <td title="2025-05-13 13:00">2025-05-13 13:00</td>
-                        <td title="2025-05-14 07:25">2025-05-14 07:25</td>
-                        <td title="24.6">24.6</td>
-                        <td><div class="status-badge badge-caution">Caution</div></td>
-                    </tr>
-                    <tr class="status-critical">
-                        <td title="29/06/25 06:59">29/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120366">JOST24120366</td>
                         <td title="JOST24120366_CP08-513-P05-07">JOST24120366_CP08-513-P05-07</td>
@@ -1007,76 +1076,30 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="30/06/25 06:59">30/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120366">JOST24120366</td>
-                        <td title="JOST24120366_CP08-513-P06-07">JOST24120366_CP08-513-P06-07</td>
-                        <td title="ST">ST</td>
-                        <td title="OPT">OPT</td>
-                        <td title="1">1</td>
-                        <td title="2450">2450</td>
-                        <td title="420">420</td>
-                        <td title="3">3</td>
-                        <td title="5.8">5.8</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title=""></td>
-                        <td title="0.0">0.0</td>
-                        <td title="2450">2450</td>
-                        <td title="2025-05-23 21:24">2025-05-23 21:24</td>
-                        <td title="2025-05-24 03:14">2025-05-24 03:14</td>
-                        <td title="0.0">0.0</td>
-                        <td><div class="status-badge badge-critical">Critical</div></td>
-                    </tr>
-                    <tr class="status-ok">
-                        <td title="25/06/25 06:59">25/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOTP24120398">JOTP24120398</td>
-                        <td title="JOTP24120398_CP08-587-P03-04">JOTP24120398_CP08-587-P03-04</td>
-                        <td title="PB">PB</td>
-                        <td title="PB01">PB01</td>
-                        <td title="1">1</td>
-                        <td title="150">150</td>
-                        <td title="50">50</td>
-                        <td title="3">3</td>
-                        <td title="3.0">3.0</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title=""></td>
-                        <td title="0.0">0.0</td>
-                        <td title="150">150</td>
-                        <td title="2025-03-27 14:19">2025-03-27 14:19</td>
-                        <td title="2025-03-27 17:19">2025-03-27 17:19</td>
-                        <td title="1166.7">1166.7</td>
-                        <td><div class="status-badge badge-ok">OK</div></td>
-                    </tr>
-                    <tr class="status-critical">
-                        <td title="18/06/25 06:59">18/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOST24120418">JOST24120418</td>
-                        <td title="JOST24120418_CT10-015-P04-05">JOST24120418_CT10-015-P04-05</td>
+                        <td title="JOST24120366_CP08-513-P03-07">JOST24120366_CP08-513-P03-07</td>
                         <td title="ST-4">ST-4</td>
-                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="PP20-110T">PP20-110T</td>
                         <td title="1">1</td>
-                        <td title="14400">14400</td>
+                        <td title="2450">2450</td>
                         <td title="360">360</td>
                         <td title="3">3</td>
-                        <td title="40.0">40.0</td>
+                        <td title="6.8">6.8</td>
                         <td title="1.0">1.0</td>
                         <td title="2.0">2.0</td>
                         <td title="8.0">8.0</td>
                         <td title=""></td>
-                        <td title="0.0">0.0</td>
-                        <td title="14400">14400</td>
+                        <td title="1350.0">1350.0</td>
+                        <td title="1100">1100</td>
                         <td title="2025-05-18 11:00">2025-05-18 11:00</td>
-                        <td title="2025-05-20 03:00">2025-05-20 03:00</td>
+                        <td title="2025-05-18 17:48">2025-05-18 17:48</td>
                         <td title="0.0">0.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="28/06/25 06:59">28/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120366">JOST24120366</td>
                         <td title="JOST24120366_CP08-513-P04-07">JOST24120366_CP08-513-P04-07</td>
@@ -1098,8 +1121,123 @@
                         <td title="0.0">0.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
+                    <tr class="status-caution">
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOST24120409">JOST24120409</td>
+                        <td title="JOST24120409_CT10-001-P01-06">JOST24120409_CT10-001-P01-06</td>
+                        <td title="ST-3">ST-3</td>
+                        <td title="PP09-160T">PP09-160T</td>
+                        <td title="1">1</td>
+                        <td title="6080">6080</td>
+                        <td title="330">330</td>
+                        <td title="3">3</td>
+                        <td title="18.4">18.4</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title="2025-05-13 13:00">2025-05-13 13:00</td>
+                        <td title="0.0">0.0</td>
+                        <td title="6080">6080</td>
+                        <td title="2025-05-13 13:00">2025-05-13 13:00</td>
+                        <td title="2025-05-14 07:25">2025-05-14 07:25</td>
+                        <td title="24.6">24.6</td>
+                        <td><div class="status-badge badge-caution">Caution</div></td>
+                    </tr>
                     <tr class="status-critical">
-                        <td title="16/06/25 06:59">16/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOST24120366">JOST24120366</td>
+                        <td title="JOST24120366_CP08-513-P06-07">JOST24120366_CP08-513-P06-07</td>
+                        <td title="ST">ST</td>
+                        <td title="OPT">OPT</td>
+                        <td title="1">1</td>
+                        <td title="2450">2450</td>
+                        <td title="420">420</td>
+                        <td title="3">3</td>
+                        <td title="5.8">5.8</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="0.0">0.0</td>
+                        <td title="2450">2450</td>
+                        <td title="2025-05-23 21:24">2025-05-23 21:24</td>
+                        <td title="2025-05-24 03:14">2025-05-24 03:14</td>
+                        <td title="0.0">0.0</td>
+                        <td><div class="status-badge badge-critical">Critical</div></td>
+                    </tr>
+                    <tr class="status-critical">
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOST24120366">JOST24120366</td>
+                        <td title="JOST24120366_CP08-513-P02-07">JOST24120366_CP08-513-P02-07</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP25-160T">PP25-160T</td>
+                        <td title="1">1</td>
+                        <td title="2450">2450</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="6.8">6.8</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="1350.0">1350.0</td>
+                        <td title="1100">1100</td>
+                        <td title="2025-05-16 19:00">2025-05-16 19:00</td>
+                        <td title="2025-05-17 01:48">2025-05-17 01:48</td>
+                        <td title="0.0">0.0</td>
+                        <td><div class="status-badge badge-critical">Critical</div></td>
+                    </tr>
+                    <tr class="status-critical">
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOST24120418">JOST24120418</td>
+                        <td title="JOST24120418_CT10-015-P04-05">JOST24120418_CT10-015-P04-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="14400">14400</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="40.0">40.0</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="0.0">0.0</td>
+                        <td title="14400">14400</td>
+                        <td title="2025-05-18 11:00">2025-05-18 11:00</td>
+                        <td title="2025-05-20 03:00">2025-05-20 03:00</td>
+                        <td title="0.0">0.0</td>
+                        <td><div class="status-badge badge-critical">Critical</div></td>
+                    </tr>
+                    <tr class="status-ok">
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOTP24120398">JOTP24120398</td>
+                        <td title="JOTP24120398_CP08-587-P03-04">JOTP24120398_CP08-587-P03-04</td>
+                        <td title="PB">PB</td>
+                        <td title="PB01">PB01</td>
+                        <td title="1">1</td>
+                        <td title="150">150</td>
+                        <td title="50">50</td>
+                        <td title="3">3</td>
+                        <td title="3.0">3.0</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="0.0">0.0</td>
+                        <td title="150">150</td>
+                        <td title="2025-03-27 15:37">2025-03-27 15:37</td>
+                        <td title="2025-03-27 18:37">2025-03-27 18:37</td>
+                        <td title="1165.4">1165.4</td>
+                        <td><div class="status-badge badge-ok">OK</div></td>
+                    </tr>
+                    <tr class="status-critical">
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120418">JOST24120418</td>
                         <td title="JOST24120418_CT10-015-P02-05">JOST24120418_CT10-015-P02-05</td>
@@ -1122,7 +1260,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="17/06/25 06:59">17/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120418">JOST24120418</td>
                         <td title="JOST24120418_CT10-015-P03-05">JOST24120418_CT10-015-P03-05</td>
@@ -1145,7 +1283,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="06/06/25 06:59">06/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120359">JOST24120359</td>
                         <td title="JOST24120359_CP08-504A-P02-04">JOST24120359_CP08-504A-P02-04</td>
@@ -1168,7 +1306,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="07/06/25 06:59">07/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120359">JOST24120359</td>
                         <td title="JOST24120359_CP08-504A-P03-04">JOST24120359_CP08-504A-P03-04</td>
@@ -1190,54 +1328,8 @@
                         <td title="3.6">3.6</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
-                    <tr class="status-critical">
-                        <td title="09/06/25 06:59">09/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOST24120337">JOST24120337</td>
-                        <td title="JOST24120337_CP08-352-P03-04">JOST24120337_CP08-352-P03-04</td>
-                        <td title="ST-4">ST-4</td>
-                        <td title="PP28-110T">PP28-110T</td>
-                        <td title="1">1</td>
-                        <td title="5440">5440</td>
-                        <td title="360">360</td>
-                        <td title="3">3</td>
-                        <td title="15.1">15.1</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title=""></td>
-                        <td title="0.0">0.0</td>
-                        <td title="5440">5440</td>
-                        <td title="2025-05-20 03:00">2025-05-20 03:00</td>
-                        <td title="2025-05-20 18:06">2025-05-20 18:06</td>
-                        <td title="0.0">0.0</td>
-                        <td><div class="status-badge badge-critical">Critical</div></td>
-                    </tr>
-                    <tr class="status-caution">
-                        <td title="10/06/25 06:59">10/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOST24120338">JOST24120338</td>
-                        <td title="JOST24120338_CP08-353&CP08-354-P01-05">JOST24120338_CP08-353&CP08-354-P01-05</td>
-                        <td title="SM">SM</td>
-                        <td title="SM01">SM01</td>
-                        <td title="1">1</td>
-                        <td title="2800">2800</td>
-                        <td title="480">480</td>
-                        <td title="3">3</td>
-                        <td title="5.8">5.8</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title="2025-05-13 18:00">2025-05-13 18:00</td>
-                        <td title="0.0">0.0</td>
-                        <td title="2800">2800</td>
-                        <td title="2025-05-13 18:00">2025-05-13 18:00</td>
-                        <td title="2025-05-13 23:50">2025-05-13 23:50</td>
-                        <td title="32.2">32.2</td>
-                        <td><div class="status-badge badge-caution">Caution</div></td>
-                    </tr>
                     <tr class="status-ok">
-                        <td title="08/06/25 06:59">08/06/25 06:59</td>
+                        <td title="18/03/25">18/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120337">JOST24120337</td>
                         <td title="JOST24120337_CP08-352-P02-04">JOST24120337_CP08-352-P02-04</td>
@@ -1259,8 +1351,77 @@
                         <td title="247.6">247.6</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
+                    <tr class="status-caution">
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOST24120338">JOST24120338</td>
+                        <td title="JOST24120338_CP08-353&CP08-354-P01-05">JOST24120338_CP08-353&CP08-354-P01-05</td>
+                        <td title="SM">SM</td>
+                        <td title="SM01">SM01</td>
+                        <td title="1">1</td>
+                        <td title="2800">2800</td>
+                        <td title="480">480</td>
+                        <td title="3">3</td>
+                        <td title="5.8">5.8</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title="2025-05-13 18:00">2025-05-13 18:00</td>
+                        <td title="0.0">0.0</td>
+                        <td title="2800">2800</td>
+                        <td title="2025-05-13 18:00">2025-05-13 18:00</td>
+                        <td title="2025-05-13 23:50">2025-05-13 23:50</td>
+                        <td title="32.2">32.2</td>
+                        <td><div class="status-badge badge-caution">Caution</div></td>
+                    </tr>
+                    <tr class="status-critical">
+                        <td title="18/03/25">18/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOST24120337">JOST24120337</td>
+                        <td title="JOST24120337_CP08-352-P03-04">JOST24120337_CP08-352-P03-04</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP28-110T">PP28-110T</td>
+                        <td title="1">1</td>
+                        <td title="5440">5440</td>
+                        <td title="360">360</td>
+                        <td title="3">3</td>
+                        <td title="15.1">15.1</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="0.0">0.0</td>
+                        <td title="5440">5440</td>
+                        <td title="2025-05-20 03:00">2025-05-20 03:00</td>
+                        <td title="2025-05-20 18:06">2025-05-20 18:06</td>
+                        <td title="0.0">0.0</td>
+                        <td><div class="status-badge badge-critical">Critical</div></td>
+                    </tr>
                     <tr class="status-warning">
-                        <td title="12/06/25 06:59">12/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="15/05/25 08:00">15/05/25 08:00</td>
+                        <td title="JOST24120338">JOST24120338</td>
+                        <td title="JOST24120338_CP08-353&CP08-354-P02-05">JOST24120338_CP08-353&CP08-354-P02-05</td>
+                        <td title="ST-4">ST-4</td>
+                        <td title="PP25-160T">PP25-160T</td>
+                        <td title="1">1</td>
+                        <td title="2800">2800</td>
+                        <td title="300">300</td>
+                        <td title="3">3</td>
+                        <td title="9.3">9.3</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title=""></td>
+                        <td title="0.0">0.0</td>
+                        <td title="2800">2800</td>
+                        <td title="2025-05-13 23:50">2025-05-13 23:50</td>
+                        <td title="2025-05-14 09:10">2025-05-14 09:10</td>
+                        <td title="22.8">22.8</td>
+                        <td><div class="status-badge badge-warning">Warning</div></td>
+                    </tr>
+                    <tr class="status-warning">
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120338">JOST24120338</td>
                         <td title="JOST24120338_CP08-353&CP08-354-P03-05">JOST24120338_CP08-353&CP08-354-P03-05</td>
@@ -1283,7 +1444,7 @@
                         <td><div class="status-badge badge-warning">Warning</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="13/06/25 06:59">13/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120338">JOST24120338</td>
                         <td title="JOST24120338_CP08-353&CP08-354-P04-05">JOST24120338_CP08-353&CP08-354-P04-05</td>
@@ -1306,7 +1467,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="14/06/25 06:59">14/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120326">JOST24120326</td>
                         <td title="JOST24120326_CP08-265-P03-04">JOST24120326_CP08-265-P03-04</td>
@@ -1329,7 +1490,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="15/06/25 06:59">15/06/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="15/05/25 08:00">15/05/25 08:00</td>
                         <td title="JOST24120418">JOST24120418</td>
                         <td title="JOST24120418_CT10-015-P01-05">JOST24120418_CT10-015-P01-05</td>
@@ -1351,31 +1512,8 @@
                         <td title="5.0">5.0</td>
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
-                    <tr class="status-warning">
-                        <td title="11/06/25 06:59">11/06/25 06:59</td>
-                        <td title="15/05/25 08:00">15/05/25 08:00</td>
-                        <td title="JOST24120338">JOST24120338</td>
-                        <td title="JOST24120338_CP08-353&CP08-354-P02-05">JOST24120338_CP08-353&CP08-354-P02-05</td>
-                        <td title="ST-4">ST-4</td>
-                        <td title="PP25-160T">PP25-160T</td>
-                        <td title="1">1</td>
-                        <td title="2800">2800</td>
-                        <td title="300">300</td>
-                        <td title="3">3</td>
-                        <td title="9.3">9.3</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title=""></td>
-                        <td title="0.0">0.0</td>
-                        <td title="2800">2800</td>
-                        <td title="2025-05-13 23:50">2025-05-13 23:50</td>
-                        <td title="2025-05-14 09:10">2025-05-14 09:10</td>
-                        <td title="22.8">22.8</td>
-                        <td><div class="status-badge badge-warning">Warning</div></td>
-                    </tr>
                     <tr class="status-critical">
-                        <td title="08/07/25 06:59">08/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24120207">JOST24120207</td>
                         <td title="JOST24120207_CV04-010-P03-08">JOST24120207_CV04-010-P03-08</td>
@@ -1398,30 +1536,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="12/07/25 06:59">12/07/25 06:59</td>
-                        <td title="16/05/25 08:00">16/05/25 08:00</td>
-                        <td title="JOAW24120287">JOAW24120287</td>
-                        <td title="JOAW24120287_CM18-001-P01-06">JOAW24120287_CM18-001-P01-06</td>
-                        <td title="WN">WN</td>
-                        <td title="SW13">SW13</td>
-                        <td title="1">1</td>
-                        <td title="30000">30000</td>
-                        <td title="150">150</td>
-                        <td title="3">3</td>
-                        <td title="200.0">200.0</td>
-                        <td title="1.0">1.0</td>
-                        <td title="2.0">2.0</td>
-                        <td title="8.0">8.0</td>
-                        <td title="2025-05-14 11:00">2025-05-14 11:00</td>
-                        <td title="24407.0">24407.0</td>
-                        <td title="5593">5593</td>
-                        <td title="2025-05-14 11:00">2025-05-14 11:00</td>
-                        <td title="2025-05-22 19:00">2025-05-22 19:00</td>
-                        <td title="0.0">0.0</td>
-                        <td><div class="status-badge badge-critical">Critical</div></td>
-                    </tr>
-                    <tr class="status-critical">
-                        <td title="11/07/25 06:59">11/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24120207">JOST24120207</td>
                         <td title="JOST24120207_CV04-010-P06-08">JOST24120207_CV04-010-P06-08</td>
@@ -1444,7 +1559,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="10/07/25 06:59">10/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24120207">JOST24120207</td>
                         <td title="JOST24120207_CV04-010-P05-08">JOST24120207_CV04-010-P05-08</td>
@@ -1467,7 +1582,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="09/07/25 06:59">09/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24120207">JOST24120207</td>
                         <td title="JOST24120207_CV04-010-P04-08">JOST24120207_CV04-010-P04-08</td>
@@ -1490,7 +1605,30 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="07/07/25 06:59">07/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
+                        <td title="16/05/25 08:00">16/05/25 08:00</td>
+                        <td title="JOAW24120287">JOAW24120287</td>
+                        <td title="JOAW24120287_CM18-001-P01-06">JOAW24120287_CM18-001-P01-06</td>
+                        <td title="WN">WN</td>
+                        <td title="SW13">SW13</td>
+                        <td title="1">1</td>
+                        <td title="30000">30000</td>
+                        <td title="150">150</td>
+                        <td title="3">3</td>
+                        <td title="200.0">200.0</td>
+                        <td title="1.0">1.0</td>
+                        <td title="2.0">2.0</td>
+                        <td title="8.0">8.0</td>
+                        <td title="2025-05-14 11:00">2025-05-14 11:00</td>
+                        <td title="24407.0">24407.0</td>
+                        <td title="5593">5593</td>
+                        <td title="2025-05-14 11:00">2025-05-14 11:00</td>
+                        <td title="2025-05-22 19:00">2025-05-22 19:00</td>
+                        <td title="0.0">0.0</td>
+                        <td><div class="status-badge badge-critical">Critical</div></td>
+                    </tr>
+                    <tr class="status-critical">
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24120207">JOST24120207</td>
                         <td title="JOST24120207_CV04-010-P02-08">JOST24120207_CV04-010-P02-08</td>
@@ -1513,7 +1651,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="02/07/25 06:59">02/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOAW24100348">JOAW24100348</td>
                         <td title="JOAW24100348_CA16-011-P01-03">JOAW24100348_CA16-011-P01-03</td>
@@ -1536,7 +1674,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="05/07/25 06:59">05/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24100248">JOST24100248</td>
                         <td title="JOST24100248_CA16-010-P02-03">JOST24100248_CA16-010-P02-03</td>
@@ -1559,7 +1697,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-warning">
-                        <td title="04/07/25 06:59">04/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24100248">JOST24100248</td>
                         <td title="JOST24100248_CA16-010-P01-03">JOST24100248_CA16-010-P01-03</td>
@@ -1582,7 +1720,7 @@
                         <td><div class="status-badge badge-warning">Warning</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="03/07/25 06:59">03/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOAW24100348">JOAW24100348</td>
                         <td title="JOAW24100348_CA16-011-P02-03">JOAW24100348_CA16-011-P02-03</td>
@@ -1605,7 +1743,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-warning">
-                        <td title="01/07/25 06:59">01/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24120091">JOST24120091</td>
                         <td title="JOST24120091_CP08-544-P01-02">JOST24120091_CP08-544-P01-02</td>
@@ -1628,7 +1766,7 @@
                         <td><div class="status-badge badge-warning">Warning</div></td>
                     </tr>
                     <tr class="status-caution">
-                        <td title="06/07/25 06:59">06/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="16/05/25 08:00">16/05/25 08:00</td>
                         <td title="JOST24120207">JOST24120207</td>
                         <td title="JOST24120207_CV04-010-P01-08">JOST24120207_CV04-010-P01-08</td>
@@ -1651,7 +1789,7 @@
                         <td><div class="status-badge badge-caution">Caution</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="19/07/25 06:59">19/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="17/05/25 08:00">17/05/25 08:00</td>
                         <td title="JOTP24120184">JOTP24120184</td>
                         <td title="JOTP24120184_CP08-562-P04-05">JOTP24120184_CP08-562-P04-05</td>
@@ -1674,7 +1812,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="18/07/25 06:59">18/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="17/05/25 08:00">17/05/25 08:00</td>
                         <td title="JOTP24120184">JOTP24120184</td>
                         <td title="JOTP24120184_CP08-562-P03-05">JOTP24120184_CP08-562-P03-05</td>
@@ -1697,7 +1835,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-warning">
-                        <td title="16/07/25 06:59">16/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="17/05/25 08:00">17/05/25 08:00</td>
                         <td title="JOTP24120184">JOTP24120184</td>
                         <td title="JOTP24120184_CP08-562-P01-05">JOTP24120184_CP08-562-P01-05</td>
@@ -1720,7 +1858,7 @@
                         <td><div class="status-badge badge-warning">Warning</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="17/07/25 06:59">17/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="17/05/25 08:00">17/05/25 08:00</td>
                         <td title="JOTP24120184">JOTP24120184</td>
                         <td title="JOTP24120184_CP08-562-P02-05">JOTP24120184_CP08-562-P02-05</td>
@@ -1743,7 +1881,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="14/07/25 06:59">14/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="17/05/25 08:00">17/05/25 08:00</td>
                         <td title="JOAW24120287">JOAW24120287</td>
                         <td title="JOAW24120287_CM18-001-P05-06">JOAW24120287_CM18-001-P05-06</td>
@@ -1766,7 +1904,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="13/07/25 06:59">13/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="17/05/25 08:00">17/05/25 08:00</td>
                         <td title="JOAW24120287">JOAW24120287</td>
                         <td title="JOAW24120287_CM18-001-P02-06">JOAW24120287_CM18-001-P02-06</td>
@@ -1789,7 +1927,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="15/07/25 06:59">15/07/25 06:59</td>
+                        <td title="20/03/25">20/03/25</td>
                         <td title="17/05/25 08:00">17/05/25 08:00</td>
                         <td title="JOAW24120251">JOAW24120251</td>
                         <td title="JOAW24120251_CD11-027D-P01-02">JOAW24120251_CD11-027D-P01-02</td>
@@ -1812,7 +1950,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="20/07/25 06:59">20/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="18/05/25 08:00">18/05/25 08:00</td>
                         <td title="JOAW24120209">JOAW24120209</td>
                         <td title="JOAW24120209_CV04-012-P01-04">JOAW24120209_CV04-012-P01-04</td>
@@ -1829,13 +1967,13 @@
                         <td title=""></td>
                         <td title="2200.0">2200.0</td>
                         <td title="14393">14393</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-03-28 03:39">2025-03-28 03:39</td>
-                        <td title="1228.3">1228.3</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-03-28 04:56">2025-03-28 04:56</td>
+                        <td title="1227.1">1227.1</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="21/07/25 06:59">21/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="18/05/25 08:00">18/05/25 08:00</td>
                         <td title="JOAW24120209">JOAW24120209</td>
                         <td title="JOAW24120209_CV04-012-P02-04">JOAW24120209_CV04-012-P02-04</td>
@@ -1858,7 +1996,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="22/07/25 06:59">22/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="18/05/25 08:00">18/05/25 08:00</td>
                         <td title="JOAW24120249">JOAW24120249</td>
                         <td title="JOAW24120249_CD11-027B-P01-02">JOAW24120249_CD11-027B-P01-02</td>
@@ -1875,13 +2013,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="80000">80000</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-03-29 02:52">2025-03-29 02:52</td>
-                        <td title="1205.1">1205.1</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-03-29 04:09">2025-03-29 04:09</td>
+                        <td title="1203.8">1203.8</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="12/08/25 06:59">12/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST25010143">JOST25010143</td>
                         <td title="JOST25010143_CM03-037-P01-03">JOST25010143_CM03-037-P01-03</td>
@@ -1898,13 +2036,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="5400">5400</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-03-28 04:49">2025-03-28 04:49</td>
-                        <td title="1251.2">1251.2</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-03-28 06:07">2025-03-28 06:07</td>
+                        <td title="1249.9">1249.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="11/08/25 06:59">11/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOTP25010142">JOTP25010142</td>
                         <td title="JOTP25010142_CM03-034-P04-05">JOTP25010142_CM03-034-P04-05</td>
@@ -1921,13 +2059,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="300">300</td>
-                        <td title="2025-03-28 00:32">2025-03-28 00:32</td>
-                        <td title="2025-03-28 02:02">2025-03-28 02:02</td>
-                        <td title="1254.0">1254.0</td>
+                        <td title="2025-03-28 01:49">2025-03-28 01:49</td>
+                        <td title="2025-03-28 03:19">2025-03-28 03:19</td>
+                        <td title="1252.7">1252.7</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="10/08/25 06:59">10/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOTP25010142">JOTP25010142</td>
                         <td title="JOTP25010142_CM03-034-P03-05">JOTP25010142_CM03-034-P03-05</td>
@@ -1944,13 +2082,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="300">300</td>
-                        <td title="2025-03-27 23:32">2025-03-27 23:32</td>
-                        <td title="2025-03-28 00:32">2025-03-28 00:32</td>
-                        <td title="1255.5">1255.5</td>
+                        <td title="2025-03-28 00:49">2025-03-28 00:49</td>
+                        <td title="2025-03-28 01:49">2025-03-28 01:49</td>
+                        <td title="1254.2">1254.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="09/08/25 06:59">09/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOTP25010142">JOTP25010142</td>
                         <td title="JOTP25010142_CM03-034-P02-05">JOTP25010142_CM03-034-P02-05</td>
@@ -1967,13 +2105,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="300">300</td>
-                        <td title="2025-03-27 17:32">2025-03-27 17:32</td>
-                        <td title="2025-03-27 23:32">2025-03-27 23:32</td>
-                        <td title="1256.5">1256.5</td>
+                        <td title="2025-03-27 18:49">2025-03-27 18:49</td>
+                        <td title="2025-03-28 00:49">2025-03-28 00:49</td>
+                        <td title="1255.2">1255.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="08/08/25 06:59">08/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOTP25010142">JOTP25010142</td>
                         <td title="JOTP25010142_CM03-034-P01-05">JOTP25010142_CM03-034-P01-05</td>
@@ -1990,13 +2128,13 @@
                         <td title=""></td>
                         <td title="1.0">1.0</td>
                         <td title="299">299</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-03-27 17:32">2025-03-27 17:32</td>
-                        <td title="1262.5">1262.5</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-03-27 18:49">2025-03-27 18:49</td>
+                        <td title="1261.2">1261.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="07/08/25 06:59">07/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST25010140">JOST25010140</td>
                         <td title="JOST25010140_CM03-027-P04-05">JOST25010140_CM03-027-P04-05</td>
@@ -2019,7 +2157,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="06/08/25 06:59">06/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST25010140">JOST25010140</td>
                         <td title="JOST25010140_CM03-027-P02-05">JOST25010140_CM03-027-P02-05</td>
@@ -2042,7 +2180,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="05/08/25 06:59">05/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST25010145">JOST25010145</td>
                         <td title="JOST25010145_CM03-039-P02-03">JOST25010145_CM03-039-P02-03</td>
@@ -2065,7 +2203,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="04/08/25 06:59">04/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOTP24120376">JOTP24120376</td>
                         <td title="JOTP24120376_CP08-554A-P03-04">JOTP24120376_CP08-554A-P03-04</td>
@@ -2082,13 +2220,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="400">400</td>
-                        <td title="2025-03-28 09:49">2025-03-28 09:49</td>
-                        <td title="2025-03-28 23:09">2025-03-28 23:09</td>
-                        <td title="1232.8">1232.8</td>
+                        <td title="2025-03-28 11:07">2025-03-28 11:07</td>
+                        <td title="2025-03-29 00:27">2025-03-29 00:27</td>
+                        <td title="1231.5">1231.5</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="03/08/25 06:59">03/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOTP24120376">JOTP24120376</td>
                         <td title="JOTP24120376_CP08-554A-P02-04">JOTP24120376_CP08-554A-P02-04</td>
@@ -2105,13 +2243,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="400">400</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-03-28 09:49">2025-03-28 09:49</td>
-                        <td title="1246.2">1246.2</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-03-28 11:07">2025-03-28 11:07</td>
+                        <td title="1244.9">1244.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="31/07/25 06:59">31/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120431">JOST24120431</td>
                         <td title="JOST24120431_CC06-001-P03-04">JOST24120431_CC06-001-P03-04</td>
@@ -2134,7 +2272,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="01/08/25 06:59">01/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120372">JOST24120372</td>
                         <td title="JOST24120372_CP08-521-P01-02">JOST24120372_CP08-521-P01-02</td>
@@ -2157,7 +2295,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-critical">
-                        <td title="30/07/25 06:59">30/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120431">JOST24120431</td>
                         <td title="JOST24120431_CC06-001-P02-04">JOST24120431_CC06-001-P02-04</td>
@@ -2180,7 +2318,7 @@
                         <td><div class="status-badge badge-critical">Critical</div></td>
                     </tr>
                     <tr class="status-warning">
-                        <td title="29/07/25 06:59">29/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120431">JOST24120431</td>
                         <td title="JOST24120431_CC06-001-P01-04">JOST24120431_CC06-001-P01-04</td>
@@ -2203,7 +2341,7 @@
                         <td><div class="status-badge badge-warning">Warning</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="28/07/25 06:59">28/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120253">JOST24120253</td>
                         <td title="JOST24120253_CH04-002-P06-07">JOST24120253_CH04-002-P06-07</td>
@@ -2226,7 +2364,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="27/07/25 06:59">27/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120253">JOST24120253</td>
                         <td title="JOST24120253_CH04-002-P05-07">JOST24120253_CH04-002-P05-07</td>
@@ -2249,7 +2387,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="26/07/25 06:59">26/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120253">JOST24120253</td>
                         <td title="JOST24120253_CH04-002-P04-07">JOST24120253_CH04-002-P04-07</td>
@@ -2272,7 +2410,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="25/07/25 06:59">25/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120253">JOST24120253</td>
                         <td title="JOST24120253_CH04-002-P03-07">JOST24120253_CH04-002-P03-07</td>
@@ -2295,7 +2433,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="24/07/25 06:59">24/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120253">JOST24120253</td>
                         <td title="JOST24120253_CH04-002-P02-07">JOST24120253_CH04-002-P02-07</td>
@@ -2318,7 +2456,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="23/07/25 06:59">23/07/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120253">JOST24120253</td>
                         <td title="JOST24120253_CH04-002-P01-07">JOST24120253_CH04-002-P01-07</td>
@@ -2341,7 +2479,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="13/08/25 06:59">13/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST25010143">JOST25010143</td>
                         <td title="JOST25010143_CM03-037-P02-03">JOST25010143_CM03-037-P02-03</td>
@@ -2358,13 +2496,13 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="5400">5400</td>
-                        <td title="2025-03-28 04:49">2025-03-28 04:49</td>
-                        <td title="2025-03-28 19:49">2025-03-28 19:49</td>
-                        <td title="1236.2">1236.2</td>
+                        <td title="2025-03-28 06:07">2025-03-28 06:07</td>
+                        <td title="2025-03-28 21:07">2025-03-28 21:07</td>
+                        <td title="1234.9">1234.9</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="02/08/25 06:59">02/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOST24120373">JOST24120373</td>
                         <td title="JOST24120373_CP08-522-P01-02">JOST24120373_CP08-522-P01-02</td>
@@ -2387,7 +2525,7 @@
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                     <tr class="status-ok">
-                        <td title="14/08/25 06:59">14/08/25 06:59</td>
+                        <td title="22/03/25">22/03/25</td>
                         <td title="19/05/25 08:00">19/05/25 08:00</td>
                         <td title="JOTP25010064">JOTP25010064</td>
                         <td title="JOTP25010064_CP08-427-P01-03">JOTP25010064_CP08-427-P01-03</td>
@@ -2404,9 +2542,9 @@
                         <td title=""></td>
                         <td title="0.0">0.0</td>
                         <td title="550">550</td>
-                        <td title="2025-03-27 13:49">2025-03-27 13:49</td>
-                        <td title="2025-03-28 09:28">2025-03-28 09:28</td>
-                        <td title="1246.5">1246.5</td>
+                        <td title="2025-03-27 15:07">2025-03-27 15:07</td>
+                        <td title="2025-03-28 10:45">2025-03-28 10:45</td>
+                        <td title="1245.2">1245.2</td>
                         <td><div class="status-badge badge-ok">OK</div></td>
                     </tr>
                 </tbody>
@@ -2427,7 +2565,7 @@
         $(document).ready(function() {
             // Initialize DataTables with improved options
             $('#scheduleTable').DataTable({
-                order: [[1, 'asc']], // Sort by LCD_DATE by default (column index 1 now that PLAN_DATE is first)
+                order: [[1, 'asc']], // Sort by LCD_DATE by default (column index 1), showing latest dates first
                 pageLength: 25,
                 lengthMenu: [10, 25, 50, 100, 200],
                 responsive: true,
