@@ -115,6 +115,16 @@ def add_schedule_times_and_buffer(jobs, schedule):
     calculate the buffer time (BAL_HR) between job completion and deadline.
     Also adjusts times for dependent processes to maintain proper sequence.
     
+    This is a central function in the production planning workflow that:
+    1. Extracts the scheduled start/end times for each job from the optimizer solution
+    2. Groups jobs by family to handle related processes
+    3. Applies time shift adjustments based on START_DATE constraints
+    4. Calculates buffer hours between job completion and deadline
+    5. Adds status indicators for buffer visualization
+    
+    Each job's UNIQUE_JOB_ID follows a pattern that includes process number information,
+    which is used to identify related jobs that must be processed in sequence.
+    
     Args:
         jobs (list): List of job dictionaries, each with UNIQUE_JOB_ID
         schedule (dict): Schedule as {machine: [(unique_job_id, start, end, priority), ...]}
@@ -122,60 +132,87 @@ def add_schedule_times_and_buffer(jobs, schedule):
     Returns:
         list: Updated jobs list with START_TIME, END_TIME, and BAL_HR added
     """
+    # STEP 1: Extract job start/end times from the scheduling solution and store in a dictionary
+    # This dictionary will serve as our reference for all subsequent time calculations
     times = {}
     for machine, tasks in schedule.items():
         for task in tasks:
             # Handle both old format (4-tuple) and new format (5-tuple with additional params)
+            # The task format depends on the scheduler's output version
             if len(task) >= 5:
                 unique_job_id, start, end, _, additional_params = task
             else:
                 unique_job_id, start, end, _ = task
                 additional_params = {}
                 
+            # Store the start and end times for each job
             times[unique_job_id] = (start, end)
             
-            # Store additional parameters in the job object if available
+            # Store additional timing information in the job object if available
+            # These are actual values from the scheduler that may differ from estimates
             if additional_params:
                 for job in jobs:
                     if job.get('UNIQUE_JOB_ID') == unique_job_id:
                         if 'setup_time' in additional_params and additional_params['setup_time'] > 0:
-                            job['ACTUAL_SETUP_TIME'] = additional_params['setup_time']
+                            job['ACTUAL_SETUP_TIME'] = additional_params['setup_time']  # Machine setup time
                         if 'break_time' in additional_params and additional_params['break_time'] > 0:
-                            job['ACTUAL_BREAK_TIME'] = additional_params['break_time']
+                            job['ACTUAL_BREAK_TIME'] = additional_params['break_time']  # Production breaks
                         if 'no_prod_time' in additional_params and additional_params['no_prod_time'] > 0:
-                            job['ACTUAL_NO_PROD_TIME'] = additional_params['no_prod_time']
+                            job['ACTUAL_NO_PROD_TIME'] = additional_params['no_prod_time']  # Non-production hours
     
+    # STEP 2: Group jobs by family and sequence number
+    # Jobs within the same family are related and often have sequential dependencies
+    # We organize them to ensure proper time adjustments across the production sequence
     family_processes = {}
     for job in jobs:
         unique_job_id = job['UNIQUE_JOB_ID']
+        # Extract the job family code from the job ID (e.g., 'CP88-888' from 'JOST888001_CP88-888-P01-08')
         family = extract_job_family(unique_job_id)
+        # Extract the process sequence number (e.g., '01' from 'P01-08')
         seq_num = extract_process_number(unique_job_id)
         
+        # Initialize family group if this is the first job from this family
         if family not in family_processes:
             family_processes[family] = []
         
+        # Store the job with its sequence number and ID for later processing
         family_processes[family].append((seq_num, unique_job_id, job))
     
+    # Sort jobs within each family by their sequence number to maintain proper order
     for family in family_processes:
         family_processes[family].sort(key=lambda x: x[0])
     
-    family_time_shifts = {}
+    # STEP 3: Calculate time shifts needed to honor START_DATE constraints
+    # Some jobs have fixed start date requirements that must be respected
+    # We calculate how much to shift job times to align with these constraints
+    family_time_shifts = {}  # Store the maximum time shift needed for each job family
+    
     for family, processes in family_processes.items():
         for seq_num, unique_job_id, job in processes:
             # Use helper function to get START_DATE_EPOCH consistently
+            # This handles both field name formats: 'START_DATE_EPOCH' and 'START_DATE _EPOCH'
             start_date_epoch = get_start_date_epoch(job)
             
-            # Check if this job has a start date constraint and is in the schedule
+            # Check if this job has a start date constraint and is included in the schedule
             if start_date_epoch is not None and unique_job_id in times:
+                # Get the time when this job is currently scheduled to start
                 scheduled_start = times[unique_job_id][0]
+                # Get the required start time from the constraint
                 requested_start = start_date_epoch
                         
+                # Calculate how much we need to shift the job to meet the constraint
+                # A positive shift means the job is scheduled too late and needs to move earlier
+                # A negative shift means the job is scheduled too early and needs to move later
                 time_shift = None
                 if requested_start is not None:
                     time_shift = scheduled_start - requested_start
+                    
+                    # For each family, we keep track of the largest shift needed
+                    # This ensures we move all related jobs by the same amount to maintain sequence
                     if family not in family_time_shifts or abs(time_shift) > abs(family_time_shifts[family]):
                         family_time_shifts[family] = time_shift
                 
+                # Log information about the constraint and calculated shift
                 if time_shift is not None:
                     logger.info(f"Family {family} has START_DATE constraint for {unique_job_id}: " 
                               f"shift={time_shift/3600:.1f} hours")
