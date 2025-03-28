@@ -138,7 +138,9 @@
                     showStatus('Schedule generated successfully!', 'success');
                     document.getElementById('resultLinks').style.display = 'block';
                     document.getElementById('ganttLink').href = data.gantt_chart;
+                    document.getElementById('ganttLink').target = '_blank';
                     document.getElementById('scheduleLink').href = data.schedule_view;
+                    document.getElementById('scheduleLink').target = '_blank';
                 } else {
                     showStatus('Error: ' + data.error, 'error');
                 }
