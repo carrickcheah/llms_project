@@ -605,16 +605,40 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     
                 # Add new information from updated column fields
                 job_info = ""
-                if 'JOB' in job_data and job_data['JOB']:
+                if 'JOB' in job_data and job_data['JOB'] and not pd.isna(job_data['JOB']):
                     job_info += f"<br><b>Job:</b> {job_data['JOB']}"
-                if 'JOB_QUANTITY' in job_data and job_data['JOB_QUANTITY']:
-                    job_info += f"<br><b>Job Quantity:</b> {job_data['JOB_QUANTITY']}"
-                if 'EXPECT_OUTPUT_PER_HOUR' in job_data and job_data['EXPECT_OUTPUT_PER_HOUR']:
-                    job_info += f"<br><b>Expected Output/Hour:</b> {job_data['EXPECT_OUTPUT_PER_HOUR']}"
-                if 'ACCUMULATED_DAILY_OUTPUT' in job_data and job_data['ACCUMULATED_DAILY_OUTPUT']:
-                    job_info += f"<br><b>Accumulated Output:</b> {job_data['ACCUMULATED_DAILY_OUTPUT']}"
-                if 'BALANCE_QUANTITY' in job_data and job_data['BALANCE_QUANTITY']:
-                    job_info += f"<br><b>Balance Quantity:</b> {job_data['BALANCE_QUANTITY']}"
+                    
+                if 'JOB_QUANTITY' in job_data and job_data['JOB_QUANTITY'] and not pd.isna(job_data['JOB_QUANTITY']):
+                    # Convert to integer if it's a number
+                    try:
+                        qty = int(job_data['JOB_QUANTITY'])
+                        job_info += f"<br><b>Job Quantity:</b> {qty}"
+                    except (ValueError, TypeError):
+                        if str(job_data['JOB_QUANTITY']).lower() != 'nan':
+                            job_info += f"<br><b>Job Quantity:</b> {job_data['JOB_QUANTITY']}"
+                            
+                if 'EXPECT_OUTPUT_PER_HOUR' in job_data and job_data['EXPECT_OUTPUT_PER_HOUR'] and not pd.isna(job_data['EXPECT_OUTPUT_PER_HOUR']):
+                    # Convert to integer if it's a number
+                    try:
+                        output = int(job_data['EXPECT_OUTPUT_PER_HOUR'])
+                        job_info += f"<br><b>Expected Output/Hour:</b> {output}"
+                    except (ValueError, TypeError):
+                        if str(job_data['EXPECT_OUTPUT_PER_HOUR']).lower() != 'nan':
+                            job_info += f"<br><b>Expected Output/Hour:</b> {job_data['EXPECT_OUTPUT_PER_HOUR']}"
+                            
+                if 'ACCUMULATED_DAILY_OUTPUT' in job_data:
+                    # Only display if it's not NaN or empty
+                    if job_data['ACCUMULATED_DAILY_OUTPUT'] and not pd.isna(job_data['ACCUMULATED_DAILY_OUTPUT']) and str(job_data['ACCUMULATED_DAILY_OUTPUT']).lower() != 'nan':
+                        job_info += f"<br><b>Accumulated Output:</b> {job_data['ACCUMULATED_DAILY_OUTPUT']}"
+                        
+                if 'BALANCE_QUANTITY' in job_data and job_data['BALANCE_QUANTITY'] and not pd.isna(job_data['BALANCE_QUANTITY']):
+                    # Convert to integer if it's a number
+                    try:
+                        bal = int(job_data['BALANCE_QUANTITY'])
+                        job_info += f"<br><b>Balance Quantity:</b> {bal}"
+                    except (ValueError, TypeError):
+                        if str(job_data['BALANCE_QUANTITY']).lower() != 'nan':
+                            job_info += f"<br><b>Balance Quantity:</b> {job_data['BALANCE_QUANTITY']}"
 
             # Ensure proper Singapore time zone display in tooltip
             start_time_str = start_date.strftime('%Y-%m-%d %H:%M')
