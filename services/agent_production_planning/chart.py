@@ -150,7 +150,7 @@ def is_same_task(job_id1, job_id2):
 def create_interactive_gantt(schedule, jobs=None, output_file='interactive_schedule.html'):
     """
     Create an interactive Gantt chart from the schedule and save it as an HTML file.
-    Tooltips are removed.
+    Tooltips are removed. Range selector buttons updated.
     """
     current_time = int(datetime.now().timestamp())
 
@@ -705,10 +705,10 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
 
                 'rangeselector': {
                     'buttons': [
-                        {'count': 1, 'label': '1d', 'step': 'day', 'stepmode': 'backward'},
-                        {'count': 3, 'label': '3d', 'step': 'day', 'stepmode': 'backward'},
                         {'count': 7, 'label': '1w', 'step': 'day', 'stepmode': 'backward'},
+                        {'count': 14, 'label': '2w', 'step': 'day', 'stepmode': 'backward'},
                         {'count': 1, 'label': '1m', 'step': 'month', 'stepmode': 'backward'},
+                        {'count': 3, 'label': '3m', 'step': 'month', 'stepmode': 'backward'},
                         {'count': 6, 'label': '6m', 'step': 'month', 'stepmode': 'backward'},
                         {'step': 'all', 'label': 'all'}
                     ],
