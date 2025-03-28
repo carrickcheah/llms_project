@@ -703,6 +703,73 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         # Disable tooltips for all traces
         for i in range(len(fig.data)):
             fig.data[i].hoverinfo = 'none' # Disable hover info - tooltips removed
+            
+        # Add vertical line for current date to help with orientation
+        current_date = datetime.now(SG_TIMEZONE)
+        fig.add_shape(
+            type="line",
+            xref="x",
+            yref="paper",
+            x0=current_date,
+            y0=0,
+            x1=current_date,
+            y1=1,
+            line=dict(
+                color="#e74c3c",
+                width=2,
+                dash="dash",
+            ),
+            name="Today"
+        )
+        
+        # Add label for the current date line
+        fig.add_annotation(
+            x=current_date,
+            y=1.01,
+            xref="x",
+            yref="paper",
+            text="Today",
+            showarrow=False,
+            font=dict(
+                family="Arial, sans-serif",
+                size=12,
+                color="#e74c3c"
+            ),
+            bgcolor="rgba(255, 255, 255, 0.8)",
+            bordercolor="#e74c3c",
+            borderwidth=1,
+            borderpad=4
+        )
+        
+        # Add vertical lines for week boundaries to make it easier to identify weeks
+        # Find first Monday before or on min_start_date
+        min_date = df['Start'].min().to_pydatetime() if not df.empty else datetime.now(SG_TIMEZONE)
+        max_date = df['Finish'].max().to_pydatetime() if not df.empty else (datetime.now(SG_TIMEZONE) + timedelta(days=30))
+        
+        # Go back to find the Monday before or on min_date
+        days_to_previous_monday = min_date.weekday()
+        first_monday = min_date - timedelta(days=days_to_previous_monday)
+        first_monday = first_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        # Create weekly vertical lines
+        current_monday = first_monday
+        while current_monday <= max_date:
+            if current_monday != first_monday:  # Skip the very first line
+                fig.add_shape(
+                    type="line",
+                    xref="x",
+                    yref="paper",
+                    x0=current_monday,
+                    y0=0,
+                    x1=current_monday,
+                    y1=1,
+                    line=dict(
+                        color="rgba(52, 152, 219, 0.5)",  # Blue with transparency
+                        width=1.5,
+                        dash="dot",
+                    )
+                )
+            current_monday += timedelta(days=7)
 
         fig.update_yaxes(categoryorder='array', categoryarray=task_order, autorange="reversed")
 
@@ -746,8 +813,10 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 'tickangle': -45,          # Angle the labels for better readability
                 'tickfont': {'size': 10},
                 'showgrid': True,          # Always show grid lines for better readability
-                'gridcolor': 'rgba(211, 211, 211, 0.6)',  # Light gray grid lines
-                'linecolor': '#bdc3c7',    # Axis line color
+                'gridcolor': 'rgba(70, 130, 180, 0.3)',  # Blue-gray grid lines for better visibility
+                'gridwidth': 1,            # Slightly thicker grid lines
+                'griddash': 'dash',        # Dashed vertical grid lines
+                'linecolor': '#2c3e50',    # Darker axis line color for better contrast
                 
                 'rangeselector': {
                     'buttons': [
@@ -766,8 +835,10 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             },
             yaxis={
                 'title': {'text': 'Unique Job IDs (Machine)', 'font': {'size': 14, 'color': '#2c3e50'}},
-                'linecolor': '#bdc3c7',  # Axis line color
-                'gridcolor': 'rgba(211, 211, 211, 0.6)',  # Light gray grid lines
+                'linecolor': '#2c3e50',  # Darker axis line color
+                'gridcolor': 'rgba(211, 211, 211, 0.4)',  # Light gray grid lines
+                'showgrid': True,  # Show horizontal grid lines
+                'gridwidth': 0.5,  # Thinner horizontal grid lines
             }
         )
 
