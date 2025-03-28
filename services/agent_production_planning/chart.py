@@ -27,15 +27,15 @@ def format_date_correctly(epoch_timestamp, is_lcd_date=False):
     """
     # Default fallback date in case of issues
     default_date = "N/A"
-    
+
     try:
         if not epoch_timestamp or epoch_timestamp <= 0:
             return default_date
-        
+
         # Create a datetime object with explicit Singapore timezone
         # This ensures all timestamps are consistently displayed in SG time
         date_obj = datetime.fromtimestamp(epoch_timestamp, tz=SG_TIMEZONE)
-        
+
         # For LCD_DATE column, use special handling for format if needed
         if is_lcd_date:
             # Use the exact format and time from the Excel file
@@ -44,9 +44,9 @@ def format_date_correctly(epoch_timestamp, is_lcd_date=False):
         else:
             # For all other dates
             formatted = date_obj.strftime('%Y-%m-%d %H:%M')
-            
+
         logger.debug(f"Formatted date for {'LCD_DATE' if is_lcd_date else 'other date'}: {epoch_timestamp} -> {formatted}")
-        
+
         return formatted
     except Exception as e:
         logger.error(f"Error formatting timestamp {epoch_timestamp}: {e}")
@@ -84,14 +84,14 @@ def extract_job_family(unique_job_id):
         family = match.group(1)
         logger.debug(f"Extracted family {family} from {unique_job_id}")
         return family
-    
+
     # Alternative approach if regex didn't work
     parts = process_code.split("-P")
     if len(parts) >= 2:
         family = parts[0]
         logger.debug(f"Extracted family {family} from {unique_job_id} (using split)")
         return family
-        
+
     logger.warning(f"Could not extract family from {unique_job_id}, using full code")
     return process_code
 
@@ -118,7 +118,7 @@ def extract_job_and_process(unique_job_id):
     """
     Extract both the JOB and PROCESS_CODE parts from a unique_job_id.
     Returns a tuple of (job_id, process_code).
-    
+
     For example, from 'JOST24100248_CA16-010-P02-03' returns ('JOST24100248', 'CA16-010-P02-03')
     If there's no underscore, returns (None, original_id)
     """
@@ -131,18 +131,18 @@ def is_same_task(job_id1, job_id2):
     """
     Check if two job IDs refer to the same task (job + process code).
     According to business rules, if JOB + PROCESS_CODE is the same, it's a duplicate.
-    
+
     For example:
     JOST24100248_CA16-010-P01-03 and JOST24100248_CA16-010-P01-03 are the same task
     JOST24100248_CA16-010-P01-03 and JOST24100248_CA16-010-P02-03 are different tasks
     """
     job1, process1 = extract_job_and_process(job_id1)
     job2, process2 = extract_job_and_process(job_id2)
-    
+
     # If either has no job part, fall back to full ID comparison
     if job1 is None or job2 is None:
         return job_id1 == job_id2
-        
+
     # Check if job IDs match and process codes match
     # Here we examine the ENTIRE process code, not just the process number
     return job1 == job2 and process1 == process2
@@ -150,15 +150,16 @@ def is_same_task(job_id1, job_id2):
 def create_interactive_gantt(schedule, jobs=None, output_file='interactive_schedule.html'):
     """
     Create an interactive Gantt chart from the schedule and save it as an HTML file.
+    Tooltips are removed.
     """
     current_time = int(datetime.now().timestamp())
-    
+
     # DEBUG: Print all START_DATE values in the input jobs for verification
     if jobs:
         for job in jobs:
             if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
                 logger.info(f"Input Job {job['UNIQUE_JOB_ID']}: START_DATE_EPOCH = {job['START_DATE_EPOCH']} -> {format_date_correctly(job['START_DATE_EPOCH'])}")
-    
+
     df_list = []
     colors = {
         'Priority 1 (Highest)': 'rgb(255, 0, 0)',
@@ -172,23 +173,23 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
     job_lookup = {}
     # Additional mapping to help find related jobs with different process codes
     job_family_lookup = {}
-    
+
     if jobs:
         for job in jobs:
             if 'UNIQUE_JOB_ID' in job:
                 # Store with the exact ID for direct lookups
                 job_id = job['UNIQUE_JOB_ID']
                 job_lookup[job_id] = job
-                
+
                 # Extract job and process code for smart matching
                 base_job, process_code = extract_job_and_process(job_id)
-                
+
                 # Store in the family lookup to find related jobs
                 if base_job:
                     if base_job not in job_family_lookup:
                         job_family_lookup[base_job] = []
                     job_family_lookup[base_job].append(job_id)
-                    
+
                     # Log for debugging
                     if 'JOST24100248' in job_id:
                         logger.info(f"Added {job_id} to job family lookup under {base_job}")
@@ -198,7 +199,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
     if not isinstance(schedule, dict):
         logger.error(f"Invalid schedule type: {type(schedule)}. Expected dictionary.")
         schedule = {}  # Convert to empty dict to prevent further errors
-    
+
     logger.info(f"Schedule contains {len(schedule)} machines")
     for machine, jobs_list in schedule.items():
         if not isinstance(jobs_list, list):
@@ -215,13 +216,13 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             Finish=datetime.utcfromtimestamp(current_time + 3600),
             Resource="None",
             Priority="Priority 3 (Medium)",
-            Description="No tasks were scheduled. Please check your input data."
+            Description="No tasks were scheduled. Please check your input data." # Removed tooltip content here, but kept basic description for task name
         ))
     else:
         # Step 1: Create a mapping of job families and their processes in sequence
         family_processes = {}
         process_durations = {}
-        
+
         # First pass - collect all process data and organize by family
         for machine, jobs in schedule.items():
             for job_data in jobs:
@@ -229,59 +230,59 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     if not isinstance(job_data, (list, tuple)) or len(job_data) < 4:
                         logger.warning(f"Invalid job data for machine {machine}: {job_data}")
                         continue
-                    
+
                     # Handle both old format (4-tuple) and new format (5-tuple with additional params)
                     if len(job_data) >= 5:
                         unique_job_id, start, end, priority, additional_params = job_data
                     else:
                         unique_job_id, start, end, priority = job_data
                         additional_params = {}
-                    
+
                     # Validate data types
                     if not isinstance(unique_job_id, str):
                         logger.warning(f"Invalid unique_job_id type ({type(unique_job_id)}) for job {job_data}")
                         unique_job_id = str(unique_job_id)
-                        
+
                     # Ensure timestamps are valid numbers
                     if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
                         logger.warning(f"Invalid timestamp types for job {unique_job_id}: start={type(start)}, end={type(end)}")
                         continue
-                        
+
                     # Ensure priority is a number
                     if not isinstance(priority, (int, float)):
                         logger.warning(f"Invalid priority type ({type(priority)}) for job {unique_job_id}")
                         priority = 3  # Default to medium priority
-                    
+
                     # Calculate duration
                     duration = end - start
                     process_durations[unique_job_id] = duration
-                    
+
                     # Group by family
                     family = extract_job_family(unique_job_id)
-                    
+
                     seq_num = extract_process_number(unique_job_id)
-                    
+
                     if family not in family_processes:
                         family_processes[family] = []
-                    
+
                     # Use original schedule times first
                     family_processes[family].append((seq_num, unique_job_id, machine, start, end, priority))
                 except Exception as e:
                     logger.error(f"Error processing job data {job_data}: {str(e)}")
                     continue
-        
+
         # Sort processes within each family by sequence number
         for family in family_processes:
             family_processes[family].sort(key=lambda x: x[0])
-        
-        # Step 2: ALWAYS use START_DATE visualization adjustments for jobs with constraints 
+
+        # Step 2: ALWAYS use START_DATE visualization adjustments for jobs with constraints
         start_date_processes = {}
         for family, processes in family_processes.items():
             for seq_num, unique_job_id, machine, start, end, priority in processes:
                 # Get job base ID for matching
                 base_job, process_code = extract_job_and_process(unique_job_id)
                 job_key = None
-                
+
                 # Check if this exact ID exists in job_lookup
                 if unique_job_id in job_lookup:
                     job_key = unique_job_id
@@ -292,31 +293,31 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         if process_code == related_process:
                             job_key = related_id
                             break
-                
+
                 if job_key and 'START_DATE_EPOCH' in job_lookup[job_key] and job_lookup[job_key]['START_DATE_EPOCH']:
                     # Extract the START_DATE information
                     start_date = job_lookup[job_key]['START_DATE_EPOCH']
-                    
+
                     # ALWAYS use START_DATE, no conditional check
                     duration = end - start
                     adjusted_start = start_date
                     adjusted_end = adjusted_start + duration
-                    
+
                     # Add verbose logging for any job with START_DATE
                     logger.info(f"APPLYING START_DATE for {unique_job_id}:")
                     logger.info(f"    START_DATE_EPOCH = {start_date} => {format_date_correctly(start_date)}")
                     logger.info(f"    Original start = {start} => {format_date_correctly(start)}")
                     logger.info(f"    Adjusted start = {adjusted_start} => {format_date_correctly(adjusted_start)}")
-                    
+
                     if unique_job_id not in start_date_processes:
                         start_date_processes[unique_job_id] = (adjusted_start, adjusted_end)
                         logger.info(f"Added {unique_job_id} to start_date_processes dict for visualization")
-                        
+
                     logger.info(f"Visualizing {unique_job_id} at START_DATE: {format_date_correctly(adjusted_start)}")
-        
+
         # Step 3: Calculate time shifts for visualization
         family_time_shifts = {}
-        
+
         # Apply time shifts from family_time_shift property if present in jobs
         if jobs:
             for family, processes in family_processes.items():
@@ -327,12 +328,12 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                             family_time_shifts[family] = time_shift
                             logger.info(f"Using job-provided time shift for family {family}: {time_shift/3600:.1f} hours")
                             break
-        
+
         # Step 4: Apply time shifts to generate adjusted task data for visualization
         process_info = {}
         for family in family_processes:
             time_shift = family_time_shifts.get(family, 0)
-            
+
             # Only apply significant shifts
             if abs(time_shift) < 60:  # Skip shifts less than a minute
                 for seq_num, unique_job_id, machine, start, end, priority in family_processes[family]:
@@ -340,9 +341,9 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         process_info[family] = []
                     process_info[family].append((unique_job_id, machine, start, end, priority, seq_num))
                 continue
-            
+
             logger.info(f"Applying time shift of {time_shift/3600:.1f} hours to family {family} for visualization")
-            
+
             for seq_num, unique_job_id, machine, start, end, priority in family_processes[family]:
                 # Skip if this process has START_DATE override
                 if unique_job_id in start_date_processes:
@@ -359,14 +360,14 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     if 'CP08-544-P01-02' in unique_job_id:
                         logger.info(f"Using time shift for {unique_job_id}: Original start={format_date_correctly(start)}, "
                                    f"Adjusted start={format_date_correctly(adjusted_start)}")
-                
+
                 if family not in process_info:
                     process_info[family] = []
                 process_info[family].append((unique_job_id, machine, adjusted_start, adjusted_end, priority, seq_num))
-                
+
                 logger.info(f"  Adjusted {unique_job_id}: START={format_date_correctly(adjusted_start)}, "
                            f"END={format_date_correctly(adjusted_end)}")
-        
+
         # Step 5: Override for START_DATE processes that were missed
         for unique_job_id, (adjusted_start, adjusted_end) in start_date_processes.items():
             # Find the process in process_info
@@ -381,16 +382,16 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         break
                 if found:
                     break
-            
+
             # If the job wasn't found in process_info, it might need to be added separately
             if not found and unique_job_id in job_lookup:
                 # Log this case as it shouldn't normally happen - job should be in the schedule
                 logger.warning(f"Job {unique_job_id} with START_DATE constraint not found in process_info, may need additional handling")
-        
+
         # Step 6: Create task list for visualization from the adjusted data
         # First create a lookup for START_DATE processes for faster access
         start_date_lookup = {proc: (start, end) for proc, (start, end) in start_date_processes.items()}
-        
+
         # Create a dedicated lookup specifically for problematic jobs based on CLAUDE.local.md
         problem_jobs = {
             "CP08-544-P01-02": {
@@ -399,12 +400,12 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 "duration": None
             },
             "CT10-001-P01-06": {
-                "specific_id": "JOST24120409_CT10-001-P01-06", 
+                "specific_id": "JOST24120409_CT10-001-P01-06",
                 "start_date": 1747112400.0,  # 2025-05-13 13:00
                 "duration": None
             }
         }
-        
+
         # Calculate durations for problem jobs from schedule
         scheduled_times = {}
         for machine, jobs_list in schedule.items():
@@ -413,19 +414,19 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 start_time = job_tuple[1]
                 end_time = job_tuple[2]
                 scheduled_times[job_id] = (start_time, end_time)
-                
+
                 # Check if this is one of our problem jobs
                 for pattern, job_info in problem_jobs.items():
                     if pattern in job_id and job_id.endswith(pattern):
                         if job_id == job_info["specific_id"]:
                             problem_jobs[pattern]["duration"] = end_time - start_time
                             logger.info(f"Found duration for problem job {job_id}: {(end_time - start_time) / 3600} hours")
-        
+
         sorted_tasks = []
         for family in sorted(process_info.keys()):
             processes = process_info[family]
             sorted_processes = sorted(processes, key=lambda x: x[5])  # Sort by sequence within family
-            
+
             # For each process, override with START_DATE if present
             final_processes = []
             for proc, machine, start, end, priority, seq_num in sorted_processes:
@@ -439,18 +440,18 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                             duration = job_info["duration"]
                         else:
                             duration = end - start
-                            
+
                         adjusted_start = start_date
                         adjusted_end = adjusted_start + duration
-                        
+
                         logger.info(f"ENFORCING EXACT START_DATE for problem job {proc}: {format_date_correctly(adjusted_start)}")
                         logger.info(f"    Original: {format_date_correctly(start)} -> {format_date_correctly(end)}")
                         logger.info(f"    Enforced: {format_date_correctly(adjusted_start)} -> {format_date_correctly(adjusted_end)}")
-                        
+
                         # Force highest priority for START_DATE jobs
                         final_processes.append((proc, machine, adjusted_start, adjusted_end, 1, seq_num))
                         break
-                
+
                 if not special_case:
                     if proc in start_date_lookup:
                         # Use START_DATE version with HIGH priority
@@ -459,46 +460,42 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         final_processes.append((proc, machine, override_start, override_end, 1, seq_num))  # Force priority 1
                     else:
                         final_processes.append((proc, machine, start, end, priority, seq_num))
-            
+
             sorted_tasks.extend(final_processes)
-            
+
         logger.info(f"Sorted task list contains {len(sorted_tasks)} tasks")
 
         # Process the sorted tasks for visualization
         for task_data in sorted_tasks:
             unique_job_id, machine, start, end, priority, _ = task_data
-            
+
             # Log detailed information for EVERY job being processed
             logger.info(f"Processing task: {unique_job_id} on {machine} from {start} to {end}")
-            
-            # Add specific tracking for the CP08-544-P01-02 job
-            if 'CP08-544-P01-02' in unique_job_id:
-                logger.info(f"##### TASK VISUALIZATION - {unique_job_id} #####")
-                logger.info(f"    Start time: {format_date_correctly(start)}")
-                logger.info(f"    End time: {format_date_correctly(end)}")
-                logger.info(f"    Machine: {machine}")
-                logger.info(f"    Priority: {priority}")
-            
+
+            # Log general info about the job without special case handling
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Task details: {unique_job_id} on {machine}, priority {priority}")
+
             try:
                 # Ensure timestamps are numbers before conversion
                 start_num = float(start) if start is not None else current_time
                 end_num = float(end) if end is not None else (current_time + 3600)
-                
+
                 # Validate timestamps
                 if start_num <= 0 or end_num <= 0:
                     logger.warning(f"Invalid timestamps for {unique_job_id}: Start={start_num}, End={end_num}")
                     start_num = current_time
                     end_num = current_time + 3600
-                
+
                 # Convert to datetime objects - use Singapore timezone consistently
                 # This ensures all timestamps are displayed in SG time zone
                 start_date = datetime.fromtimestamp(start_num, tz=SG_TIMEZONE)
                 end_date = datetime.fromtimestamp(end_num, tz=SG_TIMEZONE)
                 duration_hours = (end_num - start_num) / 3600
-                
+
                 # Store the actual scheduled times in job_lookup for accurate tooltip display
                 # This ensures that the tooltip shows the ACTUAL scheduled time, not the data from Excel
-                
+
                 # First, check if we already have this exact job ID in our lookup
                 if unique_job_id in job_lookup:
                     # Just update the scheduled times for the exact match
@@ -534,11 +531,11 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         job_lookup[unique_job_id] = {
                             'UNIQUE_JOB_ID': unique_job_id,
                             'SCHEDULED_START': start_num,
-                            'SCHEDULED_END': end_num, 
+                            'SCHEDULED_END': end_num,
                             'SCHEDULED_MACHINE': machine,
                             'SCHEDULED_DURATION': duration_hours
                         }
-                        
+
                         if 'JOST24100248' in unique_job_id:
                             logger.info(f"No matching process found for {unique_job_id}, created minimal entry")
             except Exception as e:
@@ -554,60 +551,48 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
 
             task_label = f"{unique_job_id} ({machine})"
-            
+
             buffer_info = ""
             buffer_status = ""
             number_operator = ""
-            # Use the actual current task data for the tooltip, not just the job_lookup
-            # This ensures that the correct machine and times are displayed
-            tooltip_data = {
+            # Simplified data structure for job information - no tooltips needed
+            job_data = {
                 'UNIQUE_JOB_ID': unique_job_id,
                 'MACHINE': machine,
                 'PRIORITY': priority,
-                'SCHEDULED_START': start_num,
-                'SCHEDULED_END': end_num,
+                'SCHEDULED_START': start,
+                'SCHEDULED_END': end,
                 'DURATION_HOURS': duration_hours
             }
-            
+
             # Get additional job metadata if available
             if job_lookup and unique_job_id in job_lookup:
-                job_data = job_lookup[unique_job_id]
-                # Add metadata from job_lookup but never override the actual schedule
-                for key, value in job_data.items():
-                    if key not in tooltip_data and value is not None:
-                        tooltip_data[key] = value
-                
-                # Log for debugging
-                if 'JOST24100248' in unique_job_id:
-                    logger.info(f"TOOLTIP DATA for {unique_job_id}:\n" + 
-                               f"Machine: {tooltip_data['MACHINE']}\n" +
-                               f"Start: {start_date}\n" +
-                               f"End: {end_date}\n" +
-                               f"Priority: {tooltip_data['PRIORITY']}\n" +
-                               f"Duration: {tooltip_data['DURATION_HOURS']}")
-                
+                existing_data = job_lookup[unique_job_id]
+                # Update with current schedule data
+                job_data.update({k: v for k, v in existing_data.items() if k not in ['SCHEDULED_START', 'SCHEDULED_END']})
+
                 due_date_field = next((f for f in ['LCD_DATE_EPOCH', 'DUE_DATE_TIME'] if f in job_data), None)
-                
+
                 if due_date_field and job_data[due_date_field]:
                     # Pass is_lcd_date=True for LCD_DATE_EPOCH field
                     due_date_str = format_date_correctly(job_data[due_date_field], is_lcd_date=True)
                     buffer_hours = (job_data[due_date_field] - end) / 3600
                     buffer_status = get_buffer_status_color(buffer_hours)
                     buffer_info = f"<br><b>Due Date:</b> {due_date_str}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
-                    
+
                     # Add START_DATE information if present
                     if 'START_DATE_EPOCH' in job_data and job_data['START_DATE_EPOCH']:
                         start_date_info = format_date_correctly(job_data['START_DATE_EPOCH'])
                         buffer_info += f"<br><b>START_DATE Constraint:</b> {start_date_info}"
-                
+
                 if 'NUMBER_OPERATOR' in job_data:
                     number_operator = f"<br><b>Number of Operators:</b> {job_data['NUMBER_OPERATOR']}"
-                    
+
                 # Add new information from updated column fields
                 job_info = ""
                 if 'JOB' in job_data and job_data['JOB'] and not pd.isna(job_data['JOB']):
                     job_info += f"<br><b>Job:</b> {job_data['JOB']}"
-                    
+
                 if 'JOB_QUANTITY' in job_data and job_data['JOB_QUANTITY'] and not pd.isna(job_data['JOB_QUANTITY']):
                     # Convert to integer if it's a number
                     try:
@@ -616,7 +601,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     except (ValueError, TypeError):
                         if str(job_data['JOB_QUANTITY']).lower() != 'nan':
                             job_info += f"<br><b>Job Quantity:</b> {job_data['JOB_QUANTITY']}"
-                            
+
                 if 'EXPECT_OUTPUT_PER_HOUR' in job_data and job_data['EXPECT_OUTPUT_PER_HOUR'] and not pd.isna(job_data['EXPECT_OUTPUT_PER_HOUR']):
                     # Convert to integer if it's a number
                     try:
@@ -625,12 +610,12 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     except (ValueError, TypeError):
                         if str(job_data['EXPECT_OUTPUT_PER_HOUR']).lower() != 'nan':
                             job_info += f"<br><b>Expected Output/Hour:</b> {job_data['EXPECT_OUTPUT_PER_HOUR']}"
-                            
+
                 if 'ACCUMULATED_DAILY_OUTPUT' in job_data:
                     # Only display if it's not NaN or empty
                     if job_data['ACCUMULATED_DAILY_OUTPUT'] and not pd.isna(job_data['ACCUMULATED_DAILY_OUTPUT']) and str(job_data['ACCUMULATED_DAILY_OUTPUT']).lower() != 'nan':
                         job_info += f"<br><b>Accumulated Output:</b> {job_data['ACCUMULATED_DAILY_OUTPUT']}"
-                        
+
                 if 'BALANCE_QUANTITY' in job_data and job_data['BALANCE_QUANTITY'] and not pd.isna(job_data['BALANCE_QUANTITY']):
                     # Convert to integer if it's a number
                     try:
@@ -640,21 +625,15 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         if str(job_data['BALANCE_QUANTITY']).lower() != 'nan':
                             job_info += f"<br><b>Balance Quantity:</b> {job_data['BALANCE_QUANTITY']}"
 
-            # Ensure proper Singapore time zone display in tooltip
-            start_time_str = start_date.strftime('%Y-%m-%d %H:%M')
-            end_time_str = end_date.strftime('%Y-%m-%d %H:%M')
-            
-            # Use the tooltip_data for consistency
-            description = (f"<b>Unique Job ID:</b> {tooltip_data['UNIQUE_JOB_ID']}<br>"
-                          f"<b>Machine:</b> {tooltip_data['MACHINE']}<br>"
-                          f"<b>Priority:</b> {job_priority}<br>"
-                          f"<b>Start:</b> {start_time_str}<br>"
-                          f"<b>End:</b> {end_time_str}<br>"
-                          f"<b>Duration:</b> {duration_hours:.1f} hours{buffer_info}{number_operator}{job_info if 'job_info' in locals() else ''}")
-            
-            # Log the final tooltip for debugging
-            if 'JOST24100248' in unique_job_id:
-                logger.info(f"FINAL TOOLTIP for {unique_job_id}: \n{description[:200]}...")
+
+            # Store basic timing information for job tracking
+            job_lookup[unique_job_id] = job_data
+
+            # Use the tooltip_data for consistency with pre-formatted dates
+            # Build the tooltip with better formatting
+            # Removed tooltip content construction
+            description = f"Task: {unique_job_id} on Machine: {machine}, Priority: {job_priority}"
+
 
             df_list.append(dict(
                 Task=task_label,
@@ -662,17 +641,17 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 Finish=end_date,
                 Resource=machine,
                 Priority=priority_label,
-                Description=description,
+                Description=description, # Kept a minimal description for task label
                 BufferStatus=buffer_status
             ))
 
     if not df_list:
         logger.error("No valid tasks to plot in Gantt chart.")
         return False
-        
+
     df = pd.DataFrame(df_list)
     logger.info(f"Created DataFrame with {len(df)} rows for Gantt chart")
-    
+
     if not df.empty:
         logger.debug(f"Sample data: {df.iloc[0].to_dict()}")
 
@@ -682,24 +661,28 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
     try:
         fig = ff.create_gantt(df, colors=colors, index_col='Priority', show_colorbar=True,
                               group_tasks=False,
-                              showgrid_x=True, showgrid_y=True, 
+                              showgrid_x=True, showgrid_y=True,
                               title='Interactive Production Schedule')
-        
+
+        # Disable tooltips for all traces
+        for i in range(len(fig.data)):
+            fig.data[i].hoverinfo = 'none' # Disable hover info - tooltips removed
+
         fig.update_yaxes(categoryorder='array', categoryarray=task_order, autorange="reversed")
 
         # Find the earliest start date to ensure the chart shows all jobs
         min_start_date = df['Start'].min() if not df.empty else datetime.now(SG_TIMEZONE)
-        
+
         # Check if we have April jobs that need to be visible
         april_jobs = df[df['Start'].dt.month == 4]
         has_april_jobs = not april_jobs.empty
-        
+
         if has_april_jobs:
             logger.info(f"Chart contains {len(april_jobs)} jobs starting in April")
             # Make sure these jobs are visible by explicitly logging them
             for _, row in april_jobs.iterrows():
                 logger.info(f"April job: {row['Task']} starts at {row['Start']}")
-        
+
         fig.update_layout(
             autosize=True,
             height=max(800, len(df) * 30),
@@ -737,9 +720,11 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             yaxis={'title': {'text': 'Unique Job IDs (Machine)', 'font': {'size': 14}}}
         )
 
-        for i in range(len(fig.data)):
-            fig.data[i].text = df['Description']
-            fig.data[i].hoverinfo = 'text'
+        # Removed tooltip text and hoverinfo setting
+        # for i in range(len(fig.data)):
+        #     fig.data[i].text = df['Description']
+        #     fig.data[i].hoverinfo = 'text'
+
 
         if 'BufferStatus' in df.columns and df['BufferStatus'].notna().any():
             for i, row in df.iterrows():
@@ -752,14 +737,14 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         buffer_color = "orange"
                     elif row['BufferStatus'] == "Caution":
                         buffer_color = "yellow"
-                    
+
                     fig.add_trace(go.Scatter(
                         x=[row['Finish']],
                         y=[row['Task']],
                         mode='markers',
                         marker=dict(symbol='circle', size=10, color=buffer_color),
                         showlegend=False,
-                        hoverinfo='none'
+                        hoverinfo='none' # Ensure no hover info for buffer markers as well
                     ))
 
         fig.add_annotation(
@@ -769,14 +754,14 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             showarrow=False,
             font=dict(size=10, color="gray")
         )
-        
+
         legend_items = [
             {"color": "red", "text": "Critical (<8h)"},
             {"color": "orange", "text": "Warning (<24h)"},
             {"color": "yellow", "text": "Caution (<72h)"},
             {"color": "green", "text": "OK (>72h)"}
         ]
-        
+
         spacing = 0.12
         start_x = 0.5 - ((len(legend_items) - 1) * spacing) / 2
         for i, item in enumerate(legend_items):
@@ -802,7 +787,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         logger.info(f"Saving Gantt chart to: {os.path.abspath(output_file)}")
         pyo.plot(fig, filename=output_file, auto_open=False)
         logger.info(f"Interactive Gantt chart saved to: {os.path.abspath(output_file)}")
-        
+
         # Verify that all START_DATE constraints were respected
         # This validation happens after the chart is created to make sure it matches what the user sees
         if jobs:
@@ -811,18 +796,18 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 if 'UNIQUE_JOB_ID' in job and 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
                     job_id = job['UNIQUE_JOB_ID']
                     requested_start = job['START_DATE_EPOCH']
-                    
+
                     # Look for this job in the final DataFrame
                     found = False
                     scheduled_start = None
-                    
+
                     for row in df_list:
                         if job_id in row['Task']:
                             found = True
                             # Get the timestamp from the datetime object
                             scheduled_start = int(row['Start'].timestamp())
                             break
-                            
+
                     # If we didn't find the job in the DataFrame, look for pattern matches
                     # This handles cases where the job ID might be slightly different in schedule vs jobs data
                     if not found:
@@ -832,7 +817,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                                 found = True
                                 scheduled_start = int(row['Start'].timestamp())
                                 break
-                    
+
                     # Check if the START_DATE constraint was respected
                     if found and scheduled_start is not None:
                         if abs(scheduled_start - requested_start) > 60:  # Allow 1 minute tolerance
@@ -848,7 +833,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                                         f"but was scheduled at {format_date_correctly(scheduled_start)}")
                         else:
                             logger.info(f"START_DATE RESPECTED: {job_id} correctly scheduled at {format_date_correctly(scheduled_start)}")
-            
+
             # Report violations if any
             if start_date_violations:
                 logger.error(f"Found {len(start_date_violations)} violated START_DATE constraints!")
@@ -856,9 +841,9 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     logger.error(f"  VIOLATED: {violation['job_id']} should start EXACTLY at {violation['requested_time']}")
             else:
                 logger.info("All future START_DATE constraints were respected by the scheduler")
-                
+
         return True
-        
+
     except Exception as e:
         logger.error(f"Error creating or saving Gantt chart: {e}", exc_info=True)
         return False
@@ -877,7 +862,7 @@ def flatten_schedule_to_list(schedule):
             else:
                 unique_job_id, start, end, priority = job
                 additional_params = {}
-                
+
             flat_schedule.append((unique_job_id, machine, start, end, priority, additional_params))
     return flat_schedule
 
@@ -885,11 +870,11 @@ if __name__ == "__main__":
     # Load environment variables
     load_dotenv()
     file_path = os.getenv('file_path')
-    
+
     if not file_path:
         logger.error("No file_path found in environment variables.")
         exit(1)
-        
+
     try:
         jobs, machines, setup_times = load_jobs_planning_data(file_path)
         logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines for visualization")
