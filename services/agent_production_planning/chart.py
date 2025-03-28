@@ -161,12 +161,13 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 logger.info(f"Input Job {job['UNIQUE_JOB_ID']}: START_DATE_EPOCH = {job['START_DATE_EPOCH']} -> {format_date_correctly(job['START_DATE_EPOCH'])}")
 
     df_list = []
+    # Modern professional color palette for priority levels
     colors = {
-        'Priority 1 (Highest)': 'rgb(255, 0, 0)',
-        'Priority 2 (High)': 'rgb(255, 165, 0)',
-        'Priority 3 (Medium)': 'rgb(0, 128, 0)',
-        'Priority 4 (Normal)': 'rgb(128, 0, 128)',
-        'Priority 5 (Low)': 'rgb(60, 179, 113)'
+        'Priority 1 (Highest)': 'rgb(231, 76, 60)',   # Red - #e74c3c
+        'Priority 2 (High)': 'rgb(243, 156, 18)',     # Orange - #f39c12
+        'Priority 3 (Medium)': 'rgb(41, 128, 185)',   # Blue - #2980b9
+        'Priority 4 (Normal)': 'rgb(46, 204, 113)',   # Green - #2ecc71
+        'Priority 5 (Low)': 'rgb(149, 165, 166)'      # Gray - #95a5a6
     }
 
     # Create job_lookup with more robust ID matching
@@ -550,7 +551,10 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
             priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
 
-            task_label = f"{unique_job_id} ({machine})"
+            # Create more readable task labels
+            job_family = extract_job_family(unique_job_id)
+            process_num = extract_process_number(unique_job_id)
+            task_label = f"{job_family} - P{process_num:02d} ({machine})"
 
             buffer_info = ""
             buffer_status = ""
@@ -629,10 +633,33 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             # Store basic timing information for job tracking
             job_lookup[unique_job_id] = job_data
 
-            # Use the tooltip_data for consistency with pre-formatted dates
-            # Build the tooltip with better formatting
-            # Removed tooltip content construction
-            description = f"Task: {unique_job_id} on Machine: {machine}, Priority: {job_priority}"
+            # Build detailed tooltip for job information
+            start_time = format_date_correctly(start)
+            end_time = format_date_correctly(end)
+            
+            tooltip = f"<b>Job ID:</b> {unique_job_id}<br>"
+            tooltip += f"<b>Machine:</b> {machine}<br>"
+            tooltip += f"<b>Start:</b> {start_time}<br>"
+            tooltip += f"<b>End:</b> {end_time}<br>"
+            tooltip += f"<b>Duration:</b> {duration_hours:.1f} hours<br>"
+            tooltip += f"<b>Priority:</b> {job_priority}"
+            
+            # Add additional job details if available
+            if unique_job_id in job_lookup:
+                job_info = job_lookup[unique_job_id]
+                if 'JOB' in job_info and job_info['JOB'] and not pd.isna(job_info['JOB']):
+                    tooltip += f"<br><b>Job:</b> {job_info['JOB']}"
+                if 'JOB_QUANTITY' in job_info and job_info['JOB_QUANTITY'] and not pd.isna(job_info['JOB_QUANTITY']):
+                    tooltip += f"<br><b>Quantity:</b> {job_info['JOB_QUANTITY']}"
+                if 'EXPECT_OUTPUT_PER_HOUR' in job_info and job_info['EXPECT_OUTPUT_PER_HOUR'] and not pd.isna(job_info['EXPECT_OUTPUT_PER_HOUR']):
+                    tooltip += f"<br><b>Output/Hour:</b> {job_info['EXPECT_OUTPUT_PER_HOUR']}"
+                if 'START_DATE_EPOCH' in job_info and job_info['START_DATE_EPOCH']:
+                    tooltip += f"<br><b>Required Start:</b> {format_date_correctly(job_info['START_DATE_EPOCH'])}"
+            
+            tooltip += buffer_info
+            tooltip += number_operator
+            
+            description = tooltip
 
 
             df_list.append(dict(
@@ -659,10 +686,19 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
     df['Task'] = pd.Categorical(df['Task'], categories=task_order, ordered=True)
 
     try:
-        fig = ff.create_gantt(df, colors=colors, index_col='Priority', show_colorbar=True,
-                              group_tasks=False,
-                              showgrid_x=True, showgrid_y=True,
-                              title='Interactive Production Schedule')
+        # Create gantt chart with improved styling
+        fig = ff.create_gantt(
+            df, 
+            colors=colors, 
+            index_col='Priority', 
+            show_colorbar=True,
+            group_tasks=False,
+            showgrid_x=True, 
+            showgrid_y=True,
+            title='Interactive Production Schedule',
+            bar_width=0.4,  # Thinner bars for better visualization
+            height=max(800, len(df) * 30)  # Ensure enough height
+        )
 
         # Disable tooltips for all traces
         for i in range(len(fig.data)):
@@ -683,41 +719,56 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             for _, row in april_jobs.iterrows():
                 logger.info(f"April job: {row['Task']} starts at {row['Start']}")
 
+        # Create a much more professional and user-friendly layout
         fig.update_layout(
             autosize=True,
             height=max(800, len(df) * 30),
             margin=dict(l=350, r=50, t=100, b=100),
+            paper_bgcolor='#f8f9fa',  # Light gray background for better contrast
+            plot_bgcolor='#ffffff',   # White plot area
             legend_title_text='Priority Level',
+            font=dict(family="Arial, sans-serif"),  # Professional font
             hovermode='closest',
-            title={'text': "Interactive Production Schedule", 'font': {'size': 24}, 'x': 0.5, 'xanchor': 'center'},
+            title={
+                'text': "Interactive Production Schedule", 
+                'font': {'size': 24, 'color': '#2c3e50', 'family': 'Arial, sans-serif'}, 
+                'x': 0.5, 
+                'xanchor': 'center'
+            },
             xaxis={
-                'title': {'text': 'Date', 'font': {'size': 14}},
-                # Setting a default range to ensure April jobs are visible
-                'range': [min_start_date - timedelta(days=1), None] if has_april_jobs else None,
-                # Enhanced date formatting with more detail - ensure ALL ticks have dates
+                'title': {'text': 'Date', 'font': {'size': 14, 'color': '#2c3e50'}},
+                # Always show full date range by default
+                'range': None,
+                # Enhanced date formatting with more detail
                 'tickformat': '%Y-%m-%d',  # Show date format
-                'tickmode': 'linear',  # Linear tick mode for even spacing
-                'dtick': 24*60*60*1000,  # One tick per day (in milliseconds)
-                'tickangle': -90,  # Angle the labels for better readability
+                'tickmode': 'linear',      # Linear tick mode for even spacing
+                'dtick': 24*60*60*1000,    # One tick per day (in milliseconds)
+                'tickangle': -45,          # Angle the labels for better readability
                 'tickfont': {'size': 10},
-                'showgrid': True,  # Always show grid lines for better readability
+                'showgrid': True,          # Always show grid lines for better readability
                 'gridcolor': 'rgba(211, 211, 211, 0.6)',  # Light gray grid lines
-
+                'linecolor': '#bdc3c7',    # Axis line color
+                
                 'rangeselector': {
                     'buttons': [
-                        {'count': 7, 'label': '1w', 'step': 'day', 'stepmode': 'backward'},
-                        {'count': 14, 'label': '2w', 'step': 'day', 'stepmode': 'backward'},
-                        {'count': 1, 'label': '1m', 'step': 'month', 'stepmode': 'backward'},
-                        {'count': 3, 'label': '3m', 'step': 'month', 'stepmode': 'backward'},
-                        {'count': 6, 'label': '6m', 'step': 'month', 'stepmode': 'backward'},
-                        {'step': 'all', 'label': 'all'}
+                        {'step': 'all', 'label': 'All Time'},
+                        {'count': 7, 'label': '1 Week', 'step': 'day', 'stepmode': 'backward'},
+                        {'count': 14, 'label': '2 Weeks', 'step': 'day', 'stepmode': 'backward'},
+                        {'count': 1, 'label': '1 Month', 'step': 'month', 'stepmode': 'backward'},
+                        {'count': 3, 'label': '3 Months', 'step': 'month', 'stepmode': 'backward'},
+                        {'count': 6, 'label': '6 Months', 'step': 'month', 'stepmode': 'backward'}
                     ],
-                    # Make the range selector more visible
-                    'bgcolor': '#E2E2E2',
-                    'activecolor': '#68bdf6'
+                    # Make the range selector more professional
+                    'bgcolor': '#ecf0f1',
+                    'activecolor': '#3498db',
+                    'font': {'color': '#2c3e50', 'size': 12}
                 }
             },
-            yaxis={'title': {'text': 'Unique Job IDs (Machine)', 'font': {'size': 14}}}
+            yaxis={
+                'title': {'text': 'Unique Job IDs (Machine)', 'font': {'size': 14, 'color': '#2c3e50'}},
+                'linecolor': '#bdc3c7',  # Axis line color
+                'gridcolor': 'rgba(211, 211, 211, 0.6)',  # Light gray grid lines
+            }
         )
 
         # Removed tooltip text and hoverinfo setting
@@ -747,25 +798,42 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                         hoverinfo='none' # Ensure no hover info for buffer markers as well
                     ))
 
+        # Add more professional timestamp and legend
         fig.add_annotation(
             text=f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
             xref="paper", yref="paper",
             x=0.5, y=-0.05,
             showarrow=False,
-            font=dict(size=10, color="gray")
+            font=dict(size=10, color="#7f8c8d", family="Arial, sans-serif")
         )
 
+        # Define buffer status legend items with improved styling
         legend_items = [
-            {"color": "red", "text": "Critical (<8h)"},
-            {"color": "orange", "text": "Warning (<24h)"},
-            {"color": "yellow", "text": "Caution (<72h)"},
-            {"color": "green", "text": "OK (>72h)"}
+            {"color": "#e74c3c", "text": "Critical (<8h)", "icon": "⚠️"},
+            {"color": "#f39c12", "text": "Warning (<24h)", "icon": "⚠️"},
+            {"color": "#f1c40f", "text": "Caution (<72h)", "icon": "⚠️"},
+            {"color": "#2ecc71", "text": "OK (>72h)", "icon": "✓"}
         ]
 
-        spacing = 0.12
+        # Add a 'legend' title
+        fig.add_annotation(
+            text="Buffer Status:",
+            xref="paper", yref="paper",
+            x=0.26, y=-0.07,
+            showarrow=False,
+            font=dict(size=12, color="#2c3e50", family="Arial, sans-serif", weight="bold"),
+            align="right",
+            xanchor="right"
+        )
+
+        # Create a visually appealing legend with better spacing and alignment
+        spacing = 0.14
         start_x = 0.5 - ((len(legend_items) - 1) * spacing) / 2
+        
         for i, item in enumerate(legend_items):
             x_pos = start_x + (i * spacing)
+            
+            # Add colored rectangle indicator
             fig.add_shape(
                 type="rect",
                 xref="paper", yref="paper",
@@ -773,13 +841,17 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 x1=x_pos - 0.01, y1=-0.06,
                 fillcolor=item["color"],
                 line=dict(color=item["color"]),
+                opacity=0.9,
+                layer="above"
             )
+            
+            # Add text label with improved styling
             fig.add_annotation(
                 text=item["text"],
                 xref="paper", yref="paper",
                 x=x_pos + 0.02, y=-0.07,
                 showarrow=False,
-                font=dict(size=10, color="black"),
+                font=dict(size=10, color="#2c3e50", family="Arial, sans-serif"),
                 align="left",
                 xanchor="left"
             )
