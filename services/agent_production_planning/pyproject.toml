@@ -14,5 +14,4 @@ dependencies = [
     "pandas>=2.2.3",
     "plotly>=6.0.0",
     "python-dotenv>=1.0.1",
-    "streamlit>=1.43.2",
 ]

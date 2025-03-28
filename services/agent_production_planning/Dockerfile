@@ -25,8 +25,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Add the rest of the project source code
 ADD . /app
 
-# Copy data file explicitly
+# Copy data file and HTML interface
 COPY mydata.xlsx /app/mydata.xlsx
+COPY upload.html /app/upload.html
 
 # Switch to appuser and run the final sync to set up the virtual environment
 RUN --mount=type=cache,target=/home/appuser/.cache/uv \
@@ -41,8 +42,8 @@ ENV file_path="/app/mydata.xlsx"
 # Make port 8000 available to the world outside this container
 EXPOSE 8000
 
-# Make serve.py executable
-RUN chmod +x /app/serve.py
+# Make server.py executable
+RUN chmod +x /app/server.py
 
 # Add basic health check for the container
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
@@ -51,5 +52,5 @@ HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
 # Reset the entrypoint, don't invoke `uv` by default
 ENTRYPOINT []
 
-# Command to run when the container starts - now using serve.py
-CMD ["uv", "run", "python", "/app/serve.py"]
+# Command to run when the container starts - now using server.py
+CMD ["uv", "run", "python", "/app/server.py"]
