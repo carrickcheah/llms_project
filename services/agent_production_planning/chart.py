@@ -866,18 +866,23 @@ def flatten_schedule_to_list(schedule):
             flat_schedule.append((unique_job_id, machine, start, end, priority, additional_params))
     return flat_schedule
 
+
 if __name__ == "__main__":
-    # Load environment variables
     load_dotenv()
     file_path = os.getenv('file_path')
-
     if not file_path:
         logger.error("No file_path found in environment variables.")
         exit(1)
 
     try:
+        # Log file details
+        logger.info(f"Loading data from: {os.path.abspath(file_path)}")
+        logger.info(f"File last modified: {datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')}")
+        
         jobs, machines, setup_times = load_jobs_planning_data(file_path)
         logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines for visualization")
+        logger.info(f"Sample job: {jobs[0] if jobs else 'None'}")  # Log first job
+        
         schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=True)
         success = create_interactive_gantt(schedule, jobs, 'interactive_schedule.html')
         if success:
@@ -885,5 +890,5 @@ if __name__ == "__main__":
         else:
             print("Failed to create Gantt chart.")
     except Exception as e:
-        logger.error(f"Error during Gantt chart generation: {e}")
+        logger.error(f"Error during Gantt chart generation: {e}", exc_info=True)
         print(f"Error: {e}")
