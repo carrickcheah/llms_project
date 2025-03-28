@@ -551,10 +551,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
             priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
 
-            # Create more readable task labels
-            job_family = extract_job_family(unique_job_id)
-            process_num = extract_process_number(unique_job_id)
-            task_label = f"{job_family} - P{process_num:02d} ({machine})"
+            # Use UNIQUE_JOB_ID as the task label for y-axis
+            task_label = f"{unique_job_id} ({machine})"
 
             buffer_info = ""
             buffer_status = ""
@@ -771,6 +769,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 )
             current_monday += timedelta(days=7)
 
+        # Sort tasks alphabetically by UNIQUE_JOB_ID for easier reference
+        task_order = sorted(list(dict.fromkeys(df['Task'].tolist())))
         fig.update_yaxes(categoryorder='array', categoryarray=task_order, autorange="reversed")
 
         # Find the earliest start date to ensure the chart shows all jobs
@@ -834,11 +834,12 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 }
             },
             yaxis={
-                'title': {'text': 'Unique Job IDs (Machine)', 'font': {'size': 14, 'color': '#2c3e50'}},
+                'title': {'text': 'UNIQUE_JOB_ID (Machine)', 'font': {'size': 14, 'color': '#2c3e50', 'weight': 'bold'}},
                 'linecolor': '#2c3e50',  # Darker axis line color
                 'gridcolor': 'rgba(211, 211, 211, 0.4)',  # Light gray grid lines
                 'showgrid': True,  # Show horizontal grid lines
                 'gridwidth': 0.5,  # Thinner horizontal grid lines
+                'tickfont': {'size': 10, 'family': 'monospace'}  # Monospace font for better alignment of job IDs
             }
         )
 
