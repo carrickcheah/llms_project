@@ -687,13 +687,22 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 'title': {'text': 'Date', 'font': {'size': 14}},
                 # Setting a default range to ensure April jobs are visible
                 'range': [min_start_date - timedelta(days=1), None] if has_april_jobs else None,
+                # Enhanced date formatting with more detail - ensure ALL ticks have dates
+                'tickformat': '%Y-%m-%d',  # Show date format
+                'tickmode': 'linear',  # Linear tick mode for even spacing
+                'dtick': 24*60*60*1000,  # One tick per day (in milliseconds)
+                'tickangle': -90,  # Angle the labels for better readability
+                'tickfont': {'size': 10},
+                'showgrid': True,  # Always show grid lines for better readability
+                'gridcolor': 'rgba(211, 211, 211, 0.6)',  # Light gray grid lines
+
                 'rangeselector': {
                     'buttons': [
+                        {'count': 1, 'label': '1d', 'step': 'day', 'stepmode': 'backward'},
+                        {'count': 3, 'label': '3d', 'step': 'day', 'stepmode': 'backward'},
                         {'count': 7, 'label': '1w', 'step': 'day', 'stepmode': 'backward'},
                         {'count': 1, 'label': '1m', 'step': 'month', 'stepmode': 'backward'},
                         {'count': 6, 'label': '6m', 'step': 'month', 'stepmode': 'backward'},
-                        {'count': 1, 'label': 'YTD', 'step': 'year', 'stepmode': 'todate'},
-                        {'count': 1, 'label': '1y', 'step': 'year', 'stepmode': 'backward'},
                         {'step': 'all', 'label': 'all'}
                     ],
                     # Make the range selector more visible
