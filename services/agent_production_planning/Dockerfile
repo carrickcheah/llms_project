@@ -10,9 +10,6 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
 
-# Copy from the cache instead of linking since it's a mounted volume
-ENV UV_LINK_MODE=copy
-
 # Create a non-root user early and set up permissions
 RUN useradd -m appuser
 
@@ -25,19 +22,12 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Add the rest of the project source code
 ADD . /app
 
-# Copy data file and HTML interface
-COPY mydata.xlsx /app/mydata.xlsx
-COPY upload.html /app/upload.html
-
 # Switch to appuser and run the final sync to set up the virtual environment
 RUN --mount=type=cache,target=/home/appuser/.cache/uv \
     uv sync --frozen --no-dev
 
 # Place executables in the environment at the front of the path
 ENV PATH="/app/.venv/bin:$PATH"
-
-# Set file path for data file
-ENV file_path="/app/mydata.xlsx"
 
 # Make port 8000 available to the world outside this container
 EXPOSE 8000

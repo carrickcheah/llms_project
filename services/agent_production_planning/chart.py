@@ -780,11 +780,22 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         april_jobs = df[df['Start'].dt.month == 4]
         has_april_jobs = not april_jobs.empty
 
+        # Also find current and upcoming jobs for default view
+        current_date = datetime.now(SG_TIMEZONE)
+        future_jobs = df[df['Start'] >= current_date]
+        has_future_jobs = not future_jobs.empty
+        
         if has_april_jobs:
             logger.info(f"Chart contains {len(april_jobs)} jobs starting in April")
             # Make sure these jobs are visible by explicitly logging them
             for _, row in april_jobs.iterrows():
                 logger.info(f"April job: {row['Task']} starts at {row['Start']}")
+                
+        if has_future_jobs:
+            logger.info(f"Chart contains {len(future_jobs)} future jobs (starting today or later)")
+            # Log the first few future jobs for verification
+            for _, row in future_jobs.head(3).iterrows():
+                logger.info(f"Future job: {row['Task']} starts at {row['Start']}")
 
         # Create a much more professional and user-friendly layout
         fig.update_layout(
@@ -821,8 +832,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 'rangeselector': {
                     'buttons': [
                         {'step': 'all', 'label': 'All Time'},
-                        {'count': 7, 'label': '1 Week', 'step': 'day', 'stepmode': 'backward'},
-                        {'count': 14, 'label': '2 Weeks', 'step': 'day', 'stepmode': 'backward'},
+                        {'count': 7, 'label': '1 Week', 'step': 'day', 'stepmode': 'todate'},
+                        {'count': 14, 'label': '2 Weeks', 'step': 'day', 'stepmode': 'todate'},
                         {'count': 1, 'label': '1 Month', 'step': 'month', 'stepmode': 'backward'},
                         {'count': 3, 'label': '3 Months', 'step': 'month', 'stepmode': 'backward'},
                         {'count': 6, 'label': '6 Months', 'step': 'month', 'stepmode': 'backward'}
