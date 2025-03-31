@@ -8,3 +8,6 @@
 **/tmp
 
 .mypy_cache/**/*
+**/interactive_schedule.html
+**/interactive_schedule_view.html
+.windsurfrules

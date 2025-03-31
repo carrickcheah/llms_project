@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic Invoice</title>
+  <style>
+    /* Same CSS as before */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f9;
+    }
+    .invoice-container {
+      max-width: 800px;
+      margin: 40px auto;
+      background: #fff;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .invoice-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .invoice-header h1 {
+      font-size: 24px;
+      color: #333;
+      margin: 0;
+    }
+    .invoice-header p {
+      font-size: 14px;
+      color: #777;
+    }
+    .invoice-details {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .invoice-details div {
+      font-size: 14px;
+      color: #555;
+    }
+    .invoice-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    .invoice-table th,
+    .invoice-table td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+    .invoice-table th {
+      background-color: #f4f4f4;
+      font-weight: bold;
+      color: #333;
+    }
+    .invoice-total {
+      text-align: right;
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 12px;
+      color: #777;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="invoice-container">
+    <!-- Header -->
+    <div class="invoice-header">
+      <h1>Invoice</h1>
+      <p>Invoice Number: <span id="invoice-number">---</span></p>
+    </div>
+
+    <!-- Invoice Details -->
+    <div class="invoice-details">
+      <div>
+        <p><strong>Company Name:</strong> <span id="company-name">---</span></p>
+        <p><strong>Person In Charge:</strong> <span id="person-in-charge">---</span></p>
+        <p><strong>Contact Number:</strong> <span id="contact-number">---</span></p>
+        <p><strong>Email:</strong> <span id="email">---</span></p>
+        <p><strong>Address:</strong> <span id="address">---</span></p>
+      </div>
+      <div>
+        <p><strong>Invoice Date:</strong> <span id="invoice-date">---</span></p>
+        <p><strong>Due Date:</strong> <span id="due-date">---</span></p>
+      </div>
+    </div>
+
+    <!-- Invoice Table -->
+    <table class="invoice-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Item</th>
+          <th>Quantity</th>
+          <th>Unit Price ($)</th>
+          <th>Total ($)</th>
+        </tr>
+      </thead>
+      <tbody id="invoice-items">
+        <!-- Items will be dynamically added here -->
+      </tbody>
+    </table>
+
+    <!-- Totals -->
+    <div class="invoice-total">
+      <p>Subtotal: RM<span id="subtotal">---</span></p>
+      <p>Tax (10%): RM<span id="tax">---</span></p>
+      <p><strong>Total Amount:</strong> RM<span id="total-amount">---</span></p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      Thank you for your business! For any inquiries, please contact us at <a href="mailto:info@abccorp.com">info@abccorp.com</a>.
+    </div>
+  </div>
+
+  <script>
+    // Simulated data after processing (could come from an API or user input)
+    const invoiceData = {
+      invoiceNumber: 'INV-98765',
+      companyName: 'Ronaldo Corporation',
+      personInCharge: 'Cristiano Ronaldo',
+      contactNumber: '012 8080808',
+      email: 'info@ronaldo.com',
+      address: '888, USJ1, Jalan USJ 888',
+      invoiceDate: '2023-10-01',
+      dueDate: '2023-10-15',
+      items: [
+        { id: 1, name: 'Web Development', quantity: 1, unitPrice: 500 },
+        { id: 2, name: 'Consultation', quantity: 2, unitPrice: 100 },
+      ],
+      taxRate: 0.1, // 10%
+    };
+
+    // Function to populate the invoice fields
+    function populateInvoice(data) {
+      document.getElementById('invoice-number').textContent = data.invoiceNumber;
+      document.getElementById('company-name').textContent = data.companyName;
+      document.getElementById('person-in-charge').textContent = data.personInCharge;
+      document.getElementById('contact-number').textContent = data.contactNumber;
+      document.getElementById('email').textContent = data.email;
+      document.getElementById('address').textContent = data.address;
+      document.getElementById('invoice-date').textContent = data.invoiceDate;
+      document.getElementById('due-date').textContent = data.dueDate;
+
+      // Populate the table rows
+      const itemsContainer = document.getElementById('invoice-items');
+      let subtotal = 0;
+      data.items.forEach((item, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${item.id}</td>
+          <td>${item.name}</td>
+          <td>${item.quantity}</td>
+          <td>$${item.unitPrice.toFixed(2)}</td>
+          <td>$${(item.quantity * item.unitPrice).toFixed(2)}</td>
+        `;
+        itemsContainer.appendChild(row);
+
+        // Calculate subtotal
+        subtotal += item.quantity * item.unitPrice;
+      });
+
+      // Calculate totals
+      const tax = subtotal * data.taxRate;
+      const totalAmount = subtotal + tax;
+
+      document.getElementById('subtotal').textContent = subtotal.toFixed(2);
+      document.getElementById('tax').textContent = tax.toFixed(2);
+      document.getElementById('total-amount').textContent = totalAmount.toFixed(2);
+    }
+
+    // Call the function to populate the invoice
+    populateInvoice(invoiceData);
+  </script>
+</body>
+</html>

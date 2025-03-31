@@ -187,3 +187,7 @@ tools.txt
 
 # Specific directories
 services/news_signal/data
+**/CLAUDE.local.md
+
+# windsurf rules
+.windsurfrules
