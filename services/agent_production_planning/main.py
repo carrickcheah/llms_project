@@ -13,10 +13,6 @@ from greedy import greedy_schedule
 from chart import create_interactive_gantt
 from chart_two import export_schedule_html
 from setup_times import add_schedule_times_and_buffer
-from loguru import logger
-
-
-
 
 
 def main():
@@ -45,7 +41,7 @@ def main():
     logger = logging.getLogger(__name__)
 
     if not args.file:
-        logger.error("No file path provided. Set --file argument or file_path in .env file.")
+        logger.error("No file path provided.")
         return
 
     print(f"Configuration: file={args.file}, max_jobs={args.max_jobs}, force_greedy={args.force_greedy}, "

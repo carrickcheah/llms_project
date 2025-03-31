@@ -1,7 +1,11 @@
-"""
-Configuration for data ingestion from Excel.
-This allows for configurable date column handling without hardcoding.
-"""
+###############################################
+# There are 4 main functions:
+# 1. get_column_time
+# 2. detect_date_format
+# 3. convert_column_to_dates
+# 4. load_jobs_planning_data
+###############################################
+
 import pandas as pd
 import numpy as np
 import logging

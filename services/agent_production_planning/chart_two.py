@@ -10,10 +10,14 @@ import logging
 from dotenv import load_dotenv
 from ingest_data import load_jobs_planning_data
 from greedy import greedy_schedule
+import pytz
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# At the top of the file
+SINGAPORE_TZ = pytz.timezone('Asia/Singapore')
 
 def format_date_correctly(epoch_timestamp, is_lcd_date=False):
     """Format an epoch timestamp maintaining exact time values from Excel."""
@@ -28,14 +32,12 @@ def format_date_correctly(epoch_timestamp, is_lcd_date=False):
             (isinstance(epoch_timestamp, (int, float)) and epoch_timestamp <= 0)):
             return default_date
         
-        # Get the raw datetime from timestamp
-        date_obj = datetime.fromtimestamp(epoch_timestamp)
+        # Get the datetime in Singapore timezone
+        date_obj = datetime.fromtimestamp(epoch_timestamp, tz=SINGAPORE_TZ)
         
         # For LCD_DATE column, use special handling for format
         if is_lcd_date:
             # Use the exact format and time from the Excel file
-            # We need to preserve the original time without adjustments
-            # From the sample: "01/05/25 07:00"
             formatted = date_obj.strftime('%d/%m/%y %H:%M')
         else:
             # For all other dates
