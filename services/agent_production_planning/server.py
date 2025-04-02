@@ -9,6 +9,10 @@ import cgi
 import logging
 import subprocess
 from urllib.parse import parse_qs, urlparse
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -95,6 +99,7 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                 max_jobs = form.getvalue('max_jobs', '500')
                 force_greedy = form.getvalue('force_greedy', 'false').lower() == 'true'
                 enforce_sequence = form.getvalue('enforce_sequence', 'true').lower() == 'true'
+                max_operators = form.getvalue('max_operators', '500')
                 
                 # Output file paths
                 output_html = os.path.join(SCRIPT_DIR, 'interactive_schedule.html')
@@ -106,6 +111,7 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                     os.path.join(SCRIPT_DIR, 'main.py'),
                     '--file', temp_file_path,
                     '--max-jobs', max_jobs,
+                    '--max-operators', max_operators,
                     '--output', output_html
                 ]
                 

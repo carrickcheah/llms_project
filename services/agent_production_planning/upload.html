@@ -91,10 +91,21 @@
     <div class="upload-container">
         <h2>Upload Excel File</h2>
         <p>Select your job data Excel file to generate a production schedule</p>
-        <input type="file" id="fileInput" accept=".xlsx, .xls">
+        <input type="file" id="fileInput" accept=".xlsx, .xls, .csv">
     </div>
     
-
+    <div class="options">
+        <h3>Scheduling Options</h3>
+        <label>
+            <input type="checkbox" id="enforceSequence" checked>
+            Enforce process sequence dependencies (P01→P02→P03)
+        </label>
+        <label>
+            Maximum Operators:
+            <input type="number" id="maxOperators" min="0" placeholder="Default: 50">
+            <span style="font-size: 0.9em; color: #666;">(0 = unlimited)</span>
+        </label>
+    </div>
     
     <div style="text-align: center;">
         <button id="uploadButton">Generate Schedule</button>
@@ -120,10 +131,14 @@
             
             const formData = new FormData();
             formData.append('file', file);
-            // Use default values for scheduling options
+            // Get values from form inputs
             formData.append('max_jobs', '500');
             formData.append('force_greedy', false);
-            formData.append('enforce_sequence', true);
+            formData.append('enforce_sequence', document.getElementById('enforceSequence').checked);
+            
+            // Get max operators value (use empty string if not provided, server will use default from .env)
+            const maxOperators = document.getElementById('maxOperators').value;
+            formData.append('max_operators', maxOperators);
             
             showStatus('Processing... Please wait', 'info');
             

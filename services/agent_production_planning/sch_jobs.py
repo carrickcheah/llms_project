@@ -65,7 +65,7 @@ def extract_job_family(unique_job_id, job_id=None):
         return f"{process_code}_{job_id}"
     return process_code
 
-def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_limit_seconds=300):
+def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_limit_seconds=300, max_operators=0):
     """
     Advanced scheduling function using CP-SAT solver with priority-based optimization
     and process sequence dependencies.
@@ -76,6 +76,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
         setup_times (dict): Dictionary mapping (unique_job_id1, unique_job_id2) to setup duration
         enforce_sequence (bool): Whether to enforce process sequence dependencies
         time_limit_seconds (int): Maximum time limit for the solver in seconds
+        max_operators (int): Maximum number of operators available at any time (0 means no limit)
 
     Returns:
         dict: Schedule as {machine: [(unique_job_id, start, end, priority), ...]}
@@ -199,6 +200,84 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
 
         model.Add(end_var == start_var + int_duration)
 
+    # Add machine constraints - no overlapping intervals for jobs on same machine
+    for machine_id in machines:
+        intervals_on_machine = []
+        for job in jobs:
+            if 'UNIQUE_JOB_ID' not in job:
+                continue
+            unique_job_id = job['UNIQUE_JOB_ID']
+            if job.get('RSC_CODE') == machine_id and (unique_job_id, machine_id) in intervals:
+                intervals_on_machine.append(intervals[(unique_job_id, machine_id)])
+        
+        model.AddNoOverlap(intervals_on_machine)
+    
+    # Add operator constraints if max_operators is specified
+    if max_operators > 0:
+        logger.info(f"Adding constraint for maximum {max_operators} operators")
+        
+        # Group jobs by a reasonable time granularity (e.g., hourly)
+        time_granularity = 3600  # 1 hour in seconds
+        
+        # Limit the number of time points to prevent excessive memory usage
+        max_time_points = 1000  # Limit to 1000 time points (about 41 days at hourly granularity)
+        total_time_range = int(horizon_end) - int(current_time)
+        
+        if total_time_range / time_granularity > max_time_points:
+            logger.warning(f"Time horizon too large ({total_time_range/3600/24:.1f} days). Limiting operator constraints to {max_time_points} time points.")
+            # Adjust granularity to cover the entire horizon with max_time_points
+            time_granularity = max(3600, int(total_time_range / max_time_points))
+            logger.info(f"Adjusted time granularity to {time_granularity/3600:.1f} hours")
+        
+        time_points = list(range(int(current_time), int(horizon_end), time_granularity))
+        logger.info(f"Created {len(time_points)} time points for operator constraints")
+        
+        for time_point in time_points:
+            # For each time point, create a sum of Boolean variables indicating if a job is active
+            active_operators = []
+            
+            for job in jobs:
+                if 'UNIQUE_JOB_ID' not in job:
+                    continue
+                
+                unique_job_id = job['UNIQUE_JOB_ID']
+                machine_id = job.get('RSC_CODE')
+                num_operators = job.get('NUMBER_OPERATOR', 1)
+                
+                # Skip if job doesn't need operators
+                if num_operators <= 0:
+                    continue
+                
+                if (unique_job_id, machine_id) in start_vars and (unique_job_id, machine_id) in end_vars:
+                    start_var = start_vars[(unique_job_id, machine_id)]
+                    end_var = end_vars[(unique_job_id, machine_id)]
+                    
+                    # Create a Boolean variable that is 1 if the job is active at this time point
+                    is_active = model.NewBoolVar(f'is_active_{unique_job_id}_{time_point}')
+                    
+                    # Job is active if: start_var <= time_point < end_var
+                    model.Add(start_var <= time_point).OnlyEnforceIf(is_active)
+                    model.Add(end_var > time_point).OnlyEnforceIf(is_active)
+                    model.Add(start_var > time_point).OnlyEnforceIf(is_active.Not())
+                    model.Add(end_var <= time_point).OnlyEnforceIf(is_active.Not())
+                    
+                    # Add operator count to the active_operators list
+                    active_operators.append((is_active, num_operators))
+            
+            # Sum the operators used at this time point
+            if active_operators:
+                # Create weighted sum expression for operators used at this time point
+                operators_used = []
+                for i, (is_active, num_ops) in enumerate(active_operators):
+                    temp_var = model.NewIntVar(0, num_ops, f'ops_{time_point}_{i}')
+                    model.Add(temp_var == num_ops).OnlyEnforceIf(is_active)
+                    model.Add(temp_var == 0).OnlyEnforceIf(is_active.Not())
+                    operators_used.append(temp_var)
+                    
+                # Add constraint that sum of operators used must not exceed max_operators
+                model.Add(sum(operators_used) <= max_operators)
+                logger.debug(f"Added operator constraint for time point {datetime.fromtimestamp(time_point).strftime('%Y-%m-%d %H:%M')}")
+    
     # Handle machine constraints with setup times, BREAK_HOURS, and no-production periods
     for machine in machines:
         unique_job_signatures = set()

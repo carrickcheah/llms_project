@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--output", default="interactive_schedule.html", help="Output file for the Gantt chart")
     parser.add_argument("--enforce-sequence", action="store_true", default=True, help="Enforce process sequence dependencies (default: True)")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging (show debug messages)")
+    parser.add_argument("--max-operators", type=int, default=int(os.getenv('MAX_OPERATORS', 0)), 
+                       help="Maximum number of operators available. If not provided, uses the MAX_OPERATORS value from .env file.")
     args = parser.parse_args()
 
     # Set up logging based on whether --verbose was used
@@ -45,7 +47,7 @@ def main():
         return
 
     print(f"Configuration: file={args.file}, max_jobs={args.max_jobs}, force_greedy={args.force_greedy}, "
-          f"output={args.output}, enforce_sequence={args.enforce_sequence}")
+          f"output={args.output}, enforce_sequence={args.enforce_sequence}, max_operators={args.max_operators}")
 
     current_time = int(datetime.now().timestamp())
     logger.info(f"Loading job data from {args.file}...")
@@ -138,7 +140,7 @@ def main():
             if len(valid_jobs) < len(jobs):
                 logger.warning(f"Filtered out {len(jobs) - len(valid_jobs)} invalid jobs before scheduling")
                 
-            schedule = schedule_jobs(valid_jobs, machines, setup_times, enforce_sequence=args.enforce_sequence, time_limit_seconds=time_limit)
+            schedule = schedule_jobs(valid_jobs, machines, setup_times, enforce_sequence=args.enforce_sequence, time_limit_seconds=time_limit, max_operators=args.max_operators)
             
             if not schedule:
                 logger.warning("CP-SAT solver returned None instead of a schedule dictionary")
@@ -186,7 +188,7 @@ def main():
                     
                 valid_jobs.append(job)
                 
-            schedule = greedy_schedule(valid_jobs, machines, setup_times, enforce_sequence=args.enforce_sequence)
+            schedule = greedy_schedule(valid_jobs, machines, setup_times, enforce_sequence=args.enforce_sequence, max_operators=args.max_operators)
             
             if schedule and any(schedule.values()):
                 total_jobs = sum(len(jobs_list) for jobs_list in schedule.values())

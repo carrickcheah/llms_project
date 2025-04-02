@@ -53,7 +53,7 @@ def extract_job_family(unique_job_id):
     logger.warning(f"Could not extract family from {unique_job_id}, using full code")
     return process_code
 
-def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
+def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max_operators=0):
     """
     Create a schedule using an enhanced greedy algorithm with process sequence enforcement,
     considering due dates and earliest start times (START_DATE).
@@ -63,6 +63,7 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         machines (list): List of machine IDs
         setup_times (dict): Dictionary mapping (unique_job_id1, unique_job_id2) to setup duration
         enforce_sequence (bool): Whether to enforce process sequence dependencies
+        max_operators (int): Maximum number of operators available at any time (0 means no limit)
 
     Returns:
         dict: Schedule as {machine: [(unique_job_id, start, end, priority), ...]}
@@ -70,6 +71,14 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
     current_time = int(datetime.now().timestamp())
     schedule = {machine: [] for machine in machines}
     machine_availability = {machine: current_time for machine in machines}
+    
+    # Track operator usage over time if max_operators is set
+    if max_operators > 0:
+        logger.info(f"Enforcing maximum operator constraint: {max_operators} operators")
+        # Dictionary to track how many operators are in use at any given time point
+        operator_usage = {}  # {time_point: number_of_operators_in_use}
+    else:
+        logger.info("No maximum operator constraint enforced")
     
     # Validate jobs and fix any issues
     for job in jobs:
@@ -198,6 +207,49 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         else:
             earliest_start = max(constraints.values())
             active_constraint = [name for name, value in constraints.items() if value == earliest_start][0]
+            
+        end_time = earliest_start + duration
+        num_operators = job.get('NUMBER_OPERATOR', 1)
+        
+        # Operator constraint check if max_operators is set
+        if max_operators > 0 and num_operators > 0:
+            # Find a suitable time slot where we don't exceed max_operators
+            proposed_start = earliest_start
+            can_schedule = False
+            
+            # Keep trying later start times until we find a feasible slot or hit some limit
+            max_attempts = 10  # Limit the search to prevent infinite loops
+            attempt = 0
+            
+            while attempt < max_attempts:
+                # Check if adding this job would exceed operator limit at any point
+                operator_conflict = False
+                
+                # For each time point where this job would be active
+                for t in range(int(proposed_start), int(proposed_start + duration), 3600):  # Check hourly points
+                    current_operators = operator_usage.get(t, 0)
+                    if current_operators + num_operators > max_operators:
+                        operator_conflict = True
+                        logger.info(f"Operator constraint violation at {datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M')}: "
+                                    f"Need {num_operators} operators, but only {max_operators - current_operators} available")
+                        break
+                
+                if not operator_conflict:
+                    # Found a feasible slot
+                    can_schedule = True
+                    earliest_start = proposed_start
+                    end_time = earliest_start + duration
+                    active_constraint = "Operator Availability"
+                    break
+                
+                # Try next feasible time slot (1 hour later)
+                proposed_start += 3600
+                attempt += 1
+            
+            if not can_schedule and attempt >= max_attempts:
+                logger.warning(f"Could not find feasible time slot for job {unique_job_id} after {max_attempts} attempts due to operator constraints")
+                # We'll still schedule it, but note the constraint violation
+                job['operator_constraint_violation'] = True
         
         if earliest_start > current_time:
             active_date = datetime.fromtimestamp(earliest_start).strftime('%Y-%m-%d %H:%M')
@@ -238,6 +290,29 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True):
         job_name = job.get('JOB', job.get('JOB_CODE', unique_job_id))
         logger.info(f"✅ Scheduled job {job_name} ({unique_job_id}) on {machine_id}: "
                    f"{datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} to {datetime.fromtimestamp(end).strftime('%Y-%m-%d %H:%M')}")
+
+        # Determine setup time if any
+        setup_duration = 0
+        if setup_times and machine_id in schedule and schedule[machine_id]:
+            last_job_id = schedule[machine_id][-1][0]
+            setup_key = (last_job_id, unique_job_id)
+            if setup_key in setup_times:
+                setup_duration = setup_times[setup_key]
+                logger.debug(f"Setup time: {setup_duration/60:.1f} min for transition from {last_job_id} to {unique_job_id}")
+        
+        # Calculate final start and end times
+        start_time = earliest_start
+        end_time = start_time + duration
+        
+        # Update operator usage if max_operators is set
+        if max_operators > 0 and job.get('NUMBER_OPERATOR', 0) > 0:
+            num_operators = job.get('NUMBER_OPERATOR', 1)
+            for t in range(int(start_time), int(end_time), 3600):  # Update hourly
+                operator_usage[t] = operator_usage.get(t, 0) + num_operators
+                logger.debug(f"Time {datetime.fromtimestamp(t).strftime('%Y-%m-%d %H:%M')}: {operator_usage[t]}/{max_operators} operators in use")
+        
+        # Update the machine availability
+        machine_availability[machine_id] = end_time
 
     # Calculate time shifts needed for families with START_DATE constraints
     family_time_shifts = {}

@@ -14,6 +14,7 @@ import re
 import os
 from datetime import datetime, timedelta
 import pytz
+import sys
 
 # Configure logging
 logging.basicConfig(
@@ -185,36 +186,55 @@ def convert_column_to_dates(df, column_name, base_col=None):
 
 
 
-def load_jobs_planning_data(excel_file):
+def load_jobs_planning_data(file_path):
     """
-    Load job planning data from an Excel file.
+    Load job planning data from an Excel file or CSV file.
     This handles multiple date columns with configurable time settings.
     Adds UNIQUE_JOB_ID as JOB + PROCESS_CODE for each job.
     
     Args:
-        excel_file (str): Path to the Excel file
+        file_path (str): Path to the Excel (.xlsx) or CSV (.csv) file
         
     Returns:
         tuple: (jobs, machines, setup_times)
     """
-    logger.info(f"Loading job planning data from {excel_file}")
+    logger.info(f"Loading job planning data from {file_path}")
     
     try:
-        if not os.path.exists(excel_file):
-            raise FileNotFoundError(f"Excel file not found: {excel_file}")
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
         
-        try:
-            logger.info("Trying to read Excel with header at row 0 (Excel row 1)")
-            df = pd.read_excel(excel_file, header=0)
-            if not df.empty and all(isinstance(col, str) for col in df.columns):
-                logger.info("Successfully read Excel file with header at row 0")
-            else:
-                logger.info("Header not found at row 0, falling back to row 4 (Excel row 5)")
-                df = pd.read_excel(excel_file, header=4)
-        except Exception as e:
-            logger.warning(f"Error reading with header at row 0: {e}")
-            logger.info("Falling back to header at row 4 (Excel row 5)")
-            df = pd.read_excel(excel_file, header=4)
+        # Determine file type based on extension
+        file_extension = os.path.splitext(file_path)[1].lower()
+        
+        if file_extension == '.csv':
+            logger.info("Detected CSV file format")
+            try:
+                # First try with default settings
+                df = pd.read_csv(file_path)
+                if df.empty or not all(isinstance(col, str) for col in df.columns):
+                    # Try with different encoding if needed
+                    df = pd.read_csv(file_path, encoding='latin1')
+                logger.info("Successfully read CSV file")
+            except Exception as e:
+                logger.error(f"Error reading CSV file: {e}")
+                raise
+        elif file_extension in ['.xlsx', '.xls']:
+            logger.info(f"Detected Excel file format: {file_extension}")
+            try:
+                logger.info("Trying to read Excel with header at row 0 (Excel row 1)")
+                df = pd.read_excel(file_path, header=0)
+                if not df.empty and all(isinstance(col, str) for col in df.columns):
+                    logger.info("Successfully read Excel file with header at row 0")
+                else:
+                    logger.info("Header not found at row 0, falling back to row 4 (Excel row 5)")
+                    df = pd.read_excel(file_path, header=4)
+            except Exception as e:
+                logger.warning(f"Error reading with header at row 0: {e}")
+                logger.info("Falling back to header at row 4 (Excel row 5)")
+                df = pd.read_excel(file_path, header=4)
+        else:
+            raise ValueError(f"Unsupported file format: {file_extension}. Supported formats: .csv, .xlsx, .xls")
         
         required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_CODE', 'HOURS_NEED', 'SETTING_HOURS', 'BREAK_HOURS', 'NO_PROD', 'LCD_DATE']
         missing_cols = [col for col in required_cols if col not in df.columns]
@@ -263,22 +283,13 @@ def load_jobs_planning_data(excel_file):
             # Set a minimum processing time but don't default missing values
             df.loc[(df['processing_time'] <= 0) & df['processing_time'].notna(), 'processing_time'] = 3600
             
-            # Process NUMBER_OPERATOR to adjust processing times
+            # Keep NUMBER_OPERATOR for display purposes but don't use it to adjust processing times
             if 'NUMBER_OPERATOR' in df.columns:
-                logger.info("Using NUMBER_OPERATOR from Excel to adjust job durations")
-                # Fill missing values with 1 (default to 1 operator)
+                logger.info("Loading NUMBER_OPERATOR from Excel for display only (not adjusting job durations)")
+                # Fill missing values with 1 for display purposes
                 df['NUMBER_OPERATOR'] = df['NUMBER_OPERATOR'].fillna(1)
                 # Ensure NUMBER_OPERATOR is at least 1
                 df.loc[df['NUMBER_OPERATOR'] < 1, 'NUMBER_OPERATOR'] = 1
-                
-                # Adjust processing time based on number of operators
-                # Formula: More operators decrease processing time with diminishing returns
-                # Using a square root function to model diminishing returns of adding more operators
-                import numpy as np
-                df['operator_efficiency'] = np.sqrt(df['NUMBER_OPERATOR']) / df['NUMBER_OPERATOR']
-                df['processing_time'] = df['processing_time'] * df['operator_efficiency']
-                
-                logger.info(f"Adjusted processing times based on NUMBER_OPERATOR for {len(df)} jobs")
         
         # Process SETTING_HOURS for setup times
         if 'SETTING_HOURS' in df.columns:
@@ -373,25 +384,33 @@ def load_jobs_planning_data(excel_file):
 
 if __name__ == "__main__":
     # Set up test configuration
-    excel_file = "mydata.xlsx"  # Using the most recent Excel file
+    # Default to Excel file if no argument is provided
+    file_path = "mydata.xlsx" 
+    
+    # Check if a file path was provided as a command line argument
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
     
     # Configure logging to see what's happening
     logging.basicConfig(level=logging.INFO)
     
     try:
         # Test loading the data
-        logger.info(f"Testing data ingestion with file: {excel_file}")
-        df = load_jobs_planning_data(excel_file)
+        logger.info(f"Testing data ingestion with file: {file_path}")
+        jobs, machines, setup_times = load_jobs_planning_data(file_path)
         
         # Print basic information about the loaded data
-        if isinstance(df, pd.DataFrame):
-            logger.info(f"Successfully loaded data. Shape: {df.shape}")
-            logger.info("\nFirst few rows:")
-            print(df.head())
-            logger.info("\nColumns:")
-            print(df.columns.tolist())
-        else:
-            logger.error("Expected DataFrame but got different return type")
+        logger.info(f"Successfully loaded data:")
+        logger.info(f"Number of jobs: {len(jobs)}")
+        logger.info(f"Number of machines: {len(machines)}")
+        logger.info(f"Number of setup time entries: {len(setup_times)}")
+        
+        # Print sample data from the first job
+        if jobs:
+            logger.info("\nSample job data:")
+            sample_job = jobs[0]
+            for key, value in sample_job.items():
+                logger.info(f"{key}: {value}")
             
     except Exception as e:
         logger.error(f"Error during testing: {str(e)}")
