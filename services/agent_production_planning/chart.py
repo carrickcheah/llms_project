@@ -236,8 +236,8 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     # Create task entry with original scheduling times
                     family = extract_job_family(unique_job_id)
                     process_num = extract_process_number(unique_job_id)
-                    # Create task label that will sort correctly
-                    task_label = f"{family}-P{process_num:02d} | {unique_job_id} ({machine})"
+                    # Create task label that will sort correctly - only show UNIQUE_JOB_ID
+                    task_label = unique_job_id
                     
                     job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
                     priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
@@ -305,7 +305,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 gridcolor='#e0e0e0',
                 zerolinecolor='#e0e0e0',
                 gridwidth=1,
-                griddash='dash'
+                griddash='dot'  # Add dotted grid lines
             ),
             yaxis=dict(
                 title='Jobs',
@@ -313,7 +313,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 gridcolor='#e0e0e0',
                 zerolinecolor='#e0e0e0',
                 gridwidth=1,
-                griddash='dash',
+                griddash='dot',  # Add dotted grid lines
                 categoryorder='array',  # Force specific category order
                 categoryarray=df['Task'].tolist()  # Use sorted task list in natural order
             ),
