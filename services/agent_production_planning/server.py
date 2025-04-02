@@ -10,6 +10,7 @@ import logging
 import subprocess
 from urllib.parse import parse_qs, urlparse
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 # Directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Store the most recent Excel file path (to avoid relying on .env)
+LAST_PROCESSED_FILE = None
+
 class ProductionPlanningHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Handle GET requests - serve static files"""
@@ -30,6 +34,18 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
         # Serve the upload page as default
         if path == '/':
             path = '/upload.html'
+        
+        # Handle static Gantt chart download
+        if path.startswith('/static_gantt'):
+            self.send_response(404)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response = {
+                'success': False,
+                'error': 'This endpoint has been removed'
+            }
+            self.wfile.write(json.dumps(response).encode())
+            return
         
         # Get the file path
         file_path = os.path.join(SCRIPT_DIR, path.lstrip('/'))
@@ -49,6 +65,10 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
             content_type = 'text/css'
         elif file_path.endswith('.js'):
             content_type = 'application/javascript'
+        elif file_path.endswith('.png'):
+            content_type = 'image/png'
+        elif file_path.endswith('.jpg') or file_path.endswith('.jpeg'):
+            content_type = 'image/jpeg'
         
         # Serve the file
         try:
@@ -127,8 +147,9 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                 
                 # Check if the process was successful
                 if process.returncode == 0:
-                    # Clean up the temporary file
-                    os.unlink(temp_file_path)
+                    # Store the file path for later use
+                    global LAST_PROCESSED_FILE
+                    LAST_PROCESSED_FILE = temp_file_path
                     
                     # Send success response
                     self.send_response(200)

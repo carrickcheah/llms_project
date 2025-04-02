@@ -211,10 +211,13 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
 
     if not schedule or not any(schedule.values()):
         logger.warning("Empty schedule received, creating placeholder task")
+        # Create naive datetime to avoid timezone issues
+        start_time = datetime.utcfromtimestamp(current_time)
+        end_time = datetime.utcfromtimestamp(current_time + 3600)
         df_list.append(dict(
             Task="No tasks scheduled",
-            Start=datetime.utcfromtimestamp(current_time),
-            Finish=datetime.utcfromtimestamp(current_time + 3600),
+            Start=start_time,
+            Finish=end_time,
             Resource="None",
             Priority="Priority 3 (Medium)",
             Description="No tasks were scheduled. Please check your input data." # Removed tooltip content here, but kept basic description for task name
@@ -670,20 +673,35 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 BufferStatus=buffer_status
             ))
 
-    if not df_list:
-        logger.error("No valid tasks to plot in Gantt chart.")
-        return False
-
-    df = pd.DataFrame(df_list)
-    logger.info(f"Created DataFrame with {len(df)} rows for Gantt chart")
-
-    if not df.empty:
-        logger.debug(f"Sample data: {df.iloc[0].to_dict()}")
-
-    task_order = list(dict.fromkeys(df['Task'].tolist()))
-    df['Task'] = pd.Categorical(df['Task'], categories=task_order, ordered=True)
+    # After creating all df_list entries, ensure consistent timezone handling
+    for task in df_list:
+        # Convert timezone-aware datetime objects to naive ones for consistent plotting
+        if isinstance(task['Start'], datetime) and task['Start'].tzinfo is not None:
+            task['Start'] = task['Start'].replace(tzinfo=None)
+        if isinstance(task['Finish'], datetime) and task['Finish'].tzinfo is not None:
+            task['Finish'] = task['Finish'].replace(tzinfo=None)
 
     try:
+        fig = None
+        df = pd.DataFrame(df_list)
+        
+        # Also find current and upcoming jobs for default view
+        current_date = datetime.now(SG_TIMEZONE).replace(tzinfo=None)
+        
+        # Make sure the Start column contains naive datetimes
+        df['Start'] = df['Start'].apply(lambda x: x.replace(tzinfo=None) if hasattr(x, 'tzinfo') and x.tzinfo is not None else x)
+        
+        future_jobs = df[df['Start'] >= current_date]
+        has_future_jobs = not future_jobs.empty
+        
+        logger.info(f"Created DataFrame with {len(df)} rows for Gantt chart")
+
+        if not df.empty:
+            logger.debug(f"Sample data: {df.iloc[0].to_dict()}")
+
+        task_order = list(dict.fromkeys(df['Task'].tolist()))
+        df['Task'] = pd.Categorical(df['Task'], categories=task_order, ordered=True)
+
         # Create gantt chart with improved styling
         fig = ff.create_gantt(
             df, 
@@ -703,7 +721,6 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             fig.data[i].hoverinfo = 'none' # Disable hover info - tooltips removed
             
         # Add vertical line for current date to help with orientation
-        current_date = datetime.now(SG_TIMEZONE)
         fig.add_shape(
             type="line",
             xref="x",
@@ -780,11 +797,6 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         april_jobs = df[df['Start'].dt.month == 4]
         has_april_jobs = not april_jobs.empty
 
-        # Also find current and upcoming jobs for default view
-        current_date = datetime.now(SG_TIMEZONE)
-        future_jobs = df[df['Start'] >= current_date]
-        has_future_jobs = not future_jobs.empty
-        
         if has_april_jobs:
             logger.info(f"Chart contains {len(april_jobs)} jobs starting in April")
             # Make sure these jobs are visible by explicitly logging them
@@ -853,12 +865,6 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 'tickfont': {'size': 10, 'family': 'monospace'}  # Monospace font for better alignment of job IDs
             }
         )
-
-        # Removed tooltip text and hoverinfo setting
-        # for i in range(len(fig.data)):
-        #     fig.data[i].text = df['Description']
-        #     fig.data[i].hoverinfo = 'text'
-
 
         if 'BufferStatus' in df.columns and df['BufferStatus'].notna().any():
             for i, row in df.iterrows():

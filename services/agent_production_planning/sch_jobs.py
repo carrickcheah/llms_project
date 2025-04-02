@@ -8,6 +8,15 @@ import time
 import re
 from dotenv import load_dotenv
 import os
+import math
+from collections import defaultdict
+from time_utils import (
+    epoch_to_relative_hours,
+    relative_hours_to_epoch,
+    epoch_to_datetime,
+    datetime_to_epoch,
+    format_datetime_for_display
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -67,564 +76,274 @@ def extract_job_family(unique_job_id, job_id=None):
 
 def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_limit_seconds=300, max_operators=0):
     """
-    Advanced scheduling function using CP-SAT solver with priority-based optimization
-    and process sequence dependencies.
-
+    Schedule jobs using the CP-SAT solver.
+    
     Args:
-        jobs (list): List of job dictionaries, each with UNIQUE_JOB_ID
-        machines (list): List of machine IDs
-        setup_times (dict): Dictionary mapping (unique_job_id1, unique_job_id2) to setup duration
-        enforce_sequence (bool): Whether to enforce process sequence dependencies
-        time_limit_seconds (int): Maximum time limit for the solver in seconds
-        max_operators (int): Maximum number of operators available at any time (0 means no limit)
-
+        jobs: List of job dictionaries, each with a unique ID, machine ID, processing time, and LCD date.
+        machines: List of available machines (IDs).
+        setup_times: Dictionary of setup times between processes.
+        enforce_sequence: Whether to enforce process sequence dependencies.
+        time_limit_seconds: Time limit for the solver in seconds.
+        max_operators: Maximum number of operators available (0 means unlimited).
+    
     Returns:
-        dict: Schedule as {machine: [(unique_job_id, start, end, priority), ...]}
+        Dictionary with machine IDs as keys and lists of scheduled jobs as values.
+        Each job is represented as (unique_job_id, start_time, end_time, priority).
     """
-    start_time = time.time()
-    current_time = int(datetime.now().timestamp())
-
-    horizon_end = int(current_time + max(job.get('LCD_DATE_EPOCH', current_time + 2592000) for job in jobs) + max(job['processing_time'] for job in jobs))
-    horizon = horizon_end - current_time
-
-    model = cp_model.CpModel()
-    solver = cp_model.CpSolver()
-    
-    solver.parameters.max_time_in_seconds = time_limit_seconds
-    solver.parameters.log_search_progress = True
-    
-    import multiprocessing
-    available_cpus = multiprocessing.cpu_count()
-    optimal_workers = min(available_cpus, 16)
-    solver.parameters.num_search_workers = optimal_workers
-    logger.info(f"Using {optimal_workers} parallel search workers for CP-SAT solver")
-    
-    solver.parameters.linearization_level = 2
-    
-    # Log additional data columns that will be used in scheduling
-    additional_columns = []
-    if any('setup_time' in job and job['setup_time'] > 0 for job in jobs):
-        additional_columns.append('SETTING_HOURS (setup times)')
-    if any('break_time' in job and job['break_time'] > 0 for job in jobs):
-        additional_columns.append('BREAK_HOURS (production breaks)')
-    if any('no_prod_time' in job and job['no_prod_time'] > 0 for job in jobs):
-        additional_columns.append('NO_PROD(non-production times)')
-        
-    if additional_columns:
-        logger.info(f"Using additional data columns for advanced scheduling: {', '.join(additional_columns)}")
-    else:
-        logger.info("No additional data columns found for advanced scheduling features")
-    solver.parameters.optimize_with_core = True
-    solver.parameters.use_lns = True
-
-    start_date_jobs = [job for job in jobs if 
-                      (job.get('START_DATE_EPOCH', current_time) > current_time) or 
-                      (job.get('START_DATE _EPOCH', current_time) > current_time)]
-    if start_date_jobs:
-        logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints for CP-SAT solver:")
-        for job in start_date_jobs:
-            start_date_epoch = job.get('START_DATE_EPOCH')
-            if start_date_epoch is None:
-                start_date_epoch = job.get('START_DATE _EPOCH')
-            start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
-            resource_location = job.get('RSC_CODE', 'Unknown')
-            logger.info(f"  Job {job['UNIQUE_JOB_ID']} on {resource_location}: MUST start EXACTLY at {start_date}")
-        logger.info("START_DATE constraints will be strictly enforced in the model")
-
-    family_jobs = {}
-    for job in jobs:
-        if 'UNIQUE_JOB_ID' not in job:
-            logger.error(f"Job missing UNIQUE_JOB_ID: {job}")
-            continue
-        job_id = job.get('JOB', '')
-        family = extract_job_family(job['UNIQUE_JOB_ID'], job_id)
-        if family not in family_jobs:
-            family_jobs[family] = []
-        family_jobs[family].append(job)
-
-    for family in family_jobs:
-        family_jobs[family].sort(key=lambda x: extract_process_number(x['UNIQUE_JOB_ID']))
-
-    family_constraints = {}
-    for family, family_job_list in family_jobs.items():
-        for job in family_job_list:
-            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] > current_time:
-                if family not in family_constraints:
-                    family_constraints[family] = []
-                family_constraints[family].append(job)
-
-    for family, constrained_jobs in family_constraints.items():
-        logger.info(f"Family {family} has {len(constrained_jobs)} jobs with START_DATE constraints")
-        for job in constrained_jobs:
-            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            logger.info(f"  Job {job['UNIQUE_JOB_ID']} must start at {start_date}")
-
-    start_vars = {}
-    end_vars = {}
-    intervals = {}
-    for job in jobs:
-        if 'UNIQUE_JOB_ID' not in job:
-            continue
-        unique_job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_CODE')
-        duration = job['processing_time']
-        due_time = job.get('LCD_DATE_EPOCH', horizon_end - duration)
-        priority = job['PRIORITY']
-
-        has_start_date = (('START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None) or 
-                         ('START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None))
-        user_start_time = job.get('START_DATE_EPOCH', job.get('START_DATE _EPOCH', current_time))
-
-        if not isinstance(duration, (int, float)) or duration <= 0:
-            logger.error(f"Invalid duration for job {unique_job_id}: {duration}")
-            raise ValueError(f"Invalid duration for job {unique_job_id}")
-
-        if has_start_date and user_start_time > current_time:
-            int_start_time = int(user_start_time)
-            start_var = model.NewIntVar(int_start_time, int_start_time, f'start_{machine_id}_{unique_job_id}')
-            logger.info(f"Job {unique_job_id} must start EXACTLY at {datetime.fromtimestamp(int_start_time).strftime('%Y-%m-%d %H:%M')}")
-            job['START_TIME'] = int_start_time
-        else:
-            earliest_start = int(current_time)
-            start_var = model.NewIntVar(earliest_start, horizon_end, f'start_{machine_id}_{unique_job_id}')
-            
-        end_time = int(horizon_end + duration)
-        end_var = model.NewIntVar(current_time, end_time, f'end_{machine_id}_{unique_job_id}')
-        
-        int_duration = int(duration)
-        interval_var = model.NewIntervalVar(start_var, int_duration, end_var, f'interval_{machine_id}_{unique_job_id}')
-
-        start_vars[(unique_job_id, machine_id)] = start_var
-        end_vars[(unique_job_id, machine_id)] = end_var
-        intervals[(unique_job_id, machine_id)] = interval_var
-
-        model.Add(end_var == start_var + int_duration)
-
-    # Add machine constraints - no overlapping intervals for jobs on same machine
-    for machine_id in machines:
-        intervals_on_machine = []
-        for job in jobs:
-            if 'UNIQUE_JOB_ID' not in job:
-                continue
-            unique_job_id = job['UNIQUE_JOB_ID']
-            if job.get('RSC_CODE') == machine_id and (unique_job_id, machine_id) in intervals:
-                intervals_on_machine.append(intervals[(unique_job_id, machine_id)])
-        
-        model.AddNoOverlap(intervals_on_machine)
-    
-    # Add operator constraints if max_operators is specified
-    if max_operators > 0:
-        logger.info(f"Adding constraint for maximum {max_operators} operators")
-        
-        # Group jobs by a reasonable time granularity (e.g., hourly)
-        time_granularity = 3600  # 1 hour in seconds
-        
-        # Limit the number of time points to prevent excessive memory usage
-        max_time_points = 1000  # Limit to 1000 time points (about 41 days at hourly granularity)
-        total_time_range = int(horizon_end) - int(current_time)
-        
-        if total_time_range / time_granularity > max_time_points:
-            logger.warning(f"Time horizon too large ({total_time_range/3600/24:.1f} days). Limiting operator constraints to {max_time_points} time points.")
-            # Adjust granularity to cover the entire horizon with max_time_points
-            time_granularity = max(3600, int(total_time_range / max_time_points))
-            logger.info(f"Adjusted time granularity to {time_granularity/3600:.1f} hours")
-        
-        time_points = list(range(int(current_time), int(horizon_end), time_granularity))
-        logger.info(f"Created {len(time_points)} time points for operator constraints")
-        
-        for time_point in time_points:
-            # For each time point, create a sum of Boolean variables indicating if a job is active
-            active_operators = []
-            
-            for job in jobs:
-                if 'UNIQUE_JOB_ID' not in job:
-                    continue
-                
-                unique_job_id = job['UNIQUE_JOB_ID']
-                machine_id = job.get('RSC_CODE')
-                num_operators = job.get('NUMBER_OPERATOR', 1)
-                
-                # Skip if job doesn't need operators
-                if num_operators <= 0:
-                    continue
-                
-                if (unique_job_id, machine_id) in start_vars and (unique_job_id, machine_id) in end_vars:
-                    start_var = start_vars[(unique_job_id, machine_id)]
-                    end_var = end_vars[(unique_job_id, machine_id)]
-                    
-                    # Create a Boolean variable that is 1 if the job is active at this time point
-                    is_active = model.NewBoolVar(f'is_active_{unique_job_id}_{time_point}')
-                    
-                    # Job is active if: start_var <= time_point < end_var
-                    model.Add(start_var <= time_point).OnlyEnforceIf(is_active)
-                    model.Add(end_var > time_point).OnlyEnforceIf(is_active)
-                    model.Add(start_var > time_point).OnlyEnforceIf(is_active.Not())
-                    model.Add(end_var <= time_point).OnlyEnforceIf(is_active.Not())
-                    
-                    # Add operator count to the active_operators list
-                    active_operators.append((is_active, num_operators))
-            
-            # Sum the operators used at this time point
-            if active_operators:
-                # Create weighted sum expression for operators used at this time point
-                operators_used = []
-                for i, (is_active, num_ops) in enumerate(active_operators):
-                    temp_var = model.NewIntVar(0, num_ops, f'ops_{time_point}_{i}')
-                    model.Add(temp_var == num_ops).OnlyEnforceIf(is_active)
-                    model.Add(temp_var == 0).OnlyEnforceIf(is_active.Not())
-                    operators_used.append(temp_var)
-                    
-                # Add constraint that sum of operators used must not exceed max_operators
-                model.Add(sum(operators_used) <= max_operators)
-                logger.debug(f"Added operator constraint for time point {datetime.fromtimestamp(time_point).strftime('%Y-%m-%d %H:%M')}")
-    
-    # Handle machine constraints with setup times, BREAK_HOURS, and no-production periods
-    for machine in machines:
-        unique_job_signatures = set()
-        machine_intervals = []
-        machine_jobs = []
-        
-        for job in jobs:
-            if 'UNIQUE_JOB_ID' not in job:
-                continue
-            try:
-                if job.get('RSC_CODE') == machine:
-                    unique_job_id = job['UNIQUE_JOB_ID']
-                    interval_key = (unique_job_id, job.get('RSC_CODE', 'Unknown'))
-                    
-                    if interval_key not in intervals:
-                        logger.warning(f"Missing interval for job {unique_job_id} on machine {machine}. Skipping.")
-                        continue
-                    
-                    job_signature = (
-                        job.get('JOB', ''),
-                        job['UNIQUE_JOB_ID'],
-                        job.get('RSC_CODE', ''),
-                    )
-                    
-                    if job_signature not in unique_job_signatures:
-                        unique_job_signatures.add(job_signature)
-                        machine_intervals.append(intervals[interval_key])
-                        machine_jobs.append(job)
-                    else:
-                        logger.warning(f"Skipping duplicate job {unique_job_id} on machine {machine} with signature {job_signature} to prevent constraint conflicts")
-            except Exception as e:
-                logger.error(f"Error adding job to machine {machine}: {str(e)}")
-                continue
-        
-        if machine_intervals:
-            try:
-                # Add basic no-overlap constraint for the machine
-                model.AddNoOverlap(machine_intervals)
-                logger.info(f"Added no-overlap constraint for machine {machine} with {len(machine_intervals)} jobs")
-                
-                # Add setup time transitions between jobs when available
-                if setup_times:
-                    setup_time_pairs = 0
-                    for i, job1 in enumerate(machine_jobs):
-                        for j, job2 in enumerate(machine_jobs):
-                            if i != j:  # Different jobs
-                                job1_id = job1['UNIQUE_JOB_ID']
-                                job2_id = job2['UNIQUE_JOB_ID']
-                                key = (job1_id, job2_id)
-                                
-                                # If we have setup time for this transition, add a constraint
-                                if key in setup_times and setup_times[key] > 0:
-                                    setup_duration = setup_times[key]
-                                    
-                                    # Create literal variable for the pair
-                                    job1_precedes_job2 = model.NewBoolVar(f"{job1_id} precedes {job2_id}")
-                                    
-                                    # If job1 precedes job2, ensure there's enough setup time
-                                    job1_machine_key = (job1_id, job1.get('RSC_CODE', 'Unknown'))
-                                    job2_machine_key = (job2_id, job2.get('RSC_CODE', 'Unknown'))
-                                    
-                                    # job2 starts at least setup_duration after job1 ends
-                                    time_diff = start_vars[job2_machine_key] - end_vars[job1_machine_key]
-                                    
-                                    # If job1 precedes job2, start2 >= end1 + setup_duration
-                                    # This is modeled as: job1_precedes_job2 => time_diff >= setup_duration
-                                    # 1. If job1_precedes_job2 is True, then time_diff >= setup_duration
-                                    # 2. If job1_precedes_job2 is False, this constraint is inactive
-                                    model.Add(time_diff >= setup_duration).OnlyEnforceIf(job1_precedes_job2)
-                                    
-                                    # For any pair of jobs, exactly one precedes the other
-                                    # (Only when there are overlapping intervals)
-                                    # If job2 precedes job1, no need to enforce setup time here
-                                    # (will be handled in another iteration)
-                                    setup_time_pairs += 1
-                    
-                    if setup_time_pairs > 0:
-                        logger.info(f"Added {setup_time_pairs} setup time transition constraints on machine {machine}")
-                
-                # Add break/no-production constraints if any job has these values
-                # (This is a simple implementation - assumes breaks are taken between jobs)
-                break_time_jobs = [j for j in machine_jobs if j.get('break_time', 0) > 0 or j.get('no_prod_time', 0) > 0]
-                if break_time_jobs:
-                    logger.info(f"Found {len(break_time_jobs)} jobs on machine {machine} requiring breaks or non-production time")
-                    # Could add more complex break scheduling here in future versions
-                
-            except Exception as e:
-                logger.error(f"Failed to add constraints for machine {machine}: {str(e)}")
-
-    if enforce_sequence:
-        logger.info("Enforcing process sequence dependencies (P01->P02->P03)...")
-        added_constraints = 0
-        for family, family_job_list in family_jobs.items():
-            sorted_jobs = sorted(family_job_list, key=lambda x: extract_process_number(x['UNIQUE_JOB_ID']))
-            for i in range(len(sorted_jobs) - 1):
-                job1 = sorted_jobs[i]
-                job2 = sorted_jobs[i + 1]
-                machine_id1 = job1.get('RSC_CODE', 'Unknown')
-                machine_id2 = job2.get('RSC_CODE', 'Unknown')
-                
-                job1_start_time = job1.get('START_DATE_EPOCH', 0)
-                job2_start_time = job2.get('START_DATE_EPOCH', 0)
-                
-                if job1_start_time > 0 and job2_start_time > 0 and job1_start_time >= job2_start_time:
-                    logger.warning(f"Potential sequence conflict: {job1['UNIQUE_JOB_ID']} (starts {datetime.fromtimestamp(job1_start_time).strftime('%Y-%m-%d %H:%M')}) " 
-                                  f"should finish before {job2['UNIQUE_JOB_ID']} (starts {datetime.fromtimestamp(job2_start_time).strftime('%Y-%m-%d %H:%M')})")
-                    logger.warning(f"Skipping sequence constraint to avoid infeasibility")
-                    continue
-                
-                if job1['UNIQUE_JOB_ID'] == job2['UNIQUE_JOB_ID']:
-                    logger.warning(f"Skipping invalid self-dependency for {job1['UNIQUE_JOB_ID']}")
-                    continue
-                
-                proc1 = extract_process_number(job1['UNIQUE_JOB_ID'])
-                proc2 = extract_process_number(job2['UNIQUE_JOB_ID'])
-                
-                if proc2 != proc1 + 1:
-                    logger.warning(f"Process numbers not sequential: {job1['UNIQUE_JOB_ID']} ({proc1}) → {job2['UNIQUE_JOB_ID']} ({proc2})")
-                
-                job1_signature = (
-                    job1.get('JOB', ''),
-                    job1['UNIQUE_JOB_ID'],
-                    job1.get('RSC_LOCATION', ''),
-                    job1.get('RSC_CODE', '')
-                )
-                
-                job2_signature = (
-                    job2.get('JOB', ''),
-                    job2['UNIQUE_JOB_ID'],
-                    job2.get('RSC_LOCATION', ''),
-                    job2.get('RSC_CODE', '')
-                )
-                
-                model.Add(end_vars[(job1['UNIQUE_JOB_ID'], machine_id1)] <= 
-                         start_vars[(job2['UNIQUE_JOB_ID'], machine_id2)])
-                added_constraints += 1
-                logger.info(f"Added sequence constraint: {job1['UNIQUE_JOB_ID']} must finish before {job2['UNIQUE_JOB_ID']} starts")
-        logger.info(f"Added {added_constraints} explicit sequence constraints")
-
-    makespan = model.NewIntVar(current_time, horizon_end, 'makespan')
-    for machine in machines:
-        machine_ends = [end_vars[(job['UNIQUE_JOB_ID'], job.get('RSC_CODE', 'Unknown'))] 
-                      for job in jobs 
-                      if job.get('RSC_CODE') == machine and 'UNIQUE_JOB_ID' in job]
-        if machine_ends:
-            model.AddMaxEquality(makespan, machine_ends)
-
-    # Enhanced objective function with production targets and breaks
-    objective_terms = [makespan]
-    
-    # Track additional objective components 
-    production_targets_count = 0
-    break_time_count = 0
-    setup_time_count = 0
-    
-    for job in jobs:
-        if 'UNIQUE_JOB_ID' not in job:
-            continue
-            
-        unique_job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_CODE')
-        due_time = job.get('LCD_DATE_EPOCH', 0)
-        priority = job['PRIORITY']
-        
-        # Basic delay cost (standard objective component)
-        if due_time > 0:
-            delay = model.NewIntVar(0, horizon_end - due_time, f'delay_{machine_id}_{unique_job_id}')
-            model.AddMaxEquality(delay, [0, end_vars[(unique_job_id, machine_id)] - due_time])
-            priority_weight = 6 - priority  # Invert priority (higher priority = lower weight)
-            objective_terms.append(delay * priority_weight * 10)
-        
-        # Add production target and efficiency components
-        if 'JOB_QUANTITY' in job and job.get('JOB_QUANTITY', 0) > 0 and \
-           'EXPECT_OUTPUT_PER_HOUR' in job and job.get('EXPECT_OUTPUT_PER_HOUR', 0) > 0:
-            # Create cost for jobs with specific production targets
-            # This encourages the scheduler to group similar production runs
-            job_quantity = job.get('JOB_QUANTITY', 0)
-            output_rate = job.get('EXPECT_OUTPUT_PER_HOUR', 0)
-            
-            if job_quantity > 0 and output_rate > 0:
-                # Small bonus for jobs with efficient production rates
-                # This gives slightly higher priority to more efficient jobs
-                production_efficiency = min(5, int(output_rate / 10))  # Scale to reasonable value
-                production_bonus = production_efficiency * priority
-                production_targets_count += 1
-                
-                # The higher the production_bonus, the more we want to prioritize this job
-                # So we subtract it from the objective (minimizing objective value)
-                objective_terms.append(-1 * production_bonus)
-        
-        # Penalize jobs with long setup times slightly to encourage grouping similar job types
-        if 'setup_time' in job and job['setup_time'] > 0:
-            setup_penalty = min(5, int(job['setup_time'] / 1800))  # Scale setup time (30 min = 1 unit)
-            setup_time_count += 1
-            objective_terms.append(setup_penalty)
-        
-        # Account for break times in scheduling optimization
-        if 'break_time' in job and job['break_time'] > 0:
-            break_penalty = min(3, int(job['break_time'] / 3600))  # Scale break time (1 hour = 1 unit)
-            break_time_count += 1
-            objective_terms.append(break_penalty)
-    
-    logger.info(f"Objective function includes: ")
-    logger.info(f"  - Basic makespan and delay penalties")
-    if production_targets_count > 0:
-        logger.info(f"  - Production targets and efficiency bonuses for {production_targets_count} jobs")
-    if setup_time_count > 0:
-        logger.info(f"  - Setup time penalties for {setup_time_count} jobs")
-    if break_time_count > 0:
-        logger.info(f"  - Break time penalties for {break_time_count} jobs")
-        
-    if objective_terms:
-        model.Minimize(sum(objective_terms))
-
-    logger.info(f"CP-SAT Model created with {len(jobs)} jobs")
-    logger.info(f"Objective components: makespan, {len(jobs)} priority-weighted delays")
-    logger.info(f"Starting CP-SAT solver with {time_limit_seconds} seconds time limit")
-
-    status = solver.Solve(model)
-    solve_time = time.time() - start_time
-
-    if status == cp_model.OPTIMAL:
-        logger.info(f"Optimal solution found in {solve_time:.2f} seconds")
-    elif status == cp_model.FEASIBLE:
-        logger.info(f"Feasible solution found in {solve_time:.2f} seconds")
-    elif status == cp_model.INFEASIBLE:
-        logger.error("Problem is infeasible with CP-SAT solver")
-        logger.warning("Falling back to greedy scheduler due to constraint conflicts")
-        from greedy import greedy_schedule
-        return greedy_schedule(jobs, machines, setup_times)
-    else:
-        logger.error(f"No solution found. Status: {solver.StatusName(status)}")
+    if not jobs:
+        logging.warning("No jobs to schedule.")
         return {}
-
-    # Create enhanced schedule with additional parameters
-    schedule = {}
-    total_jobs = 0
-    total_setup_time = 0
-    total_break_time = 0
+    
+    if not machines:
+        logging.warning("No machines available for scheduling.")
+        return {}
+    
+    logging.info(f"Scheduling {len(jobs)} jobs on {len(machines)} machines with CP-SAT solver")
+    logging.info(f"Using max_operators={max_operators}")
+    
+    model = cp_model.CpModel()
+    
+    # Convert jobs to a more convenient format and calculate horizon
+    # Use relative hours from reference time instead of absolute epoch
+    current_time = datetime_to_epoch(datetime.now())
+    horizon_start = current_time
+    horizon_end = current_time
     
     for job in jobs:
-        if 'UNIQUE_JOB_ID' not in job:
-            continue
-            
-        unique_job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_CODE')
-        start = solver.Value(start_vars[(unique_job_id, machine_id)])
-        end = solver.Value(end_vars[(unique_job_id, machine_id)])
-        priority = job['PRIORITY']
-        total_jobs += 1
-
-        # Handle START_DATE constraints
-        start_date_epoch = job.get('START_DATE_EPOCH', job.get('START_DATE _EPOCH'))
-        if start_date_epoch is not None and start_date_epoch > current_time:
-            if start != start_date_epoch:
-                logger.warning(f"⚠️ Job {unique_job_id} scheduled at {datetime.fromtimestamp(start).strftime('%Y-%m-%d %H:%M')} " 
-                              f"instead of requested START_DATE={datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')}")
+        if 'LCD_DATE_EPOCH' in job and job['LCD_DATE_EPOCH']:
+            horizon_end = max(horizon_end, job['LCD_DATE_EPOCH'])
+        
+        if 'processing_time' not in job or job['processing_time'] is None:
+            if 'HOURS_NEED' in job and job['HOURS_NEED'] is not None:
+                job['processing_time'] = job['HOURS_NEED'] * 3600
             else:
-                logger.info(f"✅ Job {unique_job_id} scheduled exactly at requested START_DATE")
-        
-        # Store setup time, break time, and other additional parameters
-        setup_time = job.get('setup_time', 0)
-        break_time = job.get('break_time', 0) 
-        no_prod_time = job.get('no_prod_time', 0)
-        job_quantity = job.get('JOB_QUANTITY')
-        output_rate = job.get('EXPECT_OUTPUT_PER_HOUR')
-        
-        # Track total setup and break times
-        if setup_time > 0:
-            total_setup_time += setup_time
-        if break_time > 0 or no_prod_time > 0:
-            total_break_time += break_time + no_prod_time
-        
-        # Store timing information in the job
-        job['START_TIME'] = start
-        job['END_TIME'] = end
-        
-        # Create a dictionary of additional parameters to store with the schedule
-        additional_params = {
-            'setup_time': setup_time,
-            'break_time': break_time,
-            'no_prod_time': no_prod_time,
-            'job_quantity': job_quantity,
-            'output_rate': output_rate
-        }
-        
-        # Add job to schedule with additional parameters
-        if machine_id not in schedule:
-            schedule[machine_id] = []
-        schedule[machine_id].append((unique_job_id, start, end, priority, additional_params))
+                logging.warning(f"Job {job.get('UNIQUE_JOB_ID', 'unknown')} has no processing time!")
+                job['processing_time'] = 3600  # Default of 1 hour
     
-    # Log summary of additional parameters usage
-    if total_setup_time > 0:
-        logger.info(f"Total setup time in schedule: {total_setup_time/3600:.2f} hours")
-    if total_break_time > 0:
-        logger.info(f"Total break/no-production time in schedule: {total_break_time/3600:.2f} hours")
-
-    for machine in schedule:
-        schedule[machine].sort(key=lambda x: x[1])  # Sort by start time
-
-    logger.info(f"Scheduled {sum(len(jobs) for jobs in schedule.values())} jobs on {len(schedule)} machines")
-    logger.info(f"Total jobs scheduled: {total_jobs}")
-
-    # Print schedule summary with additional parameters
-    for machine, tasks in schedule.items():
-        machine_setup_time = sum(task[4].get('setup_time', 0) for task in tasks)
-        machine_break_time = sum(task[4].get('break_time', 0) + task[4].get('no_prod_time', 0) for task in tasks)
+    # Calculate horizon in relative hours to avoid very large numbers
+    horizon_start_hours = epoch_to_relative_hours(horizon_start)
+    horizon_end_hours = epoch_to_relative_hours(horizon_end)
+    
+    logging.info(f"Planning horizon: {horizon_start_hours:.1f} to {horizon_end_hours:.1f} relative hours")
+    logging.info(f"Horizon span: {horizon_end_hours - horizon_start_hours:.1f} hours")
+    
+    # Limit the number of time points to prevent memory issues
+    MAX_TIME_POINTS = 1000
+    time_granularity = 1  # Default to hourly granularity
+    
+    # If the horizon is too large, adjust the granularity
+    if horizon_end_hours - horizon_start_hours > MAX_TIME_POINTS:
+        time_granularity = math.ceil((horizon_end_hours - horizon_start_hours) / MAX_TIME_POINTS)
+        logging.warning(f"Horizon too large ({horizon_end_hours - horizon_start_hours:.1f} hours), "
+                      f"adjusting granularity to {time_granularity}-hour intervals")
+    
+    # Create time points at the specified granularity
+    time_points = list(range(
+        int(horizon_start_hours), 
+        int(horizon_end_hours) + 1, 
+        time_granularity
+    ))
+    
+    logging.info(f"Created {len(time_points)} time points at {time_granularity}-hour granularity")
+    
+    # Create variables for each job
+    all_jobs = {}  # Dictionary mapping job ID to (start_var, end_var, interval_var)
+    job_variables = []
+    machine_to_intervals = defaultdict(list)  # Dictionary mapping machine ID to list of interval variables
+    
+    # Process sequence handling
+    job_families = defaultdict(list)
+    if enforce_sequence:
+        for job in jobs:
+            job_code = job.get('JOB')
+            if job_code:
+                job_families[job_code].append(job)
         
-        if machine_setup_time > 0 or machine_break_time > 0:
-            logger.info(f"Machine {machine} summary:")
-            if machine_setup_time > 0:
-                logger.info(f"  Setup time: {machine_setup_time/3600:.2f} hours")
-            if machine_break_time > 0:
-                logger.info(f"  Break/No-prod time: {machine_break_time/3600:.2f} hours")
-
-    family_time_shifts = {}
-    scheduled_times = {}
+        for family_id, family_jobs in job_families.items():
+            if len(family_jobs) > 1:
+                # Sort by process code to establish sequence
+                family_jobs.sort(key=lambda j: j.get('PROCESS_CODE', 0))
+                logging.info(f"Job family {family_id} has {len(family_jobs)} processes in sequence")
     
-    # Extract scheduled times from the updated schedule format
-    for machine, tasks in schedule.items():
-        for task in tasks:
-            unique_job_id, start, end = task[0], task[1], task[2]
-            scheduled_times[unique_job_id] = (start, end)
-    
-    for family, constrained_jobs in family_constraints.items():
-        time_shifts = []
-        for job in constrained_jobs:
-            unique_job_id = job['UNIQUE_JOB_ID']
-            if unique_job_id in scheduled_times:
-                scheduled_start = scheduled_times[unique_job_id][0]
-                requested_start = job['START_DATE_EPOCH']
-                time_shift = scheduled_start - requested_start
-                time_shifts.append(time_shift)
-        
-        if time_shifts:
-            family_time_shifts[family] = max(time_shifts, key=abs)
-            logger.info(f"Family {family} needs time shift of {family_time_shifts[family]/3600:.1f} hours")
-    
-    for family, time_shift in family_time_shifts.items():
-        if abs(time_shift) < 60:
+    # Create variables for each job
+    for job in jobs:
+        unique_job_id = job.get('UNIQUE_JOB_ID')
+        if not unique_job_id:
+            logging.warning(f"Job has no UNIQUE_JOB_ID field: {job}")
             continue
+        
+        machine_id = job.get('RSC_CODE')
+        if not machine_id:
+            logging.warning(f"Job {unique_job_id} has no machine assignment (RSC_CODE)")
+            continue
+        
+        if machine_id not in machines:
+            logging.warning(f"Job {unique_job_id} assigned to unknown machine {machine_id}")
+            continue
+        
+        proc_time = job.get('processing_time')
+        if not proc_time or proc_time <= 0:
+            logging.warning(f"Job {unique_job_id} has invalid processing time: {proc_time}")
+            proc_time = 3600  # Default to 1 hour
+        
+        # Convert times to relative hours
+        start_date_epoch = job.get('START_DATE_EPOCH')
+        start_min = epoch_to_relative_hours(current_time)
+        
+        if start_date_epoch is not None:
+            # If START_DATE_EPOCH is specified, job must start exactly at that time
+            start_rel_hours = epoch_to_relative_hours(start_date_epoch)
             
-        for job in family_jobs[family]:
-            job['family_time_shift'] = time_shift
-            logger.info(f"Added time shift of {time_shift/3600:.1f} hours to job {job['UNIQUE_JOB_ID']}")
-
-    return schedule
+            # Format for logging
+            start_date_dt = epoch_to_datetime(start_date_epoch)
+            start_date_str = format_datetime_for_display(start_date_dt) if start_date_dt else "INVALID DATE"
+            
+            logging.info(f"Job {unique_job_id} must start exactly at {start_date_str} (relative hour {start_rel_hours:.1f})")
+            start_min = start_rel_hours
+            start_max = start_rel_hours
+        else:
+            # Otherwise, job can start anytime after current time
+            start_max = epoch_to_relative_hours(horizon_end)
+        
+        # Convert job durations from seconds to hours for variable creation
+        proc_time_hours = proc_time / 3600
+        
+        # Create variables for the job
+        start_var = model.NewIntVar(
+            int(start_min), 
+            int(start_max), 
+            f'start_{unique_job_id}'
+        )
+        
+        end_var = model.NewIntVar(
+            int(start_min + proc_time_hours), 
+            int(start_max + proc_time_hours), 
+            f'end_{unique_job_id}'
+        )
+        
+        interval_var = model.NewIntervalVar(
+            start_var, 
+            model.NewIntVar(int(proc_time_hours), int(proc_time_hours), f'duration_{unique_job_id}'), 
+            end_var, 
+            f'interval_{unique_job_id}'
+        )
+        
+        # Store the variables for later use
+        all_jobs[unique_job_id] = (start_var, end_var, interval_var)
+        job_variables.append((unique_job_id, start_var, end_var, interval_var, machine_id, proc_time_hours))
+        machine_to_intervals[machine_id].append(interval_var)
+    
+    # Enforce no overlap constraints for each machine
+    for machine_id, intervals in machine_to_intervals.items():
+        if intervals:
+            model.AddNoOverlap(intervals)
+            logging.info(f"Added no overlap constraint for machine {machine_id} ({len(intervals)} jobs)")
+    
+    # Enforce process sequence dependencies if required
+    if enforce_sequence:
+        for job_code, family_jobs in job_families.items():
+            if len(family_jobs) <= 1:
+                continue
+                
+            # Sort jobs by process code
+            family_jobs.sort(key=lambda j: j.get('PROCESS_CODE', 0))
+            
+            # Add sequence constraints
+            for i in range(len(family_jobs) - 1):
+                job1 = family_jobs[i]
+                job2 = family_jobs[i + 1]
+                
+                job1_id = job1.get('UNIQUE_JOB_ID')
+                job2_id = job2.get('UNIQUE_JOB_ID')
+                
+                if job1_id in all_jobs and job2_id in all_jobs:
+                    _, end_var1, _ = all_jobs[job1_id]
+                    start_var2, _, _ = all_jobs[job2_id]
+                    
+                    model.Add(start_var2 >= end_var1)
+                    logging.info(f"Added sequence constraint: {job1_id} must finish before {job2_id}")
+    
+    # Enforce operator constraints if specified
+    if max_operators > 0:
+        logging.info(f"Adding operator constraints: max_operators={max_operators}")
+        
+        # For each time point, track which jobs are running
+        for t in time_points:
+            # Create Boolean variables for whether each job is active at time t
+            active_jobs = []
+            
+            for job_id, start_var, end_var, _, _, _ in job_variables:
+                is_active = model.NewBoolVar(f'active_{job_id}_at_{t}')
+                
+                # Job is active if start_var <= t < end_var
+                model.Add(start_var <= t).OnlyEnforceIf(is_active)
+                model.Add(end_var > t).OnlyEnforceIf(is_active)
+                
+                # Set is_active to false if the above condition is not met
+                model.Add(start_var > t).OnlyEnforceIf(is_active.Not())
+                model.Add(end_var <= t).OnlyEnforceIf(is_active.Not())
+                
+                active_jobs.append(is_active)
+            
+            # Sum the number of active jobs at this time point
+            if active_jobs:
+                model.Add(sum(active_jobs) <= max_operators)
+                logging.info(f"Added operator constraint at time {t}: max {max_operators} operators")
+    
+    # Minimize makespan (maximum completion time)
+    makespan = model.NewIntVar(0, 10000, 'makespan')
+    for job_id, job_tuple in all_jobs.items():
+        _, end_var, _ = job_tuple
+        model.Add(makespan >= end_var)
+    
+    # Set up the solver
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = time_limit_seconds
+    
+    # Solve the model to minimize makespan
+    model.Minimize(makespan)
+    status = solver.Solve(model)
+    
+    # Check if a solution was found
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        logging.info(f"CP-SAT solver found {'optimal' if status == cp_model.OPTIMAL else 'feasible'} solution")
+        
+        # Retrieve and return the schedule
+        schedule = defaultdict(list)
+        for job_id, (start_var, end_var, _), machine_id, proc_time_hours in [
+            (job_id, all_jobs[job_id], machine_id, proc_time_hours) 
+            for job_id, _, _, _, machine_id, proc_time_hours in job_variables
+        ]:
+            # Convert relative hours back to epoch times for output
+            start_rel = solver.Value(start_var)
+            end_rel = solver.Value(end_var)
+            
+            start_epoch = relative_hours_to_epoch(start_rel)
+            end_epoch = relative_hours_to_epoch(end_rel)
+            
+            # For logging and debugging
+            start_dt = epoch_to_datetime(start_epoch)
+            end_dt = epoch_to_datetime(end_epoch)
+            
+            schedule[machine_id].append((job_id, start_epoch, end_epoch, 0))
+            
+            # Format for logging
+            start_str = format_datetime_for_display(start_dt) if start_dt else "INVALID DATE"
+            end_str = format_datetime_for_display(end_dt) if end_dt else "INVALID DATE"
+            
+            logging.info(f"Scheduled {job_id} on {machine_id}: {start_str} to {end_str} ({proc_time_hours:.1f} hours)")
+            
+            # Update the job object with the scheduled times
+            for job in jobs:
+                if job.get('UNIQUE_JOB_ID') == job_id:
+                    job['START_TIME'] = start_epoch
+                    job['END_TIME'] = end_epoch
+                    break
+        
+        return dict(schedule)
+    else:
+        logging.error(f"CP-SAT solver failed to find a solution. Status: {solver.StatusName(status)}")
+        return None
 
 if __name__ == "__main__":
     from ingest_data import load_jobs_planning_data

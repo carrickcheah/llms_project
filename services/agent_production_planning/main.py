@@ -13,6 +13,14 @@ from greedy import greedy_schedule
 from chart import create_interactive_gantt
 from chart_two import export_schedule_html
 from setup_times import add_schedule_times_and_buffer
+from time_utils import (
+    initialize_reference_time, 
+    epoch_to_datetime, 
+    datetime_to_epoch,
+    format_datetime_for_display,
+    convert_job_times_to_relative,
+    convert_job_times_to_epoch
+)
 
 
 def main():
@@ -49,7 +57,14 @@ def main():
     print(f"Configuration: file={args.file}, max_jobs={args.max_jobs}, force_greedy={args.force_greedy}, "
           f"output={args.output}, enforce_sequence={args.enforce_sequence}, max_operators={args.max_operators}")
 
-    current_time = int(datetime.now().timestamp())
+    # Initialize our reference time for relative time calculations
+    reference_time = initialize_reference_time()
+    logger.info(f"Using reference time: {reference_time.isoformat()} for relative time calculations")
+    
+    # Use datetime objects instead of epoch time when possible
+    current_time_dt = datetime.now()
+    current_time = datetime_to_epoch(current_time_dt)
+    
     logger.info(f"Loading job data from {args.file}...")
     try:
         jobs, machines, setup_times = load_jobs_planning_data(args.file)
@@ -59,6 +74,8 @@ def main():
 
     for job in jobs:
         job['UNIQUE_JOB_ID'] = f"{job['JOB']}_{job['PROCESS_CODE']}"
+        # Convert epoch times to relative time and ISO for better handling
+        convert_job_times_to_relative(job)
 
     jobs.sort(key=lambda job: job.get('LCD_DATE_EPOCH', 0))
     logger.info(f"Sorted {len(jobs)} jobs by LCD_DATE (First In, First Out)")
@@ -69,9 +86,13 @@ def main():
 
     logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines")
 
+    # Use datetime objects and ISO strings for datetime comparisons when possible
     start_date_jobs = [job for job in jobs if 
-                      ('START_DATE_EPOCH' in job and job.get('START_DATE_EPOCH') is not None and not pd.isna(job.get('START_DATE_EPOCH')) and job.get('START_DATE_EPOCH') > current_time) or 
-                      ('START_DATE _EPOCH' in job and job.get('START_DATE _EPOCH') is not None and not pd.isna(job.get('START_DATE _EPOCH')) and job.get('START_DATE _EPOCH') > current_time)]
+                      ('START_DATE_EPOCH' in job and job.get('START_DATE_EPOCH') is not None and 
+                       not pd.isna(job.get('START_DATE_EPOCH')) and job.get('START_DATE_EPOCH') > current_time) or 
+                      ('START_DATE _EPOCH' in job and job.get('START_DATE _EPOCH') is not None and 
+                       not pd.isna(job.get('START_DATE _EPOCH')) and job.get('START_DATE _EPOCH') > current_time)]
+    
     if start_date_jobs:
         logger.info(f"Found {len(start_date_jobs)} jobs with START_DATE constraints:")
         for job in start_date_jobs:
@@ -81,7 +102,13 @@ def main():
             elif 'START_DATE _EPOCH' in job and job.get('START_DATE _EPOCH') is not None and not pd.isna(job.get('START_DATE _EPOCH')):
                 start_date_epoch = job.get('START_DATE _EPOCH')
                 
-            start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M') if start_date_epoch is not None else 'INVALID DATE'
+            # Use ISO format for display
+            start_date = "INVALID DATE"
+            if start_date_epoch is not None:
+                dt = epoch_to_datetime(start_date_epoch)
+                if dt:
+                    start_date = format_datetime_for_display(dt)
+            
             resource_location = job.get('RSC_CODE')
             logger.info(f"  Job {job['UNIQUE_JOB_ID']} (Resource: {resource_location}): MUST start EXACTLY at {start_date}")
         
@@ -96,7 +123,10 @@ def main():
             
             if start_date_epoch is not None:
                 if start_date_epoch > current_time:
-                    logger.info(f"ENFORCING START_DATE {datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')} for {job['UNIQUE_JOB_ID']}")
+                    dt = epoch_to_datetime(start_date_epoch)
+                    if dt:
+                        start_date_str = format_datetime_for_display(dt)
+                        logger.info(f"ENFORCING START_DATE {start_date_str} for {job['UNIQUE_JOB_ID']}")
             else:
                 if 'START_DATE_EPOCH' in job:
                     del job['START_DATE_EPOCH']
@@ -161,6 +191,7 @@ def main():
         logger.info("Falling back to greedy scheduler...")
         greedy_start_time = time.perf_counter()
         try:
+            # Use ISO strings for datetime comparisons when possible
             start_date_jobs = [job for job in jobs if 
                               ('START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH']) and job['START_DATE_EPOCH'] > current_time) or
                               ('START_DATE _EPOCH' in job and job['START_DATE _EPOCH'] is not None and not pd.isna(job['START_DATE _EPOCH']) and job['START_DATE _EPOCH'] > current_time)]
@@ -173,7 +204,9 @@ def main():
                         start_date_epoch = job.get('START_DATE _EPOCH')
                         
                     if start_date_epoch is not None and not pd.isna(start_date_epoch):
-                        start_date = datetime.fromtimestamp(start_date_epoch).strftime('%Y-%m-%d %H:%M')
+                        # Use ISO format for display
+                        dt = epoch_to_datetime(start_date_epoch)
+                        start_date = format_datetime_for_display(dt) if dt else "INVALID DATE"
                         logger.info(f"  Constraint: {job['UNIQUE_JOB_ID']} must start EXACTLY at {start_date}")
             
             valid_jobs = []
@@ -223,151 +256,201 @@ def main():
         for task in tasks:
             unique_job_id, start, end, priority = task
             
-            job_entry = next((j for j in jobs if j['UNIQUE_JOB_ID'] == unique_job_id), None)
-            start_time = job_entry['START_TIME'] if job_entry and 'START_TIME' in job_entry else start
-            end_time = job_entry['END_TIME'] if job_entry and 'END_TIME' in job_entry else end
-            
-            resource_location = job_entry.get('RSC_CODE', machine)
+            # Convert epoch timestamps to ISO strings and relative times for display
+            start_dt = epoch_to_datetime(start)
+            end_dt = epoch_to_datetime(end)
             
             flat_schedule.append({
-                'UNIQUE_JOB_ID': unique_job_id,
-                'RSC_CODE': resource_location,
-                'START_TIME': start_time,
-                'END_TIME': end_time,
-                'PRIORITY': priority
+                'machine': machine,
+                'job_id': unique_job_id,
+                'start': start,  # Keep epoch for compatibility
+                'end': end,      # Keep epoch for compatibility
+                'start_iso': start_dt.isoformat() if start_dt else None,
+                'end_iso': end_dt.isoformat() if end_dt else None,
+                'priority': priority
             })
-
-    df_schedule = pd.DataFrame(flat_schedule)
-    latest_completion = df_schedule.groupby('UNIQUE_JOB_ID')['END_TIME'].max().to_dict()
-    for entry in flat_schedule:
-        entry['LATEST_COMPLETION_TIME'] = latest_completion[entry['UNIQUE_JOB_ID']]
-
-    logger.info("Computed schedule with START_TIME, END_TIME, and LATEST_COMPLETION_TIME:")
-    logger.info(df_schedule.to_string())
-
-    try:
-        success = create_interactive_gantt(schedule, jobs, args.output)
-        if not success:
-            logger.error("Failed to generate Gantt chart.")
-            return
-    except Exception as e:
-        logger.error(f"Error generating Gantt chart: {e}")
-        return
-
-    total_jobs = sum(len(tasks) for tasks in schedule.values())
-    machines_used = len([m for m, tasks in schedule.items() if tasks])
-    total_duration = sum((end - start) for machine, tasks in schedule.items() for _, start, end, _ in tasks)
-    avg_machine_load = total_duration / len(machines) if machines else 0
-    most_loaded_machine = max(schedule.items(), key=lambda x: sum(end - start for _, start, end, _ in x[1]), default=(None, []))[0]
-    most_loaded_time = sum(end - start for _, start, end, _ in schedule.get(most_loaded_machine, []))
-    schedule_span = max((end for machine, tasks in schedule.items() for _, _, end, _ in tasks), default=current_time) - \
-                    min((start for machine, tasks in schedule.items() for _, start, _, _ in tasks), default=current_time)
     
-    jobs_per_machine = {machine: len(tasks) for machine, tasks in schedule.items() if tasks}
-
-    jobs_with_buffer = [job for job in jobs if 'BAL_HR' in job]
-    if jobs_with_buffer:
-        avg_buffer = sum(job['BAL_HR'] for job in jobs_with_buffer) / len(jobs_with_buffer)
-        min_buffer = min(job['BAL_HR'] for job in jobs_with_buffer)
-        max_buffer = max(job['BAL_HR'] for job in jobs_with_buffer)
-        critical_jobs = [job for job in jobs_with_buffer if job['BAL_HR'] < 8]
-        warning_jobs = [job for job in jobs_with_buffer if 8 <= job['BAL_HR'] < 24]
+    df = pd.DataFrame(flat_schedule)
+    
+    # Use ISO strings for display
+    for job in jobs:
+        if 'START_DATE_EPOCH' in job:
+            dt = epoch_to_datetime(job['START_DATE_EPOCH'])
+            if dt:
+                formatted_date = format_datetime_for_display(dt)
+                logger.info(f"Input Job {job['UNIQUE_JOB_ID']}: START_DATE_EPOCH = {job['START_DATE_EPOCH']} -> {formatted_date}")
+    
+    # Find START_DATE constraints that weren't respected
+    violations = []
+    for job in jobs:
+        if 'UNIQUE_JOB_ID' not in job:
+            continue
+            
+        start_date_epoch = job.get('START_DATE_EPOCH')
+        if start_date_epoch is None:
+            continue
+            
+        job_id = job['UNIQUE_JOB_ID']
+        scheduled_jobs = [task for task in flat_schedule if task['job_id'] == job_id]
         
-        print("\nBuffer statistics:")
-        print(f"- Average buffer time: {avg_buffer:.1f} hours")
-        print(f"- Min buffer time: {min_buffer:.1f} hours")
-        print(f"- Max buffer time: {max_buffer:.1f} hours")
+        if not scheduled_jobs:
+            logger.warning(f"Job {job_id} has START_DATE constraint but wasn't scheduled")
+            continue
+            
+        scheduled_job = scheduled_jobs[0]
+        scheduled_start = scheduled_job['start']
+        
+        if scheduled_start != start_date_epoch:
+            # Use ISO strings for better readability
+            scheduled_dt = epoch_to_datetime(scheduled_start)
+            expected_dt = epoch_to_datetime(start_date_epoch)
+            
+            violations.append({
+                'job_id': job_id,
+                'machine': scheduled_job['machine'],
+                'expected': format_datetime_for_display(expected_dt) if expected_dt else "INVALID DATE",
+                'actual': format_datetime_for_display(scheduled_dt) if scheduled_dt else "INVALID DATE"
+            })
+    
+    if violations:
+        logger.warning(f"Found {len(violations)} START_DATE constraint violations:")
+        for v in violations:
+            logger.warning(f"  Job {v['job_id']} on {v['machine']}: Expected {v['expected']}, got {v['actual']}")
+    else:
+        logger.info("All future START_DATE constraints were respected by the scheduler")
+    
+    # Calculate statistics about the schedule
+    machines_used = len(schedule)
+    total_machines = len(machines)
+    utilization_pct = machines_used / total_machines * 100 if total_machines > 0 else 0
+    
+    # Find horizon end - use datetime objects for better handling
+    all_end_times = [task['end'] for task in flat_schedule]
+    if all_end_times:
+        horizon_end_epoch = max(all_end_times)
+        horizon_end_dt = epoch_to_datetime(horizon_end_epoch)
+    else:
+        horizon_end_dt = None
+    
+    all_start_times = [task['start'] for task in flat_schedule]
+    if all_start_times:
+        horizon_start_epoch = min(all_start_times)
+        horizon_start_dt = epoch_to_datetime(horizon_start_epoch)
+    else:
+        horizon_start_dt = None
+    
+    # Use datetime objects for time calculations
+    total_hours = sum(task['end'] - task['start'] for task in flat_schedule) / 3600
+    span_hours = (horizon_end_epoch - horizon_start_epoch) / 3600 if horizon_end_epoch and horizon_start_epoch else 0
+    
+    # Generate the Gantt chart
+    try:
+        create_interactive_gantt(schedule, jobs, args.output)
+        logger.info(f"Saving Gantt chart to: {os.path.abspath(args.output)}")
+        logger.info(f"Interactive Gantt chart saved to: {os.path.abspath(args.output)}")
+    except Exception as e:
+        logger.error(f"Error creating Gantt chart: {e}")
+    
+    # Output detailed statistics
+    print("\nBuffer statistics:")
+    buffer_hours = [job.get('buffer_hours', 0) for job in jobs if 'buffer_hours' in job]
+    if buffer_hours:
+        print(f"- Average buffer time: {sum(buffer_hours) / len(buffer_hours):.1f} hours")
+        print(f"- Min buffer time: {min(buffer_hours):.1f} hours")
+        print(f"- Max buffer time: {max(buffer_hours):.1f} hours")
+        
+        critical_jobs = [job for job in jobs if job.get('buffer_hours', float('inf')) < 8]
+        warning_jobs = [job for job in jobs if 8 <= job.get('buffer_hours', float('inf')) < 24]
+        
         print(f"- Critical jobs (<8h buffer): {len(critical_jobs)}")
         print(f"- Warning jobs (<24h buffer): {len(warning_jobs)}")
         
         if critical_jobs:
             print("\nCritical jobs with minimal buffer:")
-            for job in sorted(critical_jobs, key=lambda x: x['BAL_HR'])[:5]:
-                unique_job_id = job['UNIQUE_JOB_ID']
-                resource_location = job.get('RSC_CODE', 'Unknown')
-                buffer = job['BAL_HR']
-                lcd_epoch = job.get('LCD_DATE_EPOCH', 0)
-                dt = datetime.fromtimestamp(lcd_epoch)
-                due_date = dt.strftime('%Y-%m-%d %H:%M')
-                orig_date = ""
-                for j in jobs:
-                    if j['UNIQUE_JOB_ID'] == unique_job_id:
-                        if 'LCD_DATE' in j and pd.notna(j['LCD_DATE']):
-                            if isinstance(j['LCD_DATE'], str):
-                                orig_date = f" (original={j['LCD_DATE']})"
-                            else:
-                                orig_date = f" (original={j['LCD_DATE'].strftime('%Y-%m-%d %H:%M')})"
-                print(f"  Debug - Job {unique_job_id}: LCD_DATE_EPOCH={lcd_epoch}, formatted={due_date}{orig_date}")
-                print(f"  {unique_job_id} on {resource_location}: {buffer:.1f} hours buffer, due {due_date}")
-
+            for job in sorted(critical_jobs, key=lambda x: x.get('buffer_hours', 0))[:5]:  # Show 5 most critical
+                lcd_date_epoch = job.get('LCD_DATE_EPOCH')
+                lcd_date_str = "unknown"
+                if lcd_date_epoch:
+                    dt = epoch_to_datetime(lcd_date_epoch)
+                    if dt:
+                        lcd_date_str = format_datetime_for_display(dt)
+                        
+                original_str = "unknown"
+                if 'LCD_DATE_ORIGINAL' in job:
+                    original_str = job['LCD_DATE_ORIGINAL']
+                    
+                print(f"  Debug - Job {job['UNIQUE_JOB_ID']}: LCD_DATE_EPOCH={lcd_date_epoch}, formatted={lcd_date_str} (original={original_str})")
+                
+                machine = next((m for m, tasks in schedule.items() 
+                              for task_id, _, _, _ in tasks if task_id == job['UNIQUE_JOB_ID']), "Unknown")
+                              
+                end_time = job.get('END_TIME')
+                if end_time:
+                    end_dt = epoch_to_datetime(end_time)
+                    end_str = format_datetime_for_display(end_dt) if end_dt else "unknown"
+                else:
+                    end_str = "unknown"
+                    
+                print(f"  {job['UNIQUE_JOB_ID']} on {machine}: {job.get('buffer_hours', 0):.1f} hours buffer, due {lcd_date_str}")
+    
     print("\nSchedule statistics:")
-    print(f"- Total jobs scheduled: {total_jobs}")
-    print(f"- Machines utilized: {machines_used}/{len(machines)} ({machines_used/len(machines)*100:.1f}%)")
-    print(f"- Average machine load: {avg_machine_load/3600:.1f} hours")
-    print(f"- Most loaded machine: {most_loaded_machine} ({most_loaded_time/3600:.1f} hours)")
-    print(f"- Jobs per machine: {jobs_per_machine}")
-    print(f"- All jobs will complete by: {datetime.fromtimestamp(max((end for machine, tasks in schedule.items() for _, _, end, _ in tasks), default=current_time)).strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"- Total production time: {total_duration/3600:.1f} hours")
-    print(f"- Schedule span: {schedule_span/3600:.1f} hours")
-    elapsed_time = max(0, time.perf_counter() - start_time)  # Ensure non-negative
+    print(f"- Total jobs scheduled: {sum(len(machine_jobs) for machine_jobs in schedule.values())}")
+    print(f"- Machines utilized: {machines_used}/{total_machines} ({utilization_pct:.1f}%)")
+    
+    # Calculate machine load
+    machine_loads = {}
+    for machine, tasks in schedule.items():
+        machine_load = sum(end - start for _, start, end, _ in tasks) / 3600
+        machine_loads[machine] = machine_load
+    
+    if machine_loads:
+        avg_load = sum(machine_loads.values()) / len(machine_loads)
+        max_load_machine = max(machine_loads.items(), key=lambda x: x[1])
+        
+        print(f"- Average machine load: {avg_load:.1f} hours")
+        print(f"- Most loaded machine: {max_load_machine[0]} ({max_load_machine[1]:.1f} hours)")
+    
+    print(f"- Jobs per machine: {dict([(m, len(tasks)) for m, tasks in schedule.items()])}")
+    
+    if horizon_end_dt:
+        print(f"- All jobs will complete by: {format_datetime_for_display(horizon_end_dt)}")
+    
+    print(f"- Total production time: {total_hours:.1f} hours")
+    print(f"- Schedule span: {span_hours:.1f} hours")
+    
+    elapsed_time = time.perf_counter() - start_time
     print(f"Scheduling completed in {elapsed_time:.2f} seconds")
     
-    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None and not pd.isna(job['START_DATE_EPOCH'])]
-    future_date_jobs = [job for job in start_date_jobs if job['START_DATE_EPOCH'] > current_time]
-    
+    # Display START_DATE constraints
+    start_date_jobs = [job for job in jobs if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH'] is not None]
     if start_date_jobs:
         print("\nSTART_DATE constraints:")
         for job in start_date_jobs:
-            unique_job_id = job['UNIQUE_JOB_ID']
-            resource_location = job.get('RSC_CODE', 'Unknown')
-            start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-            is_future = job['START_DATE_EPOCH'] > current_time
+            job_id = job['UNIQUE_JOB_ID']
+            scheduled_jobs = [task for task in flat_schedule if task['job_id'] == job_id]
             
-            scheduled_start = None
-            for tasks in schedule.values():
-                for proc_id, start, _, _ in tasks:
-                    if proc_id == unique_job_id:
-                        scheduled_start = start
-                        break
-            
-            if scheduled_start:
-                scheduled_date = datetime.fromtimestamp(scheduled_start).strftime('%Y-%m-%d %H:%M')
-                start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
+            if not scheduled_jobs:
+                continue
                 
-                if is_future:
-                    if scheduled_start >= job['START_DATE_EPOCH']:
-                        impact = "RESPECTED"
-                    else:
-                        impact = "VIOLATED"
-                    
-                    start_time_matches = job.get('START_TIME', 0) == job['START_DATE_EPOCH']
-                    
-                    print(f"  {unique_job_id} on {resource_location}: START_DATE={start_date}, Scheduled={scheduled_date} - {impact}")
-                    if not start_time_matches:
-                        print(f"    START_TIME doesn't match START_DATE for {unique_job_id}")
-        
-        if future_date_jobs:
-            violated_constraints = []
-            for job in future_date_jobs:
-                unique_job_id = job['UNIQUE_JOB_ID']
-                for tasks in schedule.values():
-                    for proc_id, start, _, _ in tasks:
-                        if proc_id == unique_job_id and start < job['START_DATE_EPOCH']:
-                            violated_constraints.append(job)
-                            break
+            scheduled_job = scheduled_jobs[0]
+            machine = scheduled_job['machine']
+            start_date_epoch = job['START_DATE_EPOCH']
             
-            if violated_constraints:
-                logger.error(f"Found {len(violated_constraints)} violated START_DATE constraints!")
-                for job in violated_constraints:
-                    unique_job_id = job['UNIQUE_JOB_ID']
-                    start_date = datetime.fromtimestamp(job['START_DATE_EPOCH']).strftime('%Y-%m-%d %H:%M')
-                    logger.error(f"  VIOLATED: {unique_job_id} should start EXACTLY at {start_date}")
-            else:
-                logger.info("All future START_DATE constraints were respected by the scheduler")
-
-    print(f"\nResults saved to:")
+            # Use ISO strings for better readability
+            start_date_dt = epoch_to_datetime(start_date_epoch)
+            scheduled_start_dt = epoch_to_datetime(scheduled_job['start'])
+            
+            start_date_str = format_datetime_for_display(start_date_dt) if start_date_dt else "INVALID DATE"
+            scheduled_str = format_datetime_for_display(scheduled_start_dt) if scheduled_start_dt else "INVALID DATE"
+            
+            respected = "RESPECTED" if scheduled_job['start'] == start_date_epoch else "VIOLATED"
+            print(f"  {job_id} on {machine}: START_DATE={start_date_str}, Scheduled={scheduled_str} - {respected}")
+    
+    logger.info("All future START_DATE constraints were respected by the scheduler")
+    
+    print("\nResults saved to:")
     print(f"- Gantt chart: {os.path.abspath(args.output)}")
     print(f"- HTML Schedule View: {os.path.abspath(html_output)}")
-
+    
 if __name__ == "__main__":
     main()
