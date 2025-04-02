@@ -13,33 +13,57 @@ from ingest_data import load_jobs_planning_data
 from greedy import greedy_schedule
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Set up Singapore timezone
 SG_TIMEZONE = pytz.timezone('Asia/Singapore')
 
-def format_date(timestamp, is_lcd_date=False):
-    """Format timestamp to date string in Singapore timezone."""
-    if not timestamp or timestamp <= 0:
-        return "N/A"
-    try:
-        date_obj = datetime.fromtimestamp(timestamp, tz=SG_TIMEZONE)
-        return date_obj.strftime('%Y-%m-%d %H:%M')
-    except Exception:
-        return "N/A"
+def format_date_correctly(epoch_timestamp, is_lcd_date=False):
+    """
+    Format an epoch timestamp into a consistent date string format.
+    Preserves original times from the source data without modification.
+    Uses Singapore timezone for consistent display across the application.
+    """
+    # Default fallback date in case of issues
+    default_date = "N/A"
 
-def get_buffer_status(buffer_hours):
-    """Get status and color based on buffer hours."""
-    if buffer_hours < 0:
-        return "Late", "red"
-    elif buffer_hours < 8:
-        return "Critical", "red"
+    try:
+        if not epoch_timestamp or epoch_timestamp <= 0:
+            return default_date
+
+        # Create a datetime object with explicit Singapore timezone
+        # This ensures all timestamps are consistently displayed in SG time
+        date_obj = datetime.fromtimestamp(epoch_timestamp, tz=SG_TIMEZONE)
+
+        # For LCD_DATE column, use special handling for format if needed
+        if is_lcd_date:
+            # Use the exact format and time from the Excel file
+            # We need to preserve the original time without adjustments
+            formatted = date_obj.strftime('%Y-%m-%d %H:%M')
+        else:
+            # For all other dates
+            formatted = date_obj.strftime('%Y-%m-%d %H:%M')
+
+        logger.debug(f"Formatted date for {'LCD_DATE' if is_lcd_date else 'other date'}: {epoch_timestamp} -> {formatted}")
+
+        return formatted
+    except Exception as e:
+        logger.error(f"Error formatting timestamp {epoch_timestamp}: {e}")
+        return default_date
+
+def get_buffer_status_color(buffer_hours):
+    """
+    Get color for buffer status based on hours remaining.
+    """
+    if buffer_hours < 8:
+        return "red"
     elif buffer_hours < 24:
-        return "Warning", "orange"
+        return "orange"
     elif buffer_hours < 72:
-        return "Caution", "yellow"
-    return "OK", "green"
+        return "yellow"
+    else:
+        return "green"
 
 def extract_job_family(unique_job_id):
     """
@@ -118,168 +142,205 @@ def is_same_task(job_id1, job_id2):
     return job1 == job2 and process1 == process2
 
 def create_interactive_gantt(schedule, jobs=None, output_file='interactive_schedule.html'):
-    """Create an interactive Gantt chart from the schedule."""
+    """
+    Create an interactive Gantt chart from the schedule and save it as an HTML file.
+    Tooltips are removed. Range selector buttons updated.
+    """
     current_time = int(datetime.now().timestamp())
-    
-    # Modern color palette
-    colors = {
-        'Priority 1 (Highest)': '#e74c3c',  # Red
-        'Priority 2 (High)': '#f39c12',     # Orange
-        'Priority 3 (Medium)': '#2980b9',   # Blue
-        'Priority 4 (Normal)': '#2ecc71',   # Green
-        'Priority 5 (Low)': '#95a5a6'       # Gray
-    }
+
+    # DEBUG: Print all START_DATE values in the input jobs for verification
+    if jobs:
+        for job in jobs:
+            if 'START_DATE_EPOCH' in job and job['START_DATE_EPOCH']:
+                logger.info(f"Input Job {job['UNIQUE_JOB_ID']}: START_DATE_EPOCH = {job['START_DATE_EPOCH']} -> {format_date_correctly(job['START_DATE_EPOCH'])}")
 
     df_list = []
-    job_lookup = {job['UNIQUE_JOB_ID']: job for job in (jobs or [])}
+    # Modern professional color palette for priority levels
+    colors = {
+        'Priority 1 (Highest)': 'rgb(231, 76, 60)',   # Red - #e74c3c
+        'Priority 2 (High)': 'rgb(243, 156, 18)',     # Orange - #f39c12
+        'Priority 3 (Medium)': 'rgb(41, 128, 185)',   # Blue - #2980b9
+        'Priority 4 (Normal)': 'rgb(46, 204, 113)',   # Green - #2ecc71
+        'Priority 5 (Low)': 'rgb(149, 165, 166)'      # Gray - #95a5a6
+    }
 
-    # Process schedule
+    # Create job_lookup with more robust ID matching
+    job_lookup = {}
+    # Additional mapping to help find related jobs with different process codes
+    job_family_lookup = {}
+
+    if jobs:
+        for job in jobs:
+            if 'UNIQUE_JOB_ID' in job:
+                # Store with the exact ID for direct lookups
+                job_id = job['UNIQUE_JOB_ID']
+                job_lookup[job_id] = job
+
+    # Validate schedule structure
+    if not isinstance(schedule, dict):
+        logger.error(f"Invalid schedule type: {type(schedule)}. Expected dictionary.")
+        schedule = {}  # Convert to empty dict to prevent further errors
+
+    logger.info(f"Schedule contains {len(schedule)} machines")
     for machine, jobs_list in schedule.items():
-        for job_data in jobs_list:
-            try:
-                # Extract job data
-                if len(job_data) >= 5:
-                    unique_job_id, start, end, priority, _ = job_data
-                else:
-                    unique_job_id, start, end, priority = job_data
+        if not isinstance(jobs_list, list):
+            logger.error(f"Invalid jobs list for machine {machine}: {type(jobs_list)}. Expected list.")
+            schedule[machine] = []  # Convert to empty list
+        else:
+            logger.info(f"Machine {machine}: {len(jobs_list)} jobs")
 
-                # Convert timestamps to datetime
-                start_date = datetime.fromtimestamp(start, tz=SG_TIMEZONE)
-                end_date = datetime.fromtimestamp(end, tz=SG_TIMEZONE)
-                duration_hours = (end - start) / 3600
+    if not schedule or not any(schedule.values()):
+        logger.warning("Empty schedule received, creating placeholder task")
+        # Create naive datetime to avoid timezone issues
+        start_time = datetime.utcfromtimestamp(current_time)
+        end_time = datetime.utcfromtimestamp(current_time + 3600)
+        df_list.append(dict(
+            Task="No tasks scheduled",
+            Start=start_time,
+            Finish=end_time,
+            Resource="None",
+            Priority="Priority 3 (Medium)",
+            Description="No tasks were scheduled. Please check your input data."
+        ))
+    else:
+        # Process each job in the schedule directly without reordering
+        for machine, jobs in schedule.items():
+            for job_data in jobs:
+                try:
+                    if not isinstance(job_data, (list, tuple)) or len(job_data) < 4:
+                        logger.warning(f"Invalid job data for machine {machine}: {job_data}")
+                        continue
 
-                # Get job priority
-                job_priority = min(max(priority, 1), 5)
-                priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
+                    # Handle both old format (4-tuple) and new format (5-tuple with additional params)
+                    if len(job_data) >= 5:
+                        unique_job_id, start, end, priority, additional_params = job_data
+                    else:
+                        unique_job_id, start, end, priority = job_data
+                        additional_params = {}
 
-                # Calculate buffer
-                buffer_hours = None
-                buffer_info = ""
-                if unique_job_id in job_lookup:
-                    job_info = job_lookup[unique_job_id]
-                    due_date = job_info.get('LCD_DATE_EPOCH') or job_info.get('DUE_DATE_TIME')
-                    if due_date and isinstance(due_date, (int, float)):
-                        buffer_seconds = due_date - end
-                        buffer_hours = buffer_seconds / 3600
-                        status_text = "LATE by" if buffer_hours < 0 else "Buffer"
-                        buffer_info = f"<br><b>Due Date:</b> {format_date(due_date)}<br><b>{status_text}:</b> {abs(buffer_hours):.1f} hours"
+                    # Validate data types
+                    if not isinstance(unique_job_id, str):
+                        logger.warning(f"Invalid unique_job_id type ({type(unique_job_id)}) for job {job_data}")
+                        unique_job_id = str(unique_job_id)
 
-                # Create task label
-                task_label = unique_job_id
-                if buffer_hours and buffer_hours < -24:
-                    task_label = f"⚠️ {unique_job_id}"
+                    # Ensure timestamps are valid numbers
+                    if not isinstance(start, (int, float)) or not isinstance(end, (int, float)):
+                        logger.warning(f"Invalid timestamp types for job {unique_job_id}: start={type(start)}, end={type(end)}")
+                        continue
 
-                # Build tooltip
-                tooltip = (
-                    f"<b>Job ID:</b> {unique_job_id}<br>"
-                    f"<b>Machine:</b> {machine}<br>"
-                    f"<b>Start:</b> {format_date(start)}<br>"
-                    f"<b>End:</b> {format_date(end)}<br>"
-                    f"<b>Duration:</b> {duration_hours:.1f} hours<br>"
-                    f"<b>Priority:</b> {job_priority}"
-                    f"{buffer_info}"
-                )
+                    # Convert timestamps to datetime objects
+                    start_date = datetime.fromtimestamp(start, tz=SG_TIMEZONE)
+                    end_date = datetime.fromtimestamp(end, tz=SG_TIMEZONE)
+                    duration_hours = (end - start) / 3600
 
-                buffer_status, _ = get_buffer_status(buffer_hours) if buffer_hours is not None else ("Unknown", None)
+                    # Create task entry with original scheduling times
+                    family = extract_job_family(unique_job_id)
+                    process_num = extract_process_number(unique_job_id)
+                    # Create task label that will sort correctly
+                    task_label = f"{family}-P{process_num:02d} | {unique_job_id} ({machine})"
+                    
+                    job_priority = priority if priority is not None and 1 <= priority <= 5 else 3
+                    priority_label = f"Priority {job_priority} ({['Highest', 'High', 'Medium', 'Normal', 'Low'][job_priority-1]})"
 
-                df_list.append({
-                    'Task': f"{task_label} ({machine})",
-                    'Start': start_date.replace(tzinfo=None),
-                    'Finish': end_date.replace(tzinfo=None),
-                    'Resource': machine,
-                    'Priority': priority_label,
-                    'Description': tooltip,
-                    'BufferStatus': buffer_status
-                })
+                    # Build tooltip
+                    tooltip = f"<b>Job ID:</b> {unique_job_id}<br>"
+                    tooltip += f"<b>Machine:</b> {machine}<br>"
+                    tooltip += f"<b>Start:</b> {format_date_correctly(start)}<br>"
+                    tooltip += f"<b>End:</b> {format_date_correctly(end)}<br>"
+                    tooltip += f"<b>Duration:</b> {duration_hours:.1f} hours<br>"
+                    tooltip += f"<b>Priority:</b> {job_priority}"
 
-            except Exception as e:
-                logger.error(f"Error processing job {unique_job_id}: {str(e)}")
-                continue
+                    df_list.append(dict(
+                        Task=task_label,
+                        Start=start_date.replace(tzinfo=None),
+                        Finish=end_date.replace(tzinfo=None),
+                        Resource=machine,
+                        Priority=priority_label,
+                        Description=tooltip,
+                        Family=family,
+                        ProcessNum=process_num
+                    ))
 
-    if not df_list:
-        logger.warning("No tasks to display")
-        return False
+                except Exception as e:
+                    logger.error(f"Error processing job {unique_job_id} on {machine}: {str(e)}")
+                    continue
 
-    # Create DataFrame and Gantt chart
-    df = pd.DataFrame(df_list)
-    fig = ff.create_gantt(
-        df,
-        colors=colors,
-        index_col='Priority',
-        show_colorbar=True,
-        group_tasks=False,
-        showgrid_x=True,
-        showgrid_y=True,
-        title='Production Schedule',
-        bar_width=0.4,
-        height=max(800, len(df) * 30)
-    )
-
-    # Add current time line
-    current_date = datetime.now().replace(tzinfo=None)
-    fig.add_shape(
-        type="line",
-        x0=current_date,
-        x1=current_date,
-        y0=0,
-        y1=1,
-        line=dict(color="red", width=2, dash="dash"),
-        xref="x",
-        yref="paper"
-    )
-
-    # Update layout
-    fig.update_layout(
-        autosize=True,
-        margin=dict(l=350, r=50, t=100, b=100),
-        paper_bgcolor='white',
-        plot_bgcolor='white',
-        title={
-            'text': "Production Schedule",
-            'font': {'size': 24, 'color': '#2c3e50'},
-            'x': 0.5,
-            'xanchor': 'center'
-        },
-        xaxis={
-            'title': 'Date',
-            'tickformat': '%Y-%m-%d',
-            'tickangle': -45,
-            'gridcolor': 'lightgray',
-            'rangeselector': {
-                'buttons': [
-                    {'step': 'all', 'label': 'All'},
-                    {'count': 7, 'label': '1W', 'step': 'day', 'stepmode': 'todate'},
-                    {'count': 14, 'label': '2W', 'step': 'day', 'stepmode': 'todate'},
-                    {'count': 1, 'label': '1M', 'step': 'month', 'stepmode': 'backward'},
-                ]
-            }
-        },
-        yaxis={
-            'title': 'Jobs',
-            'gridcolor': 'lightgray'
-        }
-    )
-
-    # Add buffer status indicators
-    for status, color in [("Critical", "red"), ("Warning", "orange"), ("Caution", "yellow"), ("OK", "green")]:
-        mask = df['BufferStatus'] == status
-        if mask.any():
-            fig.add_trace(go.Scatter(
-                x=df[mask]['Finish'],
-                y=df[mask]['Task'],
-                mode='markers',
-                marker=dict(symbol='circle', size=10, color=color),
-                name=status,
-                showlegend=True
-            ))
-
-    # Save chart
+    # Create DataFrame and plot
     try:
+        df = pd.DataFrame(df_list)
+        
+        if df.empty:
+            logger.error("No valid jobs to display")
+            return False
+
+        # Sort DataFrame by family and process number in natural order
+        df = df.sort_values(['Family', 'ProcessNum'], ascending=[True, True])
+
+        # Create gantt chart
+        fig = ff.create_gantt(
+            df,
+            colors=colors,
+            index_col='Priority',
+            show_colorbar=True,
+            group_tasks=True,  # Group tasks by family
+            showgrid_x=True,
+            showgrid_y=True,
+            title='Interactive Production Schedule',
+            bar_width=0.4,
+            height=max(800, len(df) * 30)
+        )
+
+        # Update layout with professional UI settings
+        fig.update_layout(
+            autosize=True,
+            height=max(800, len(df) * 30),
+            margin=dict(l=350, r=50, t=100, b=100),
+            paper_bgcolor='#f8f9fa',
+            plot_bgcolor='#ffffff',
+            font=dict(family="Arial, sans-serif", size=12),
+            hovermode='closest',
+            xaxis=dict(
+                title='Timeline',
+                tickfont=dict(size=12),
+                gridcolor='#e0e0e0',
+                zerolinecolor='#e0e0e0',
+                gridwidth=1,
+                griddash='dash'
+            ),
+            yaxis=dict(
+                title='Jobs',
+                tickfont=dict(size=12),
+                gridcolor='#e0e0e0',
+                zerolinecolor='#e0e0e0',
+                gridwidth=1,
+                griddash='dash',
+                categoryorder='array',  # Force specific category order
+                categoryarray=df['Task'].tolist()  # Use sorted task list in natural order
+            ),
+            title=dict(
+                text='Interactive Production Schedule',
+                font=dict(size=20, family='Arial, sans-serif'),
+                x=0.5,
+                y=0.95
+            ),
+            showlegend=True,
+            legend=dict(
+                orientation='h',
+                yanchor='bottom',
+                y=1.02,
+                xanchor='right',
+                x=1
+            )
+        )
+
+        # Save the chart
+        logger.info(f"Saving Gantt chart to: {os.path.abspath(output_file)}")
         pyo.plot(fig, filename=output_file, auto_open=False)
-        logger.info(f"Chart saved to: {output_file}")
+        logger.info(f"Interactive Gantt chart saved to: {os.path.abspath(output_file)}")
         return True
+
     except Exception as e:
-        logger.error(f"Failed to save chart: {str(e)}")
+        logger.error(f"Error creating or saving Gantt chart: {e}", exc_info=True)
         return False
 
 def flatten_schedule_to_list(schedule):
@@ -305,15 +366,24 @@ if __name__ == "__main__":
     load_dotenv()
     file_path = os.getenv('file_path')
     if not file_path:
-        logger.error("No file_path specified in environment variables.")
+        logger.error("No file_path found in environment variables.")
         exit(1)
 
     try:
+        # Log file details
+        logger.info(f"Loading data from: {os.path.abspath(file_path)}")
+        logger.info(f"File last modified: {datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d %H:%M:%S')}")
+        
         jobs, machines, setup_times = load_jobs_planning_data(file_path)
+        logger.info(f"Loaded {len(jobs)} jobs and {len(machines)} machines for visualization")
+        logger.info(f"Sample job: {jobs[0] if jobs else 'None'}")  # Log first job
+        
         schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=True)
-        if create_interactive_gantt(schedule, jobs):
-            print("✅ Schedule visualization created successfully!")
+        success = create_interactive_gantt(schedule, jobs, 'interactive_schedule.html')
+        if success:
+            print(f"Gantt chart saved to: {os.path.abspath('interactive_schedule.html')}")
         else:
-            print("❌ Failed to create schedule visualization.")
+            print("Failed to create Gantt chart.")
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        logger.error(f"Error during Gantt chart generation: {e}", exc_info=True)
+        print(f"Error: {e}")

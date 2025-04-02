@@ -63,6 +63,27 @@ def extract_job_family(unique_job_id):
     logger.warning(f"Could not extract family from {unique_job_id}, using full code")
     return process_code
 
+def find_best_machine(job, machines, machine_available_time):
+    """Helper function to find the best machine for a job"""
+    # First check if job has a specific machine requirement
+    required_machine = job.get('RSC_CODE')
+    if required_machine and required_machine in machines:
+        return required_machine
+        
+    # If no specific machine required, find least loaded compatible machine
+    compatible_machines = []
+    for machine in machines:
+        # Check if machine is compatible with job requirements
+        # You can add more compatibility checks here
+        compatible_machines.append(machine)
+    
+    if not compatible_machines:
+        logger.warning(f"No compatible machines found for job {job.get('UNIQUE_JOB_ID')}")
+        return None
+        
+    # Return least loaded compatible machine
+    return min(compatible_machines, key=lambda m: machine_available_time[m])
+
 def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max_operators=0):
     """
     Create a schedule using a greedy algorithm.
@@ -81,232 +102,191 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
     logger.info(f"Creating schedule using greedy algorithm for {len(jobs)} jobs on {len(machines)} machines")
     logger.info(f"Using max_operators={max_operators}")
     
-    if not jobs:
-        logger.warning("No jobs to schedule")
+    if not jobs or not machines:
+        logger.warning("No jobs or machines available")
         return {}
-        
-    if not machines:
-        logger.warning("No machines available")
-        return {}
-    
+
     # Use relative time instead of epoch to avoid large numbers
     current_time = datetime_to_epoch(datetime.now())
-    current_rel_hours = epoch_to_relative_hours(current_time)
     
     # Create a dictionary to track machine availability
     machine_available_time = {machine: current_time for machine in machines}
     
-    # Dictionary to track the max end time for each job family
-    job_family_end_times = {}
-    
     # Track operator usage over time
     operators_in_use = defaultdict(int)  # time_point -> number of operators
     
-    # Sort jobs by priority (higher priority first) and then by due date (earlier due date first)
-    sorted_jobs = sorted(jobs, key=lambda x: (
-        -x.get('PRIORITY', 0),  # Higher priority first
-        x.get('LCD_DATE_EPOCH', float('inf'))  # Earlier due date first
-    ))
-    
-    # Jobs with START_DATE constraints should be scheduled first
-    start_date_jobs = [job for job in sorted_jobs if 
-                      job.get('START_DATE_EPOCH') is not None and 
-                      job.get('START_DATE_EPOCH') > current_time]
-    
-    if start_date_jobs:
-        logger.info(f"Found {len(start_date_jobs)} jobs with future START_DATE constraints")
-        for job in start_date_jobs:
-            start_date_epoch = job.get('START_DATE_EPOCH')
-            job_id = job.get('UNIQUE_JOB_ID', 'unknown')
-            
-            # Use formatter for display
-            start_date_dt = epoch_to_datetime(start_date_epoch)
-            start_date_str = format_datetime_for_display(start_date_dt) if start_date_dt else "INVALID DATE"
-            
-            logger.info(f"Job {job_id} must start at {start_date_str}")
-    
-    # Move jobs with START_DATE constraints to the front of the list
-    sorted_jobs = sorted(sorted_jobs, key=lambda x: (
-        0 if x.get('START_DATE_EPOCH') is not None and x.get('START_DATE_EPOCH') > current_time else 1,
-        -x.get('PRIORITY', 0),
-        x.get('LCD_DATE_EPOCH', float('inf'))
-    ))
-    
-    # Create schedule dictionary
-    schedule = {machine: [] for machine in machines}
-    
-    # Group jobs by family for sequence enforcement
+    # Group jobs by family and sort by process number
     job_families = defaultdict(list)
-    if enforce_sequence:
-        for job in sorted_jobs:
-            family = extract_job_family(job['UNIQUE_JOB_ID'])
-            if family:
-                process_num = extract_process_number(job['UNIQUE_JOB_ID'])
-                if process_num != 999:  # Only add if we got a valid process number
-                    job_families[family].append((process_num, job))
-                
-        # Sort each family's jobs by process number and log
-        for family, jobs_in_family in job_families.items():
-            # Sort by process number, ensuring proper numerical ordering
-            jobs_in_family.sort(key=lambda x: int(x[0]))  # Convert process_num to int for sorting
-            logger.info(f"Job family {family} has {len(jobs_in_family)} processes in sequence")
+    unassigned_jobs = []
+    start_date_jobs = []
+    
+    # First pass: Group jobs by family and identify start date jobs
+    for job in jobs:
+        if not job.get('UNIQUE_JOB_ID'):
+            continue
             
-            # Update the sorted_jobs list to maintain sequence order
-            family_job_ids = [j[1]['UNIQUE_JOB_ID'] for j in jobs_in_family]
-            logger.info(f"Job family {family} sequence: {family_job_ids}")
+        # Handle START_DATE jobs first
+        if job.get('START_DATE_EPOCH') is not None and job.get('START_DATE_EPOCH') > current_time:
+            start_date_jobs.append(job)
+            continue
             
-            # Update job_family_end_times with initial values
-            job_family_end_times[family] = current_time
-
-    # Schedule jobs
+        family = extract_job_family(job['UNIQUE_JOB_ID'])
+        if family:
+            process_num = extract_process_number(job['UNIQUE_JOB_ID'])
+            if process_num != 999:
+                job_families[family].append((process_num, job))
+            else:
+                unassigned_jobs.append(job)
+        else:
+            unassigned_jobs.append(job)
+    
+    # Sort jobs within each family by process number
+    for family in job_families:
+        job_families[family].sort(key=lambda x: int(x[0]))
+        logger.info(f"Job family {family} sequence: {[j[1]['UNIQUE_JOB_ID'] for j in job_families[family]]}")
+    
+    # Create schedule dictionary and tracking sets
+    schedule = {machine: [] for machine in machines}
     scheduled_jobs = set()
     unscheduled_jobs = []
     
-    for job in sorted_jobs:
-        if 'UNIQUE_JOB_ID' not in job:
-            logger.warning(f"Job has no UNIQUE_JOB_ID: {job}")
-            continue
-            
-        job_id = job['UNIQUE_JOB_ID']
-        machine_id = job.get('RSC_CODE')
-        
-        if not machine_id:
-            logger.warning(f"Job {job_id} has no machine assignment")
-            unscheduled_jobs.append(job)
-            continue
-            
-        if machine_id not in machines:
-            logger.warning(f"Job {job_id} assigned to unknown machine {machine_id}")
-            unscheduled_jobs.append(job)
-            continue
-            
+    def can_schedule_job(job, machine_id, start_time_epoch):
+        """Check if a job can be scheduled at the given time"""
         if not job.get('processing_time'):
             if 'HOURS_NEED' in job and job['HOURS_NEED'] is not None:
                 job['processing_time'] = job['HOURS_NEED'] * 3600
             else:
-                logger.warning(f"Job {job_id} has no processing time")
-                job['processing_time'] = 3600  # Default 1 hour
+                job['processing_time'] = 3600
         
-        processing_time = job['processing_time']
+        end_time_epoch = start_time_epoch + job['processing_time']
         
-        # Get job family information for sequence enforcement
-        job_family = job.get('JOB')
-        process_code = job.get('PROCESS_CODE')
-        
-        # Handle START_DATE constraints
-        start_date_epoch = job.get('START_DATE_EPOCH')
-        earliest_start = machine_available_time[machine_id]
-        
-        if start_date_epoch is not None and start_date_epoch > current_time:
-            # This job has a specific start date/time requirement
-            earliest_start = max(earliest_start, start_date_epoch)
-            
-            # Use formatter for display
-            start_date_dt = epoch_to_datetime(start_date_epoch)
-            start_date_str = format_datetime_for_display(start_date_dt) if start_date_dt else "INVALID DATE"
-            
-            logger.info(f"Job {job_id} must start exactly at {start_date_str}")
-        
-        # Check sequence constraints
-        if enforce_sequence:
-            family = extract_job_family(job_id)
-            if family:
-                process_num = extract_process_number(job_id)
-                if process_num != 999:
-                    # Find the previous process in this family
-                    prev_jobs = [(p, j) for p, j in job_families[family] if int(p) < int(process_num)]
-                    if prev_jobs:
-                        # Get the most recent previous process
-                        prev_process = max(prev_jobs, key=lambda x: int(x[0]))
-                        prev_job = prev_process[1]
-                        prev_job_id = prev_job['UNIQUE_JOB_ID']
-                        
-                        # Check if previous job is scheduled
-                        prev_scheduled = False
-                        prev_end_time = current_time
-                        for m in schedule:
-                            for scheduled_id, start, end, *_ in schedule[m]:
-                                if scheduled_id == prev_job_id:
-                                    prev_scheduled = True
-                                    prev_end_time = end
-                                    break
-                            if prev_scheduled:
-                                break
-                        
-                        if not prev_scheduled:
-                            logger.info(f"Cannot schedule {job_id} yet - previous process {prev_job_id} not scheduled")
-                            continue
-                        
-                        # Update earliest start time based on previous process
-                        earliest_start = max(earliest_start, prev_end_time)
-                        logger.info(f"Enforcing zero-gap sequence: {prev_job_id} -> {job_id}, start = {format_datetime_for_display(epoch_to_datetime(earliest_start))}")
-                        
-                        # Update machine available time to maintain sequence
-                        if earliest_start > machine_available_time[machine_id]:
-                            logger.info(f"Machine {machine_id} will be idle from {format_datetime_for_display(epoch_to_datetime(current_time))} to {format_datetime_for_display(epoch_to_datetime(earliest_start))} to maintain sequence")
-        
-        # Check operator constraints if specified
+        # Check machine availability
+        for scheduled_id, scheduled_start, scheduled_end, _ in schedule[machine_id]:
+            if not (end_time_epoch <= scheduled_start or start_time_epoch >= scheduled_end):
+                return False
+                
+        # Check operator constraints
         if max_operators > 0:
-            # Find a time slot with available operators
-            while True:
-                # Check if we can start at earliest_start without exceeding operator limit
-                can_schedule = True
-                
-                # Convert to relative hours for better handling
-                start_rel = epoch_to_relative_hours(earliest_start)
-                end_rel = epoch_to_relative_hours(earliest_start + processing_time)
-                
-                # Check hourly granularity for simplicity
-                for hour in range(int(start_rel), int(end_rel) + 1):
-                    if operators_in_use[hour] >= max_operators:
-                        can_schedule = False
-                        earliest_start = relative_hours_to_epoch(hour + 1)  # Try next hour
-                        break
-                
-                if can_schedule:
-                    break
-        
-        # Schedule the job
-        start_time_epoch = earliest_start
-        end_time_epoch = start_time_epoch + processing_time
-        
-        # Update operator usage if needed
-        if max_operators > 0:
-            # Convert to relative hours for better handling
             start_rel = epoch_to_relative_hours(start_time_epoch)
             end_rel = epoch_to_relative_hours(end_time_epoch)
             
             for hour in range(int(start_rel), int(end_rel) + 1):
-                operators_in_use[hour] += 1
-                if operators_in_use[hour] > max_operators:
-                    logger.warning(f"Operator constraint exceeded at hour {hour}: {operators_in_use[hour]}/{max_operators}")
+                if operators_in_use[hour] >= max_operators:
+                    return False
         
-        # Update machine availability
-        machine_available_time[machine_id] = end_time_epoch
+        return True
+    
+    # First schedule START_DATE jobs since they have fixed start times
+    for job in start_date_jobs:
+        job_id = job['UNIQUE_JOB_ID']
+        start_time_epoch = job.get('START_DATE_EPOCH')
         
-        # Update job family end time for sequence enforcement
-        if job_family:
-            job_family_end_times[job_family] = max(
-                job_family_end_times.get(job_family, 0),
-                end_time_epoch
-            )
+        if not start_time_epoch:
+            continue
+            
+        machine_id = find_best_machine(job, machines, machine_available_time)
+        if not machine_id:
+            logger.warning(f"No compatible machine found for START_DATE job {job_id}")
+            unscheduled_jobs.append(job)
+            continue
+            
+        if can_schedule_job(job, machine_id, start_time_epoch):
+            end_time_epoch = start_time_epoch + job['processing_time']
+            schedule[machine_id].append((job_id, start_time_epoch, end_time_epoch, job.get('PRIORITY', 0)))
+            scheduled_jobs.add(job_id)
+            machine_available_time[machine_id] = max(machine_available_time[machine_id], end_time_epoch)
+            
+            # Update operator usage
+            if max_operators > 0:
+                start_rel = epoch_to_relative_hours(start_time_epoch)
+                end_rel = epoch_to_relative_hours(end_time_epoch)
+                for hour in range(int(start_rel), int(end_rel) + 1):
+                    operators_in_use[hour] += 1
+            
+            logger.info(f"Scheduled START_DATE job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(start_time_epoch))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
+        else:
+            unscheduled_jobs.append(job)
+            logger.warning(f"Could not schedule START_DATE job {job_id} at required time {format_datetime_for_display(epoch_to_datetime(start_time_epoch))}")
+    
+    # Then schedule jobs by family in sequence
+    for family, jobs_in_family in sorted(job_families.items()):
+        last_end_time = current_time
         
-        # Format times for logging
-        start_dt = epoch_to_datetime(start_time_epoch)
-        end_dt = epoch_to_datetime(end_time_epoch)
+        for process_num, job in jobs_in_family:
+            job_id = job['UNIQUE_JOB_ID']
+            if job_id in scheduled_jobs:
+                continue
+                
+            # Find best machine for this job
+            machine_id = find_best_machine(job, machines, machine_available_time)
+            if not machine_id:
+                logger.warning(f"No compatible machine found for job {job_id}")
+                unscheduled_jobs.append(job)
+                continue
+            
+            # Find earliest possible start time
+            earliest_start = max(machine_available_time[machine_id], last_end_time)
+            
+            # Try to schedule the job
+            while not can_schedule_job(job, machine_id, earliest_start):
+                earliest_start += 3600  # Try next hour
+                
+                # Prevent infinite loop
+                if earliest_start > current_time + (365 * 24 * 3600):  # 1 year limit
+                    logger.error(f"Could not find valid time slot for job {job_id}")
+                    unscheduled_jobs.append(job)
+                    break
+            
+            if earliest_start <= current_time + (365 * 24 * 3600):
+                end_time_epoch = earliest_start + job['processing_time']
+                schedule[machine_id].append((job_id, earliest_start, end_time_epoch, job.get('PRIORITY', 0)))
+                scheduled_jobs.add(job_id)
+                last_end_time = end_time_epoch
+                machine_available_time[machine_id] = end_time_epoch
+                
+                # Update operator usage
+                if max_operators > 0:
+                    start_rel = epoch_to_relative_hours(earliest_start)
+                    end_rel = epoch_to_relative_hours(end_time_epoch)
+                    for hour in range(int(start_rel), int(end_rel) + 1):
+                        operators_in_use[hour] += 1
+                
+                logger.info(f"Scheduled job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
+    
+    # Finally schedule any remaining unassigned jobs
+    for job in unassigned_jobs:
+        job_id = job['UNIQUE_JOB_ID']
+        if job_id in scheduled_jobs:
+            continue
+            
+        # Find best machine for this job
+        machine_id = find_best_machine(job, machines, machine_available_time)
+        if not machine_id:
+            logger.warning(f"No compatible machine found for job {job_id}")
+            unscheduled_jobs.append(job)
+            continue
+            
+        earliest_start = machine_available_time[machine_id]
         
-        start_str = format_datetime_for_display(start_dt) if start_dt else "INVALID DATE"
-        end_str = format_datetime_for_display(end_dt) if end_dt else "INVALID DATE"
+        while not can_schedule_job(job, machine_id, earliest_start):
+            earliest_start += 3600
+            if earliest_start > current_time + (365 * 24 * 3600):
+                unscheduled_jobs.append(job)
+                break
         
-        # Add job to schedule
-        schedule[machine_id].append((job_id, start_time_epoch, end_time_epoch, job.get('PRIORITY', 0)))
-        
-        # Mark job as scheduled and update job with timing information
-        scheduled_jobs.add(job_id)
-        job['START_TIME'] = start_time_epoch
-        job['END_TIME'] = end_time_epoch
-        
-        logger.info(f"Scheduled {job_id} on {machine_id}: {start_str} to {end_str}")
+        if earliest_start <= current_time + (365 * 24 * 3600):
+            end_time_epoch = earliest_start + job['processing_time']
+            schedule[machine_id].append((job_id, earliest_start, end_time_epoch, job.get('PRIORITY', 0)))
+            scheduled_jobs.add(job_id)
+            machine_available_time[machine_id] = end_time_epoch
+            
+            if max_operators > 0:
+                start_rel = epoch_to_relative_hours(earliest_start)
+                end_rel = epoch_to_relative_hours(end_time_epoch)
+                for hour in range(int(start_rel), int(end_rel) + 1):
+                    operators_in_use[hour] += 1
+            
+            logger.info(f"Scheduled unassigned job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
     
     # Log scheduling statistics
     elapsed = time.time() - start_time
@@ -315,60 +295,16 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
     
     logger.info(f"Greedy scheduling complete in {elapsed:.2f} seconds")
     logger.info(f"Scheduled {total_scheduled} jobs, {total_unscheduled} jobs could not be scheduled")
+    logger.info(f"Utilized {len([m for m in schedule if schedule[m]])} machines")
     
-    # Calculate machines utilized
-    machines_utilized = sum(1 for m, jobs in schedule.items() if jobs)
-    logger.info(f"Utilized {machines_utilized}/{len(machines)} machines")
-    
-    # Get the latest completion time
-    if any(schedule.values()):
-        latest_end = max(end for m, jobs in schedule.items() if jobs for _, _, end, _ in jobs)
-        latest_end_dt = epoch_to_datetime(latest_end)
-        latest_end_str = format_datetime_for_display(latest_end_dt) if latest_end_dt else "INVALID DATE"
-        logger.info(f"All jobs will complete by {latest_end_str}")
-    
-    # Check and report on START_DATE constraints
-    start_date_job_ids = {job.get('UNIQUE_JOB_ID') for job in start_date_jobs}
-    scheduled_start_dates = {}
-    
-    for machine, jobs_on_machine in schedule.items():
-        for job_id, start, _, _ in jobs_on_machine:
-            if job_id in start_date_job_ids:
-                scheduled_start_dates[job_id] = start
-    
-    # Check if all START_DATE constraints were respected
-    violated_constraints = []
-    for job in start_date_jobs:
-        job_id = job.get('UNIQUE_JOB_ID')
-        if job_id in scheduled_start_dates:
-            requested_start = job.get('START_DATE_EPOCH')
-            actual_start = scheduled_start_dates[job_id]
-            
-            if requested_start != actual_start:
-                # Format for display
-                requested_dt = epoch_to_datetime(requested_start)
-                actual_dt = epoch_to_datetime(actual_start)
-                
-                requested_str = format_datetime_for_display(requested_dt) if requested_dt else "INVALID DATE"
-                actual_str = format_datetime_for_display(actual_dt) if actual_dt else "INVALID DATE"
-                
-                violated_constraints.append((job_id, requested_str, actual_str))
-    
-    if violated_constraints:
-        logger.warning(f"Found {len(violated_constraints)} violated START_DATE constraints:")
-        for job_id, requested, actual in violated_constraints:
-            logger.warning(f"Job {job_id}: requested {requested}, scheduled at {actual}")
-    else:
-        logger.info("All START_DATE constraints were respected")
-    
-    # Check operator constraints
-    if max_operators > 0:
-        max_operators_used = max(operators_in_use.values()) if operators_in_use else 0
-        logger.info(f"Maximum operators used at any time: {max_operators_used}/{max_operators}")
-        
-        if max_operators_used > max_operators:
-            logger.warning(f"Operator constraint exceeded: used {max_operators_used}/{max_operators}")
-            # Could implement more sophisticated handling here
+    # Find latest completion time
+    latest_end = max(
+        max((job[2] for job in jobs_list), default=current_time)
+        for jobs_list in schedule.values()
+        if jobs_list
+    )
+    latest_end_dt = epoch_to_datetime(latest_end)
+    logger.info(f"All jobs will complete by {format_datetime_for_display(latest_end_dt)}")
     
     return schedule
 
