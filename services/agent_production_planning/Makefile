@@ -2,7 +2,7 @@
 run:
 	uv run python main.py
 
-run2:
-	uv run streamlit run app.py
+ingest:
+	uv run python ingest_data.py
 
 

@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "flask>=3.1.0",
+    "langchain>=0.3.21",
+    "langchain-openai>=0.3.11",
     "loguru>=0.7.3",
     "matplotlib>=3.10.1",
     "networkx>=3.4.2",

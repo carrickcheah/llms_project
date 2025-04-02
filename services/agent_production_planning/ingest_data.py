@@ -1,4 +1,5 @@
 ###############################################
+# ingest_data.py | Never edit this line
 # There are 4 main functions:
 # 1. get_column_time
 # 2. detect_date_format
@@ -27,26 +28,19 @@ logger = logging.getLogger(__name__)
 
 
 # No hardcoded values - all times will come from Excel directly
-DATE_COLUMNS_CONFIG = {}
-
-# Default time for date columns not specifically configured
-DEFAULT_TIME = (8, 0)  # Default to 8am
-
 def get_column_time(column_name):
     """
-    Get the configured time for a column name, handling trailing spaces.
+    Get the time from Excel data directly. No default values.
     
     Args:
         column_name (str): The column name, possibly with trailing spaces
         
     Returns:
-        tuple: (hour, minute) tuple from configuration or default
+        None: Since we don't use hardcoded times anymore
     """
-    # Strip any trailing spaces to match with our configuration
-    clean_name = column_name.strip() if isinstance(column_name, str) else column_name
-    
-    # Return the configured time or default
-    return DATE_COLUMNS_CONFIG.get(clean_name, DEFAULT_TIME)
+    # We don't use any hardcoded or default times anymore
+    # All times must come from Excel directly
+    return None
 
 def detect_date_format(date_value):
     """
@@ -101,11 +95,12 @@ def convert_column_to_dates(df, column_name, base_col=None):
     """
     Convert a column to datetime format, handling multiple formats.
     Also adds an _EPOCH column with Unix timestamp.
+    All times must come directly from Excel, no defaults.
     
     Args:
         df (DataFrame): The pandas DataFrame
         column_name (str): The name of the column to convert
-        base_col (str): Optional base column name for custom time configuration
+        base_col (str): Optional base column name (not used anymore since we don't use defaults)
         
     Returns:
         DataFrame: The updated DataFrame
@@ -148,22 +143,11 @@ def convert_column_to_dates(df, column_name, base_col=None):
             df[f"{column_name}_EPOCH"] = np.nan
             return df
     
-    # Apply time component if needed
-    # Option 1: Always use time from the original data if it exists
+    # Log whether time component exists in the data
     if has_time:
-        logger.info(f"Column '{column_name}' already has time component, preserving original times")
-    # Option 2: For dates without time or with midnight default time, don't modify - keep as is
+        logger.info(f"Column '{column_name}' has time component from Excel data")
     else:
-        # Get the configured time for this column - but DON'T apply it, just log it
-        if base_col is None:
-            base_col = column_name
-            
-        # IMPORTANT: We're not modifying times anymore, just logging for debugging
-        hour, minute = get_column_time(base_col)
-        logger.info(f"Column '{column_name}' has no time component. Original values will be preserved.")
-        
-        # We leave all dates as they come from Excel, even if they don't have a time component
-        # This ensures we never impose any hardcoded times
+        logger.info(f"Column '{column_name}' has no time component in Excel data")
     
     # Create epoch timestamp column for all dates
     # Use cleaned column name (no trailing spaces) for the EPOCH field
@@ -385,4 +369,30 @@ def load_jobs_planning_data(excel_file):
         
     except Exception as e:
         logger.error(f"Error loading jobs planning data: {e}")
+        raise
+
+if __name__ == "__main__":
+    # Set up test configuration
+    excel_file = "mydata.xlsx"  # Using the most recent Excel file
+    
+    # Configure logging to see what's happening
+    logging.basicConfig(level=logging.INFO)
+    
+    try:
+        # Test loading the data
+        logger.info(f"Testing data ingestion with file: {excel_file}")
+        df = load_jobs_planning_data(excel_file)
+        
+        # Print basic information about the loaded data
+        if isinstance(df, pd.DataFrame):
+            logger.info(f"Successfully loaded data. Shape: {df.shape}")
+            logger.info("\nFirst few rows:")
+            print(df.head())
+            logger.info("\nColumns:")
+            print(df.columns.tolist())
+        else:
+            logger.error("Expected DataFrame but got different return type")
+            
+    except Exception as e:
+        logger.error(f"Error during testing: {str(e)}")
         raise
