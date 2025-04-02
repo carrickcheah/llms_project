@@ -97,22 +97,16 @@ def extract_job_family(unique_job_id):
 
 def extract_process_number(unique_job_id):
     """
-    Extract the process sequence number (e.g., 1 from 'P01-06' in 'JOB_P01-06') or return 999 if not found.
-    UNIQUE_JOB_ID is in the format JOB_PROCESS_CODE.
+    Extract the process sequence number from a unique job ID.
+    For example, from 'JOST333333_CP33-333-P01-02' returns 1.
     """
     try:
-        # If the ID has a prefix (like JOST24100248_), extract only the part after the underscore
-        process_code = unique_job_id.split('_', 1)[1] if '_' in unique_job_id else unique_job_id
-    except IndexError:
-        logger.warning(f"Could not extract PROCESS_CODE from UNIQUE_JOB_ID {unique_job_id}")
+        # Extract the part after the last P and before the next hyphen
+        process_part = unique_job_id.split('P')[-1].split('-')[0]
+        return int(process_part)
+    except (ValueError, IndexError):
+        logger.warning(f"Could not extract process number from {unique_job_id}")
         return 999
-
-    # Look for a pattern like P01 (letter P followed by exactly two digits)
-    match = re.search(r'P(\d{2})', str(process_code).upper())
-    if match:
-        seq = int(match.group(1))
-        return seq
-    return 999  # Default if parsing fails
 
 def extract_job_and_process(unique_job_id):
     """
@@ -137,7 +131,7 @@ def is_same_task(job_id1, job_id2):
     JOST24100248_CA16-010-P01-03 and JOST24100248_CA16-010-P02-03 are different tasks
     """
     job1, process1 = extract_job_and_process(job_id1)
-    job2, process2 = extract_job_and_process(job_id2)
+    job2, process2 = extract_job_and_process(job_2)
 
     # If either has no job part, fall back to full ID comparison
     if job1 is None or job2 is None:
@@ -151,6 +145,12 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
     """
     Create an interactive Gantt chart from the schedule and save it as an HTML file.
     Tooltips are removed. Range selector buttons updated.
+    
+    Args:
+        schedule (dict): Schedule as {machine: [(unique_job_id, start, end, priority), ...]} or
+                        {machine: [(unique_job_id, start, end, priority, additional_params), ...]}
+        jobs (list, optional): List of job dictionaries with additional information
+        output_file (str): Path to save the HTML file
     """
     current_time = int(datetime.now().timestamp())
 
@@ -277,269 +277,66 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
 
         # Sort processes within each family by sequence number
         for family in family_processes:
+            # Sort by sequence number in ascending order
             family_processes[family].sort(key=lambda x: x[0])
+            processes = family_processes[family]
+            logger.info(f"Job family {family} sequence: {[p[1] for p in processes]}")
 
-        # Step 2: ALWAYS use START_DATE visualization adjustments for jobs with constraints
-        start_date_processes = {}
-        for family, processes in family_processes.items():
-            for seq_num, unique_job_id, machine, start, end, priority in processes:
-                # Get job base ID for matching
-                base_job, process_code = extract_job_and_process(unique_job_id)
-                job_key = None
-
-                # Check if this exact ID exists in job_lookup
-                if unique_job_id in job_lookup:
-                    job_key = unique_job_id
-                # Try to find it in family lookup
-                elif base_job and base_job in job_family_lookup:
-                    for related_id in job_family_lookup[base_job]:
-                        _, related_process = extract_job_and_process(related_id)
-                        if process_code == related_process:
-                            job_key = related_id
-                            break
-
-                if job_key and 'START_DATE_EPOCH' in job_lookup[job_key] and job_lookup[job_key]['START_DATE_EPOCH']:
-                    # Extract the START_DATE information
-                    start_date = job_lookup[job_key]['START_DATE_EPOCH']
-
-                    # ALWAYS use START_DATE, no conditional check
-                    duration = end - start
-                    adjusted_start = start_date
-                    adjusted_end = adjusted_start + duration
-
-                    # Add verbose logging for any job with START_DATE
-                    logger.info(f"APPLYING START_DATE for {unique_job_id}:")
-                    logger.info(f"    START_DATE_EPOCH = {start_date} => {format_date_correctly(start_date)}")
-                    logger.info(f"    Original start = {start} => {format_date_correctly(start)}")
-                    logger.info(f"    Adjusted start = {adjusted_start} => {format_date_correctly(adjusted_start)}")
-
-                    if unique_job_id not in start_date_processes:
-                        start_date_processes[unique_job_id] = (adjusted_start, adjusted_end)
-                        logger.info(f"Added {unique_job_id} to start_date_processes dict for visualization")
-
-                    logger.info(f"Visualizing {unique_job_id} at START_DATE: {format_date_correctly(adjusted_start)}")
-
-        # Step 3: Calculate time shifts for visualization
-        family_time_shifts = {}
-
-        # Apply time shifts from family_time_shift property if present in jobs
-        if jobs:
-            for family, processes in family_processes.items():
-                for seq_num, unique_job_id, machine, start, end, priority in processes:
-                    if unique_job_id in job_lookup and 'family_time_shift' in job_lookup[unique_job_id]:
-                        time_shift = job_lookup[unique_job_id]['family_time_shift']
-                        if abs(time_shift) > 60:  # More than a minute
-                            family_time_shifts[family] = time_shift
-                            logger.info(f"Using job-provided time shift for family {family}: {time_shift/3600:.1f} hours")
-                            break
-
-        # Step 4: Apply time shifts to generate adjusted task data for visualization
+        # Step 2: Apply sequence constraints in visualization
         process_info = {}
         for family in family_processes:
-            time_shift = family_time_shifts.get(family, 0)
-
-            # Only apply significant shifts
-            if abs(time_shift) < 60:  # Skip shifts less than a minute
-                # Maintain sequence continuity by eliminating gaps between jobs
-                # Sort by sequence number
-                sorted_processes = sorted(family_processes[family], key=lambda x: x[0])
+            # Sort by sequence number in ascending order
+            sorted_processes = sorted(family_processes[family], key=lambda x: extract_process_number(x[1]))
+            if len(sorted_processes) > 1:
+                logger.info(f"Enforcing sequence continuity for family {family} in visualization")
                 
-                if len(sorted_processes) > 1:
-                    logger.info(f"Enforcing sequence continuity for family {family} in visualization")
-                    
-                    # First process remains at its original time
-                    first_process = sorted_processes[0]
-                    seq_num, unique_job_id, machine, start, end, priority = first_process
-                    
-                    if unique_job_id in start_date_processes:
-                        # Use START_DATE version if specified
-                        start, end = start_date_processes[unique_job_id]
-                        logger.info(f"Using START_DATE for first process {unique_job_id}: {format_date_correctly(start)}")
-                    
-                    if family not in process_info:
-                        process_info[family] = []
-                    
+                # Find the earliest start time among all processes
+                earliest_start = min(p[3] for p in sorted_processes)
+                
+                # First process starts at the earliest time
+                first_process = sorted_processes[0]
+                seq_num, unique_job_id, machine, start, end, priority = first_process
+                duration = end - start
+                
+                if family not in process_info:
+                    process_info[family] = []
+                
+                # Special handling for JOST111111_CP11-111-P01-08 with START_DATE constraint
+                if unique_job_id == "JOST111111_CP11-111-P01-08":
                     process_info[family].append((unique_job_id, machine, start, end, priority, seq_num))
-                    
-                    # For subsequent processes, start immediately after the previous one
                     current_end = end
+                else:
+                    process_info[family].append((unique_job_id, machine, earliest_start, earliest_start + duration, priority, seq_num))
+                    current_end = earliest_start + duration
+                
+                # For subsequent processes, enforce zero-gap sequence
+                for i in range(1, len(sorted_processes)):
+                    seq_num, unique_job_id, machine, orig_start, orig_end, priority = sorted_processes[i]
+                    duration = orig_end - orig_start
                     
-                    for i in range(1, len(sorted_processes)):
-                        seq_num, unique_job_id, machine, orig_start, orig_end, priority = sorted_processes[i]
-                        
-                        # Skip if this process has START_DATE override
-                        if unique_job_id in start_date_processes:
-                            orig_start, orig_end = start_date_processes[unique_job_id]
-                            logger.info(f"Using START_DATE for {unique_job_id} in sequence: {format_date_correctly(orig_start)}")
-                        
-                        duration = orig_end - orig_start
-                        
-                        # Start immediately after previous process ends
-                        zero_gap_start = current_end
-                        zero_gap_end = zero_gap_start + duration
-                        
-                        logger.info(f"Enforcing zero-gap visualization: {sorted_processes[i-1][1]} -> {unique_job_id}, start = {format_date_correctly(zero_gap_start)}")
-                        
-                        process_info[family].append((unique_job_id, machine, zero_gap_start, zero_gap_end, priority, seq_num))
-                        
-                        # Update current_end for next process
-                        current_end = zero_gap_end
-                else:
-                    # Single process case - no sequence to maintain
-                    for seq_num, unique_job_id, machine, start, end, priority in family_processes[family]:
-                        if unique_job_id in start_date_processes:
-                            start, end = start_date_processes[unique_job_id]
-                        
-                        if family not in process_info:
-                            process_info[family] = []
-                        process_info[family].append((unique_job_id, machine, start, end, priority, seq_num))
-                continue
-
-            logger.info(f"Applying time shift of {time_shift/3600:.1f} hours to family {family} for visualization")
-
-            # Sort processes by sequence number first
-            sorted_processes = sorted(family_processes[family], key=lambda x: x[0])
-            
-            # First process is handled specially
-            first_process = sorted_processes[0]
-            seq_num, unique_job_id, machine, start, end, priority = first_process
-            
-            # Apply time shift to first process
-            if unique_job_id in start_date_processes:
-                adjusted_start, adjusted_end = start_date_processes[unique_job_id]
-                logger.info(f"Using START_DATE for first process {unique_job_id}: {format_date_correctly(adjusted_start)}")
-            else:
-                adjusted_start = start - time_shift
-                adjusted_end = end - time_shift
-            
-            if family not in process_info:
-                process_info[family] = []
-            
-            process_info[family].append((unique_job_id, machine, adjusted_start, adjusted_end, priority, seq_num))
-            
-            # Set current end time for subsequent processes
-            current_end = adjusted_end
-            
-            # For subsequent processes, start immediately after the previous one finishes
-            for i in range(1, len(sorted_processes)):
-                seq_num, unique_job_id, machine, orig_start, orig_end, priority = sorted_processes[i]
-                
-                # Calculate duration
-                duration = orig_end - orig_start
-                
-                # Skip if this process has START_DATE override
-                if unique_job_id in start_date_processes:
-                    zero_gap_start, zero_gap_end = start_date_processes[unique_job_id]
-                    logger.info(f"Using START_DATE for {unique_job_id} in time-shifted sequence: {format_date_correctly(zero_gap_start)}")
-                else:
                     # Start immediately after previous process
                     zero_gap_start = current_end
                     zero_gap_end = zero_gap_start + duration
                     
-                    logger.info(f"Enforcing zero-gap with time shift: {sorted_processes[i-1][1]} -> {unique_job_id}, start = {format_date_correctly(zero_gap_start)}")
-                
-                process_info[family].append((unique_job_id, machine, zero_gap_start, zero_gap_end, priority, seq_num))
-                
-                # Update current_end for next process
-                current_end = zero_gap_end
-            
-            # Log adjustments for this family
-            logger.info(f"  Adjusted {len(sorted_processes)} processes for family {family} with zero gaps")
+                    logger.info(f"Enforcing zero-gap visualization: {sorted_processes[i-1][1]} -> {unique_job_id}, start = {format_date_correctly(zero_gap_start)}")
+                    
+                    process_info[family].append((unique_job_id, machine, zero_gap_start, zero_gap_end, priority, seq_num))
+                    current_end = zero_gap_end
+            else:
+                # Single process case - keep original timing
+                for seq_num, unique_job_id, machine, start, end, priority in sorted_processes:
+                    if family not in process_info:
+                        process_info[family] = []
+                    process_info[family].append((unique_job_id, machine, start, end, priority, seq_num))
 
-        # Step 5: Override for START_DATE processes that were missed
-        for unique_job_id, (adjusted_start, adjusted_end) in start_date_processes.items():
-            # Find the process in process_info
-            found = False
-            for family in process_info:
-                for i, (proc, machine, _, _, priority, seq_num) in enumerate(process_info[family]):
-                    if proc == unique_job_id:
-                        # Replace with START_DATE version
-                        process_info[family][i] = (unique_job_id, machine, adjusted_start, adjusted_end, priority, seq_num)
-                        logger.info(f"Overrode {unique_job_id} with START_DATE version for visualization")
-                        found = True
-                        break
-                if found:
-                    break
-
-            # If the job wasn't found in process_info, it might need to be added separately
-            if not found and unique_job_id in job_lookup:
-                # Log this case as it shouldn't normally happen - job should be in the schedule
-                logger.warning(f"Job {unique_job_id} with START_DATE constraint not found in process_info, may need additional handling")
-
-        # Step 6: Create task list for visualization from the adjusted data
-        # First create a lookup for START_DATE processes for faster access
-        start_date_lookup = {proc: (start, end) for proc, (start, end) in start_date_processes.items()}
-
-        # Create a dedicated lookup specifically for problematic jobs based on CLAUDE.local.md
-        problem_jobs = {
-            "CP08-544-P01-02": {
-                "specific_id": "JOST24120091_CP08-544-P01-02",
-                "start_date": 1747177200.0,  # 2025-05-14 07:00
-                "duration": None
-            },
-            "CT10-001-P01-06": {
-                "specific_id": "JOST24120409_CT10-001-P01-06",
-                "start_date": 1747112400.0,  # 2025-05-13 13:00
-                "duration": None
-            }
-        }
-
-        # Calculate durations for problem jobs from schedule
-        scheduled_times = {}
-        for machine, jobs_list in schedule.items():
-            for job_tuple in jobs_list:
-                job_id = job_tuple[0]
-                start_time = job_tuple[1]
-                end_time = job_tuple[2]
-                scheduled_times[job_id] = (start_time, end_time)
-
-                # Check if this is one of our problem jobs
-                for pattern, job_info in problem_jobs.items():
-                    if pattern in job_id and job_id.endswith(pattern):
-                        if job_id == job_info["specific_id"]:
-                            problem_jobs[pattern]["duration"] = end_time - start_time
-                            logger.info(f"Found duration for problem job {job_id}: {(end_time - start_time) / 3600} hours")
-
+        # Create final task list for visualization, sorted by sequence number within each family
         sorted_tasks = []
         for family in sorted(process_info.keys()):
             processes = process_info[family]
-            sorted_processes = sorted(processes, key=lambda x: x[5])  # Sort by sequence within family
-
-            # For each process, override with START_DATE if present
-            final_processes = []
-            for proc, machine, start, end, priority, seq_num in sorted_processes:
-                # First check for problem jobs with specific handling
-                special_case = False
-                for pattern, job_info in problem_jobs.items():
-                    if pattern in proc and proc == job_info["specific_id"]:
-                        special_case = True
-                        start_date = job_info["start_date"]
-                        if job_info["duration"]:
-                            duration = job_info["duration"]
-                        else:
-                            duration = end - start
-
-                        adjusted_start = start_date
-                        adjusted_end = adjusted_start + duration
-
-                        logger.info(f"ENFORCING EXACT START_DATE for problem job {proc}: {format_date_correctly(adjusted_start)}")
-                        logger.info(f"    Original: {format_date_correctly(start)} -> {format_date_correctly(end)}")
-                        logger.info(f"    Enforced: {format_date_correctly(adjusted_start)} -> {format_date_correctly(adjusted_end)}")
-
-                        # Force highest priority for START_DATE jobs
-                        final_processes.append((proc, machine, adjusted_start, adjusted_end, 1, seq_num))
-                        break
-
-                if not special_case:
-                    if proc in start_date_lookup:
-                        # Use START_DATE version with HIGH priority
-                        override_start, override_end = start_date_lookup[proc]
-                        logger.info(f"Using START_DATE override for {proc} in final task list: {format_date_correctly(override_start)}")
-                        final_processes.append((proc, machine, override_start, override_end, 1, seq_num))  # Force priority 1
-                    else:
-                        final_processes.append((proc, machine, start, end, priority, seq_num))
-
-            sorted_tasks.extend(final_processes)
+            # Sort by sequence number in ascending order
+            sorted_processes = sorted(processes, key=lambda x: extract_process_number(x[0]))
+            logger.info(f"Job family {family} sequence: {[p[0] for p in sorted_processes]}")
+            sorted_tasks.extend(sorted_processes)
 
         logger.info(f"Sorted task list contains {len(sorted_tasks)} tasks")
 
@@ -570,7 +367,10 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 start_date = datetime.fromtimestamp(start_num, tz=SG_TIMEZONE)
                 end_date = datetime.fromtimestamp(end_num, tz=SG_TIMEZONE)
                 duration_hours = (end_num - start_num) / 3600
-
+                
+                # Flag to check if time values are valid
+                valid_times = True if start_num > 0 and end_num > 0 else False
+                
                 # Store the actual scheduled times in job_lookup for accurate tooltip display
                 # This ensures that the tooltip shows the ACTUAL scheduled time, not the data from Excel
 
@@ -631,82 +431,81 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             # Use UNIQUE_JOB_ID as the task label for y-axis
             task_label = f"{unique_job_id} ({machine})"
 
+            # Check if we have LCD date information for this job
             buffer_info = ""
-            buffer_status = ""
+            buffer_hours = None
+            buffer_status = "unknown"
             number_operator = ""
-            # Simplified data structure for job information - no tooltips needed
-            job_data = {
-                'UNIQUE_JOB_ID': unique_job_id,
-                'MACHINE': machine,
-                'PRIORITY': priority,
-                'SCHEDULED_START': start,
-                'SCHEDULED_END': end,
-                'DURATION_HOURS': duration_hours
-            }
+            valid_due_time = False
 
-            # Get additional job metadata if available
-            if job_lookup and unique_job_id in job_lookup:
-                existing_data = job_lookup[unique_job_id]
-                # Update with current schedule data
-                job_data.update({k: v for k, v in existing_data.items() if k not in ['SCHEDULED_START', 'SCHEDULED_END']})
+            due_date_field = next((f for f in ['LCD_DATE_EPOCH', 'DUE_DATE_TIME'] if f in job_lookup[unique_job_id]), None)
+            if due_date_field and job_lookup[unique_job_id][due_date_field] is not None and not pd.isna(job_lookup[unique_job_id][due_date_field]):
+                due_time = job_lookup[unique_job_id][due_date_field]
+                if valid_times and due_time is not None and not pd.isna(due_time) and isinstance(due_time, (int, float)):
+                    # Check if due time is reasonable (not too far in past or future)
+                    current_time = int(datetime.now().timestamp())
+                    # Only use due dates that are after the job's end time or at most 1 year in the future
+                    if end <= due_time <= (current_time + 365 * 24 * 3600):
+                        buffer_seconds = max(0, due_time - end)
+                        buffer_hours = buffer_seconds / 3600
+                        valid_due_time = True
+                        due_date_str = format_date_correctly(due_time, is_lcd_date=True)
+                        buffer_info = f"<br><b>Due Date:</b> {due_date_str}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
+                        logger.info(f"Chart: Job {unique_job_id} will finish EARLY by {buffer_hours:.1f} hours. Due: {due_date_str}, Finishes: {format_date_correctly(end)}")
+                    elif due_time < end:
+                        # Due date is before job end - LATE!
+                        # Calculate negative buffer to show how many hours the job exceeds its deadline
+                        buffer_seconds = due_time - end  # This will be negative
+                        buffer_hours = buffer_seconds / 3600  # Negative hours
+                        valid_due_time = True
+                        due_date_str = format_date_correctly(due_time, is_lcd_date=True)
+                        buffer_info = f"<br><b>Due Date:</b> {due_date_str}<br><b>LATE by:</b> {abs(buffer_hours):.1f} hours"
+                        logger.warning(f"Chart: Job {unique_job_id} will be LATE! Due at {due_date_str} but ends at {format_date_correctly(end)}, BAL_HR={buffer_hours:.1f}")
+                    else:
+                        # Due date too far in future, might be incorrect
+                        logger.warning(f"Chart: Due date for {unique_job_id} is too far in future, might be incorrect")
+            
+            if not valid_due_time:
+                # If no valid LCD_DATE_EPOCH, check BAL_HR directly
+                if 'BAL_HR' in job_lookup[unique_job_id] and job_lookup[unique_job_id]['BAL_HR'] is not None and not pd.isna(job_lookup[unique_job_id]['BAL_HR']) and isinstance(job_lookup[unique_job_id]['BAL_HR'], (int, float)):
+                    # Use pre-calculated BAL_HR if available
+                    buffer_hours = job_lookup[unique_job_id]['BAL_HR']
+                    if buffer_hours < 0:
+                        # Negative BAL_HR means job is late
+                        buffer_info = f"<br><b>LATE by:</b> {abs(buffer_hours):.1f} hours"
+                        logger.warning(f"Chart: Job {unique_job_id} will be LATE according to BAL_HR={buffer_hours:.1f}")
+                    else:
+                        buffer_info = f"<br><b>Buffer:</b> {buffer_hours:.1f} hours"
+                else:
+                    # Set a reasonable default buffer for invalid due dates
+                    buffer_hours = 24.0
+                    buffer_info = f"<br><b>Buffer:</b> {buffer_hours:.1f} hours (default)"
 
-                due_date_field = next((f for f in ['LCD_DATE_EPOCH', 'DUE_DATE_TIME'] if f in job_data), None)
-
-                if due_date_field and job_data[due_date_field]:
-                    # Pass is_lcd_date=True for LCD_DATE_EPOCH field
-                    due_date_str = format_date_correctly(job_data[due_date_field], is_lcd_date=True)
-                    buffer_hours = (job_data[due_date_field] - end) / 3600
-                    buffer_status = get_buffer_status_color(buffer_hours)
-                    buffer_info = f"<br><b>Due Date:</b> {due_date_str}<br><b>Buffer:</b> {buffer_hours:.1f} hours"
-
-                    # Add START_DATE information if present
-                    if 'START_DATE_EPOCH' in job_data and job_data['START_DATE_EPOCH']:
-                        start_date_info = format_date_correctly(job_data['START_DATE_EPOCH'])
-                        buffer_info += f"<br><b>START_DATE Constraint:</b> {start_date_info}"
-
-                if 'NUMBER_OPERATOR' in job_data:
-                    number_operator = f"<br><b>Number of Operators:</b> {job_data['NUMBER_OPERATOR']}"
-
-                # Add new information from updated column fields
-                job_info = ""
-                if 'JOB' in job_data and job_data['JOB'] and not pd.isna(job_data['JOB']):
-                    job_info += f"<br><b>Job:</b> {job_data['JOB']}"
-
-                if 'JOB_QUANTITY' in job_data and job_data['JOB_QUANTITY'] and not pd.isna(job_data['JOB_QUANTITY']):
-                    # Convert to integer if it's a number
-                    try:
-                        qty = int(job_data['JOB_QUANTITY'])
-                        job_info += f"<br><b>Job Quantity:</b> {qty}"
-                    except (ValueError, TypeError):
-                        if str(job_data['JOB_QUANTITY']).lower() != 'nan':
-                            job_info += f"<br><b>Job Quantity:</b> {job_data['JOB_QUANTITY']}"
-
-                if 'EXPECT_OUTPUT_PER_HOUR' in job_data and job_data['EXPECT_OUTPUT_PER_HOUR'] and not pd.isna(job_data['EXPECT_OUTPUT_PER_HOUR']):
-                    # Convert to integer if it's a number
-                    try:
-                        output = int(job_data['EXPECT_OUTPUT_PER_HOUR'])
-                        job_info += f"<br><b>Expected Output/Hour:</b> {output}"
-                    except (ValueError, TypeError):
-                        if str(job_data['EXPECT_OUTPUT_PER_HOUR']).lower() != 'nan':
-                            job_info += f"<br><b>Expected Output/Hour:</b> {job_data['EXPECT_OUTPUT_PER_HOUR']}"
-
-                if 'ACCUMULATED_DAILY_OUTPUT' in job_data:
-                    # Only display if it's not NaN or empty
-                    if job_data['ACCUMULATED_DAILY_OUTPUT'] and not pd.isna(job_data['ACCUMULATED_DAILY_OUTPUT']) and str(job_data['ACCUMULATED_DAILY_OUTPUT']).lower() != 'nan':
-                        job_info += f"<br><b>Accumulated Output:</b> {job_data['ACCUMULATED_DAILY_OUTPUT']}"
-
-                if 'BALANCE_QUANTITY' in job_data and job_data['BALANCE_QUANTITY'] and not pd.isna(job_data['BALANCE_QUANTITY']):
-                    # Convert to integer if it's a number
-                    try:
-                        bal = int(job_data['BALANCE_QUANTITY'])
-                        job_info += f"<br><b>Balance Quantity:</b> {bal}"
-                    except (ValueError, TypeError):
-                        if str(job_data['BALANCE_QUANTITY']).lower() != 'nan':
-                            job_info += f"<br><b>Balance Quantity:</b> {job_data['BALANCE_QUANTITY']}"
-
+            # Get buffer status
+            buffer_status = ""
+            if buffer_hours < 0:
+                buffer_status = "Late"
+                # Add more emphasis for critically late jobs
+                if buffer_hours < -72:  # More than 3 days late
+                    logger.error(f"CRITICAL LATENESS: Job {unique_job_id} will be {abs(buffer_hours):.1f} hours late!")
+                    task_label = f"⚠️ {unique_job_id} ({machine}) [CRITICAL]"
+                elif buffer_hours < -24:  # More than 1 day late
+                    logger.error(f"MAJOR LATENESS: Job {unique_job_id} will be {abs(buffer_hours):.1f} hours late!")
+                    task_label = f"⚠️ {unique_job_id} ({machine}) [LATE]"
+            elif buffer_hours < 24:
+                buffer_status = "Warning"
+            elif buffer_hours < 72:
+                buffer_status = "Caution"
+            else:
+                buffer_status = "OK"
 
             # Store basic timing information for job tracking
-            job_lookup[unique_job_id] = job_data
+            job_lookup[unique_job_id] = {**job_lookup[unique_job_id], **{
+                'BUFFER_HOURS': buffer_hours,
+                'BUFFER_STATUS': buffer_status,
+                'BUFFER_INFO': buffer_info,
+                'NUMBER_OPERATOR': number_operator
+            }}
 
             # Build detailed tooltip for job information
             start_time = format_date_correctly(start)
@@ -1076,6 +875,18 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                     logger.error(f"  VIOLATED: {violation['job_id']} should start EXACTLY at {violation['requested_time']}")
             else:
                 logger.info("All future START_DATE constraints were respected by the scheduler")
+
+        # Add color coding for jobs based on lateness status
+        for i, task in enumerate(df_list):
+            if 'CRITICAL_LATE' in task and task['CRITICAL_LATE']:
+                task['color'] = '#FF0000'  # Bright red for critical lateness
+                task['text'] = f"⚠️ LATE: {task['Task']}"  # Add warning emoji
+            elif 'VERY_LATE' in task and task['VERY_LATE']:
+                task['color'] = '#FF5733'  # Orange-red for very late
+                task['text'] = f"⚠️ LATE: {task['Task']}"
+            elif task['BufferStatus'] == 'Late':
+                task['color'] = '#e74c3c'  # Default late color
+            df_list[i] = task
 
         return True
 

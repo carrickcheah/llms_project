@@ -138,18 +138,26 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
     # Group jobs by family for sequence enforcement
     job_families = defaultdict(list)
     if enforce_sequence:
-        for job in jobs:
-            job_code = job.get('JOB')
-            if job_code:
-                job_families[job_code].append(job)
+        for job in sorted_jobs:
+            family = extract_job_family(job['UNIQUE_JOB_ID'])
+            if family:
+                process_num = extract_process_number(job['UNIQUE_JOB_ID'])
+                if process_num != 999:  # Only add if we got a valid process number
+                    job_families[family].append((process_num, job))
                 
-        # Log information about job families
-        for family, family_jobs in job_families.items():
-            if len(family_jobs) > 1:
-                # Sort by process code to establish sequence
-                family_jobs.sort(key=lambda j: j.get('PROCESS_CODE', 0))
-                logger.info(f"Job family {family} has {len(family_jobs)} processes in sequence")
-    
+        # Sort each family's jobs by process number and log
+        for family, jobs_in_family in job_families.items():
+            # Sort by process number, ensuring proper numerical ordering
+            jobs_in_family.sort(key=lambda x: int(x[0]))  # Convert process_num to int for sorting
+            logger.info(f"Job family {family} has {len(jobs_in_family)} processes in sequence")
+            
+            # Update the sorted_jobs list to maintain sequence order
+            family_job_ids = [j[1]['UNIQUE_JOB_ID'] for j in jobs_in_family]
+            logger.info(f"Job family {family} sequence: {family_job_ids}")
+            
+            # Update job_family_end_times with initial values
+            job_family_end_times[family] = current_time
+
     # Schedule jobs
     scheduled_jobs = set()
     unscheduled_jobs = []
@@ -199,32 +207,43 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
             
             logger.info(f"Job {job_id} must start exactly at {start_date_str}")
         
-        # Enforce process sequence dependencies
-        if enforce_sequence and job_family:
-            # Find the max end time of all previous processes in this job family
-            family_jobs = job_families[job_family]
-            family_jobs.sort(key=lambda j: j.get('PROCESS_CODE', 0))
-            
-            # Find the previous process in the sequence
-            for j in family_jobs:
-                prev_proc_code = j.get('PROCESS_CODE', 0)
-                prev_job_id = j.get('UNIQUE_JOB_ID')
-                
-                # If this is a previous process in the sequence
-                if prev_proc_code < process_code and prev_job_id in scheduled_jobs:
-                    # Find the end time of this previous process
-                    for m, jobs_on_machine in schedule.items():
-                        for scheduled_job_id, start, end, _ in jobs_on_machine:
-                            if scheduled_job_id == prev_job_id:
-                                # Always start this job immediately after its predecessor completes
-                                # This is the key change - we want zero gaps between dependent processes
-                                earliest_start = max(earliest_start, end)
-                                logger.info(f"Enforcing zero-gap sequence: {prev_job_id} -> {job_id}, start = {format_datetime_for_display(epoch_to_datetime(earliest_start))}")
-                                
-                                # Prioritize sequence continuity over machine availability
-                                # Only if the machine is available at the required time
-                                if earliest_start > machine_available_time[machine_id]:
-                                    logger.info(f"Machine {machine_id} will be idle from {format_datetime_for_display(epoch_to_datetime(machine_available_time[machine_id]))} to {format_datetime_for_display(epoch_to_datetime(earliest_start))} to maintain sequence")
+        # Check sequence constraints
+        if enforce_sequence:
+            family = extract_job_family(job_id)
+            if family:
+                process_num = extract_process_number(job_id)
+                if process_num != 999:
+                    # Find the previous process in this family
+                    prev_jobs = [(p, j) for p, j in job_families[family] if int(p) < int(process_num)]
+                    if prev_jobs:
+                        # Get the most recent previous process
+                        prev_process = max(prev_jobs, key=lambda x: int(x[0]))
+                        prev_job = prev_process[1]
+                        prev_job_id = prev_job['UNIQUE_JOB_ID']
+                        
+                        # Check if previous job is scheduled
+                        prev_scheduled = False
+                        prev_end_time = current_time
+                        for m in schedule:
+                            for scheduled_id, start, end, *_ in schedule[m]:
+                                if scheduled_id == prev_job_id:
+                                    prev_scheduled = True
+                                    prev_end_time = end
+                                    break
+                            if prev_scheduled:
+                                break
+                        
+                        if not prev_scheduled:
+                            logger.info(f"Cannot schedule {job_id} yet - previous process {prev_job_id} not scheduled")
+                            continue
+                        
+                        # Update earliest start time based on previous process
+                        earliest_start = max(earliest_start, prev_end_time)
+                        logger.info(f"Enforcing zero-gap sequence: {prev_job_id} -> {job_id}, start = {format_datetime_for_display(epoch_to_datetime(earliest_start))}")
+                        
+                        # Update machine available time to maintain sequence
+                        if earliest_start > machine_available_time[machine_id]:
+                            logger.info(f"Machine {machine_id} will be idle from {format_datetime_for_display(epoch_to_datetime(current_time))} to {format_datetime_for_display(epoch_to_datetime(earliest_start))} to maintain sequence")
         
         # Check operator constraints if specified
         if max_operators > 0:

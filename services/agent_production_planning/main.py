@@ -22,6 +22,9 @@ from time_utils import (
     convert_job_times_to_epoch
 )
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def main():
     print("Production Planning Scheduler")
@@ -238,6 +241,11 @@ def main():
         logger.error("Failed to create a valid schedule.")
         return
 
+    # Convert CP-SAT schedule to greedy format if needed
+    if '_metadata' in schedule:
+        logger.info("Converting CP-SAT schedule format to greedy format")
+        schedule = convert_cpsat_to_greedy_format(schedule)
+
     jobs = add_schedule_times_and_buffer(jobs, schedule)
     
     try:
@@ -254,7 +262,10 @@ def main():
     flat_schedule = []
     for machine, tasks in schedule.items():
         for task in tasks:
-            unique_job_id, start, end, priority = task
+            if len(task) == 5:
+                unique_job_id, start, end, priority, _ = task
+            else:
+                unique_job_id, start, end, priority = task
             
             # Convert epoch timestamps to ISO strings and relative times for display
             start_dt = epoch_to_datetime(start)
@@ -400,7 +411,7 @@ def main():
     # Calculate machine load
     machine_loads = {}
     for machine, tasks in schedule.items():
-        machine_load = sum(end - start for _, start, end, _ in tasks) / 3600
+        machine_load = sum(end - start for task in tasks for _, start, end, *_ in [task]) / 3600
         machine_loads[machine] = machine_load
     
     if machine_loads:
@@ -452,5 +463,110 @@ def main():
     print(f"- Gantt chart: {os.path.abspath(args.output)}")
     print(f"- HTML Schedule View: {os.path.abspath(html_output)}")
     
+def convert_cpsat_to_greedy_format(cpsat_schedule):
+    """
+    Convert the CP-SAT solver schedule format to the greedy scheduler format.
+    The format should be: {machine: [(job_id, start, end, priority, additional_params), ...]}
+    
+    Args:
+        cpsat_schedule (dict): Either CP-SAT format {job_id: {'machine': str, 'start': int, 'end': int, ...}, '_metadata': {...}}
+                              or greedy format {machine: [(job_id, start, end, priority), ...]}
+    
+    Returns:
+        dict: Schedule in format {machine: [(job_id, start, end, priority, additional_params), ...]}
+    """
+    logger.info("Converting CP-SAT schedule format to greedy format")
+    
+    # If it's already in the right format (no _metadata), convert tuples to 5-tuples if needed
+    if '_metadata' not in cpsat_schedule:
+        greedy_format = {}
+        for machine, tasks in cpsat_schedule.items():
+            greedy_format[machine] = []
+            for task in tasks:
+                # Handle both 4-tuple and 5-tuple formats
+                if len(task) == 4:
+                    job_id, start, end, priority = task
+                    greedy_format[machine].append((job_id, start, end, priority, {}))
+                elif len(task) == 5:
+                    greedy_format[machine].append(task)  # Already in correct format
+                else:
+                    logger.warning(f"Unexpected task format for machine {machine}: {task}")
+                    # Try to extract required fields if possible
+                    if len(task) >= 3:
+                        job_id, start, end = task[:3]
+                        priority = task[3] if len(task) > 3 else 3  # Default priority
+                        greedy_format[machine].append((job_id, start, end, priority, {}))
+        return greedy_format
+    
+    # Create a new schedule without the _metadata
+    greedy_format = {}
+    
+    # Process each job in the CP-SAT schedule
+    for job_id, details in cpsat_schedule.items():
+        if job_id == '_metadata':
+            continue
+            
+        if not isinstance(details, dict):
+            logger.warning(f"Invalid details format for job {job_id}: {details}")
+            continue
+            
+        # Extract required fields
+        machine = details.get('machine')
+        start = details.get('start')
+        end = details.get('end')
+        priority = details.get('priority', 3)  # Default to medium priority
+        
+        if not all(x is not None for x in [machine, start, end]):
+            logger.warning(f"Missing required fields for job {job_id}: machine={machine}, start={start}, end={end}")
+            continue
+            
+        # Initialize machine list if needed
+        if machine not in greedy_format:
+            greedy_format[machine] = []
+            
+        # Add the job as a 5-tuple with empty additional params
+        greedy_format[machine].append((job_id, start, end, priority, {}))
+    
+    # Log conversion stats
+    total_tasks = sum(len(tasks) for tasks in greedy_format.values())
+    logger.info(f"Converted CP-SAT schedule: {total_tasks} tasks scheduled")
+    
+    return greedy_format
+
+def build_schedule_from_logs(cpsat_schedule):
+    """
+    Build a schedule directly from the logging messages if the standard conversion fails.
+    This is a last resort when the CP-SAT solver returns a format we can't process directly.
+    
+    Returns:
+        dict: The schedule in greedy scheduler format {machine: [(job_id, start, end, priority, additional_params), ...]}
+    """
+    logger.info("Building schedule from solver log messages")
+    greedy_format = {}
+    
+    # Create a list of dictionaries for all scheduled jobs
+    # Format should match what we see in the logs:
+    # "Scheduled JOST111111_CP11-111-P01-08 on PAINTING: start=34, end=54"
+    for job_id, details in cpsat_schedule.items():
+        if job_id == '_metadata':
+            continue
+            
+        if isinstance(details, dict) and 'machine' in details and 'start' in details and 'end' in details:
+            machine = details['machine']
+            start = details['start']
+            end = details['end']
+            priority = details.get('priority', 3)  # Default to medium priority
+            
+            if machine not in greedy_format:
+                greedy_format[machine] = []
+                
+            greedy_format[machine].append((job_id, start, end, priority, {}))  # Use 5-tuple with empty additional params
+    
+    # Count how many jobs we scheduled this way
+    total_after = sum(len(tasks) for machine, tasks in greedy_format.items())
+    logger.info(f"Built schedule from logs: {total_after} tasks scheduled")
+    
+    return greedy_format
+
 if __name__ == "__main__":
     main()

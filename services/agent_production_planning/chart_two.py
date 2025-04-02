@@ -112,7 +112,8 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
     
     Args:
         jobs (list): List of job dictionaries with buffer information
-        schedule (dict): Schedule as {machine: [(unique_job_id, start, end, priority), ...]}
+        schedule (dict): Schedule as {machine: [(unique_job_id, start, end, priority), ...]} or
+                        {machine: [(unique_job_id, start, end, priority, additional_params), ...]}
         output_file (str): Path to save the HTML file
         
     Returns:
@@ -140,9 +141,11 @@ def export_schedule_html(jobs, schedule, output_file='schedule_view.html'):
         start_times = {}
         for machine, tasks in schedule.items():
             for task in tasks:
-                unique_job_id, start, end, priority = task
-                end_times[unique_job_id] = end
-                start_times[unique_job_id] = start
+                # Handle both 4-tuple and 5-tuple formats
+                if len(task) >= 4:  # Both formats have at least 4 elements
+                    unique_job_id, start, end = task[:3]  # First 3 elements are the same in both formats
+                    end_times[unique_job_id] = end
+                    start_times[unique_job_id] = start
         
         # Step 2: Apply time shifts from jobs to their visualization times
         adjusted_times = {}
