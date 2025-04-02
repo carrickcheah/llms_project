@@ -290,7 +290,47 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
                 model.Add(sum(active_jobs) <= max_operators)
                 logging.info(f"Added operator constraint at time {t}: max {max_operators} operators")
     
-    # Minimize makespan (maximum completion time)
+    # Create variables for minimizing gaps between dependent jobs
+    sequence_gaps = []
+    if enforce_sequence:
+        for job_code, family_jobs in job_families.items():
+            if len(family_jobs) <= 1:
+                continue
+                
+            # Sort jobs by process code
+            family_jobs.sort(key=lambda j: j.get('PROCESS_CODE', 0))
+            
+            # Calculate gap between consecutive jobs in sequence
+            for i in range(len(family_jobs) - 1):
+                job1 = family_jobs[i]
+                job2 = family_jobs[i + 1]
+                
+                job1_id = job1.get('UNIQUE_JOB_ID')
+                job2_id = job2.get('UNIQUE_JOB_ID')
+                
+                if job1_id in all_jobs and job2_id in all_jobs:
+                    _, end_var1, _ = all_jobs[job1_id]
+                    start_var2, _, _ = all_jobs[job2_id]
+                    
+                    # Create a variable for the gap between these jobs
+                    gap = model.NewIntVar(0, int(horizon_end_hours), f'gap_{job1_id}_to_{job2_id}')
+                    
+                    # Gap equals start of job2 minus end of job1
+                    model.Add(gap == start_var2 - end_var1)
+                    
+                    # Add this gap to our list
+                    sequence_gaps.append(gap)
+                    logging.info(f"Added gap variable between {job1_id} and {job2_id}")
+    
+    # First objective: minimize the sum of gaps between dependent jobs
+    total_gap = model.NewIntVar(0, int(horizon_end_hours * len(sequence_gaps)) if sequence_gaps else 1, 'total_gap')
+    if sequence_gaps:
+        model.Add(total_gap == sum(sequence_gaps))
+        logging.info(f"Created objective to minimize {len(sequence_gaps)} sequence gaps")
+    else:
+        model.Add(total_gap == 0)
+    
+    # Second objective: minimize makespan (maximum completion time) as a secondary goal
     makespan = model.NewIntVar(0, 10000, 'makespan')
     for job_id, job_tuple in all_jobs.items():
         _, end_var, _ = job_tuple
@@ -300,8 +340,9 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_seconds
     
-    # Solve the model to minimize makespan
-    model.Minimize(makespan)
+    # Minimize combined objective (gaps are much more important than makespan)
+    # Scale is 1000 to prioritize gaps over makespan
+    model.Minimize(total_gap * 1000 + makespan)
     status = solver.Solve(model)
     
     # Check if a solution was found

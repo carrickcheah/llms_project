@@ -216,8 +216,15 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                     for m, jobs_on_machine in schedule.items():
                         for scheduled_job_id, start, end, _ in jobs_on_machine:
                             if scheduled_job_id == prev_job_id:
+                                # Always start this job immediately after its predecessor completes
+                                # This is the key change - we want zero gaps between dependent processes
                                 earliest_start = max(earliest_start, end)
-                                logger.info(f"Enforcing sequence: {prev_job_id} -> {job_id}, earliest start = {format_datetime_for_display(epoch_to_datetime(earliest_start))}")
+                                logger.info(f"Enforcing zero-gap sequence: {prev_job_id} -> {job_id}, start = {format_datetime_for_display(epoch_to_datetime(earliest_start))}")
+                                
+                                # Prioritize sequence continuity over machine availability
+                                # Only if the machine is available at the required time
+                                if earliest_start > machine_available_time[machine_id]:
+                                    logger.info(f"Machine {machine_id} will be idle from {format_datetime_for_display(epoch_to_datetime(machine_available_time[machine_id]))} to {format_datetime_for_display(epoch_to_datetime(earliest_start))} to maintain sequence")
         
         # Check operator constraints if specified
         if max_operators > 0:

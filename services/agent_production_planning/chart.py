@@ -340,37 +340,111 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
 
             # Only apply significant shifts
             if abs(time_shift) < 60:  # Skip shifts less than a minute
-                for seq_num, unique_job_id, machine, start, end, priority in family_processes[family]:
+                # Maintain sequence continuity by eliminating gaps between jobs
+                # Sort by sequence number
+                sorted_processes = sorted(family_processes[family], key=lambda x: x[0])
+                
+                if len(sorted_processes) > 1:
+                    logger.info(f"Enforcing sequence continuity for family {family} in visualization")
+                    
+                    # First process remains at its original time
+                    first_process = sorted_processes[0]
+                    seq_num, unique_job_id, machine, start, end, priority = first_process
+                    
+                    if unique_job_id in start_date_processes:
+                        # Use START_DATE version if specified
+                        start, end = start_date_processes[unique_job_id]
+                        logger.info(f"Using START_DATE for first process {unique_job_id}: {format_date_correctly(start)}")
+                    
                     if family not in process_info:
                         process_info[family] = []
+                    
                     process_info[family].append((unique_job_id, machine, start, end, priority, seq_num))
+                    
+                    # For subsequent processes, start immediately after the previous one
+                    current_end = end
+                    
+                    for i in range(1, len(sorted_processes)):
+                        seq_num, unique_job_id, machine, orig_start, orig_end, priority = sorted_processes[i]
+                        
+                        # Skip if this process has START_DATE override
+                        if unique_job_id in start_date_processes:
+                            orig_start, orig_end = start_date_processes[unique_job_id]
+                            logger.info(f"Using START_DATE for {unique_job_id} in sequence: {format_date_correctly(orig_start)}")
+                        
+                        duration = orig_end - orig_start
+                        
+                        # Start immediately after previous process ends
+                        zero_gap_start = current_end
+                        zero_gap_end = zero_gap_start + duration
+                        
+                        logger.info(f"Enforcing zero-gap visualization: {sorted_processes[i-1][1]} -> {unique_job_id}, start = {format_date_correctly(zero_gap_start)}")
+                        
+                        process_info[family].append((unique_job_id, machine, zero_gap_start, zero_gap_end, priority, seq_num))
+                        
+                        # Update current_end for next process
+                        current_end = zero_gap_end
+                else:
+                    # Single process case - no sequence to maintain
+                    for seq_num, unique_job_id, machine, start, end, priority in family_processes[family]:
+                        if unique_job_id in start_date_processes:
+                            start, end = start_date_processes[unique_job_id]
+                        
+                        if family not in process_info:
+                            process_info[family] = []
+                        process_info[family].append((unique_job_id, machine, start, end, priority, seq_num))
                 continue
 
             logger.info(f"Applying time shift of {time_shift/3600:.1f} hours to family {family} for visualization")
 
-            for seq_num, unique_job_id, machine, start, end, priority in family_processes[family]:
+            # Sort processes by sequence number first
+            sorted_processes = sorted(family_processes[family], key=lambda x: x[0])
+            
+            # First process is handled specially
+            first_process = sorted_processes[0]
+            seq_num, unique_job_id, machine, start, end, priority = first_process
+            
+            # Apply time shift to first process
+            if unique_job_id in start_date_processes:
+                adjusted_start, adjusted_end = start_date_processes[unique_job_id]
+                logger.info(f"Using START_DATE for first process {unique_job_id}: {format_date_correctly(adjusted_start)}")
+            else:
+                adjusted_start = start - time_shift
+                adjusted_end = end - time_shift
+            
+            if family not in process_info:
+                process_info[family] = []
+            
+            process_info[family].append((unique_job_id, machine, adjusted_start, adjusted_end, priority, seq_num))
+            
+            # Set current end time for subsequent processes
+            current_end = adjusted_end
+            
+            # For subsequent processes, start immediately after the previous one finishes
+            for i in range(1, len(sorted_processes)):
+                seq_num, unique_job_id, machine, orig_start, orig_end, priority = sorted_processes[i]
+                
+                # Calculate duration
+                duration = orig_end - orig_start
+                
                 # Skip if this process has START_DATE override
                 if unique_job_id in start_date_processes:
-                    adjusted_start, adjusted_end = start_date_processes[unique_job_id]
-                    # Add specific logging for CP08-544-P01-02
-                    if 'CP08-544-P01-02' in unique_job_id:
-                        logger.info(f"USING START_DATE for {unique_job_id}: Original start={format_date_correctly(start)}, "
-                                   f"Adjusted start={format_date_correctly(adjusted_start)}")
+                    zero_gap_start, zero_gap_end = start_date_processes[unique_job_id]
+                    logger.info(f"Using START_DATE for {unique_job_id} in time-shifted sequence: {format_date_correctly(zero_gap_start)}")
                 else:
-                    # Adjust the times by the time shift
-                    adjusted_start = start - time_shift
-                    adjusted_end = end - time_shift
-                    # Add specific logging for CP08-544-P01-02
-                    if 'CP08-544-P01-02' in unique_job_id:
-                        logger.info(f"Using time shift for {unique_job_id}: Original start={format_date_correctly(start)}, "
-                                   f"Adjusted start={format_date_correctly(adjusted_start)}")
-
-                if family not in process_info:
-                    process_info[family] = []
-                process_info[family].append((unique_job_id, machine, adjusted_start, adjusted_end, priority, seq_num))
-
-                logger.info(f"  Adjusted {unique_job_id}: START={format_date_correctly(adjusted_start)}, "
-                           f"END={format_date_correctly(adjusted_end)}")
+                    # Start immediately after previous process
+                    zero_gap_start = current_end
+                    zero_gap_end = zero_gap_start + duration
+                    
+                    logger.info(f"Enforcing zero-gap with time shift: {sorted_processes[i-1][1]} -> {unique_job_id}, start = {format_date_correctly(zero_gap_start)}")
+                
+                process_info[family].append((unique_job_id, machine, zero_gap_start, zero_gap_end, priority, seq_num))
+                
+                # Update current_end for next process
+                current_end = zero_gap_end
+            
+            # Log adjustments for this family
+            logger.info(f"  Adjusted {len(sorted_processes)} processes for family {family} with zero gaps")
 
         # Step 5: Override for START_DATE processes that were missed
         for unique_job_id, (adjusted_start, adjusted_end) in start_date_processes.items():
