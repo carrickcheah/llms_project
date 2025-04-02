@@ -295,27 +295,48 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             autosize=True,
             height=max(800, len(df) * 30),
             margin=dict(l=350, r=50, t=100, b=100),
-            paper_bgcolor='#f8f9fa',
-            plot_bgcolor='#ffffff',
+            paper_bgcolor='#ffffff',  # White background
+            plot_bgcolor='#ffffff',   # White plot background
             font=dict(family="Arial, sans-serif", size=12),
             hovermode='closest',
             xaxis=dict(
                 title='Timeline',
                 tickfont=dict(size=12),
-                gridcolor='#e0e0e0',
-                zerolinecolor='#e0e0e0',
+                gridcolor='#d9d9d9',  # Darker gray for major grid
+                showgrid=True,
                 gridwidth=1,
-                griddash='dot'  # Add dotted grid lines
+                griddash='solid',  # Solid lines for major grid
+                minor=dict(
+                    showgrid=True,
+                    gridwidth=1,
+                    griddash='dot',
+                    gridcolor='#e6e6e6',  # Light gray for minor grid
+                    dtick="D1",  # Daily minor gridlines
+                    ticks="inside"
+                ),
+                showline=True,
+                linewidth=1,
+                linecolor='#d9d9d9',
+                dtick="D7"  # Weekly major gridlines
             ),
             yaxis=dict(
                 title='Jobs',
                 tickfont=dict(size=12),
-                gridcolor='#e0e0e0',
-                zerolinecolor='#e0e0e0',
+                gridcolor='#d9d9d9',  # Darker gray for major grid
+                showgrid=True,
                 gridwidth=1,
-                griddash='dot',  # Add dotted grid lines
-                categoryorder='array',  # Force specific category order
-                categoryarray=df['Task'].tolist()  # Use sorted task list in natural order
+                griddash='solid',  # Solid lines for major grid
+                minor=dict(
+                    showgrid=True,
+                    gridwidth=1,
+                    griddash='dot',
+                    gridcolor='#e6e6e6'  # Light gray for minor grid
+                ),
+                showline=True,
+                linewidth=1,
+                linecolor='#d9d9d9',
+                categoryorder='array',
+                categoryarray=df['Task'].tolist()
             ),
             title=dict(
                 text='Interactive Production Schedule',
