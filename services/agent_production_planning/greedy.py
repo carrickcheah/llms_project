@@ -140,10 +140,21 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
         else:
             unassigned_jobs.append(job)
     
-    # Sort jobs within each family by process number
+    # Sort all jobs by priority first
+    def sort_by_priority(job_tuple):
+        process_num, job = job_tuple
+        return (job['PRIORITY'], process_num)  # Sort by priority first, then process number
+    
+    # Sort jobs within each family by priority and process number
     for family in job_families:
-        job_families[family].sort(key=lambda x: int(x[0]))
+        job_families[family].sort(key=sort_by_priority)
         logger.info(f"Job family {family} sequence: {[j[1]['UNIQUE_JOB_ID'] for j in job_families[family]]}")
+    
+    # Sort families by highest priority job in each family
+    sorted_families = sorted(
+        job_families.items(),
+        key=lambda x: min(job['PRIORITY'] for _, job in x[1])
+    )
     
     # Create schedule dictionary and tracking sets
     schedule = {machine: [] for machine in machines}
@@ -208,8 +219,8 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
             unscheduled_jobs.append(job)
             logger.warning(f"Could not schedule START_DATE job {job_id} at required time {format_datetime_for_display(epoch_to_datetime(start_time_epoch))}")
     
-    # Then schedule jobs by family in sequence
-    for family, jobs_in_family in sorted(job_families.items()):
+    # Then schedule jobs by family in priority order
+    for family, jobs_in_family in sorted_families:
         last_end_time = current_time
         
         for process_num, job in jobs_in_family:
@@ -254,6 +265,9 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                 logger.info(f"Scheduled job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
     
     # Finally schedule any remaining unassigned jobs
+    # Sort unassigned jobs by priority first
+    unassigned_jobs.sort(key=lambda x: (x['PRIORITY'], x.get('LCD_DATE_EPOCH', float('inf'))))  # Use priority directly
+    
     for job in unassigned_jobs:
         job_id = job['UNIQUE_JOB_ID']
         if job_id in scheduled_jobs:

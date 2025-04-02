@@ -403,12 +403,30 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     gap_weight = 1  # Minimal weight on gaps
     tardiness_weight = 1000  # Increased weight on tardiness (was 100)
     makespan_weight = 1  # Minimal weight on makespan
+    priority_weight = 10000  # Very high weight for priority violations
     
-    # Define objective with appropriate weights - removed start_dev and sequence penalties since they're now hard constraints
+    # Create priority penalty variables
+    priority_penalties = []
+    for job_id, task in all_tasks.items():
+        priority = task['job']['PRIORITY']  # Get priority directly from job data
+        if priority < 3:  # Higher priority jobs (1 or 2)
+            # Create penalty variable for each higher priority job that finishes after a lower priority job
+            for other_id, other_task in all_tasks.items():
+                if other_id != job_id:
+                    other_priority = other_task['job']['PRIORITY']
+                    if other_priority > priority:
+                        # Create bool var for if higher priority job finishes after lower priority job
+                        priority_violation = model.NewBoolVar(f'priority_violation_{job_id}_{other_id}')
+                        model.Add(task['end'] > other_task['start']).OnlyEnforceIf(priority_violation)
+                        model.Add(task['end'] <= other_task['start']).OnlyEnforceIf(priority_violation.Not())
+                        priority_penalties.append(priority_violation)
+    
+    # Define objective with appropriate weights - including priority penalties
     model.Minimize(
         total_gap * gap_weight +
         total_tardiness * tardiness_weight +
-        makespan * makespan_weight
+        makespan * makespan_weight +
+        sum(priority_penalties) * priority_weight
     )
     
     # Create solver and set time limit
