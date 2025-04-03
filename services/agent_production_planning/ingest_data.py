@@ -15,6 +15,10 @@ import os
 from datetime import datetime, timedelta
 import pytz
 import sys
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -65,6 +69,10 @@ def detect_date_format(date_value):
     
     # Look for common date patterns
 
+    # Format: 31/12/23 (European format with 2-digit year - dd/mm/yy)
+    if re.match(r'\d{1,2}/\d{1,2}/\d{2}$', date_value):
+        return lambda x: pd.to_datetime(x, format='%d/%m/%y'), False
+    
     # Format: 31/12/2023 23:59 (European format with time, no seconds)
     if re.match(r'\d{1,2}/\d{1,2}/\d{4}\s\d{1,2}:\d{2}', date_value):
         return lambda x: pd.to_datetime(x, format='%d/%m/%Y %H:%M'), True
@@ -191,6 +199,7 @@ def load_jobs_planning_data(file_path):
     Load job planning data from an Excel file or CSV file.
     This handles multiple date columns with configurable time settings.
     Adds UNIQUE_JOB_ID as JOB + PROCESS_CODE for each job.
+    Filters jobs based on MATERIAL_ARRIVAL date - only processes jobs where materials have arrived.
     
     Args:
         file_path (str): Path to the Excel (.xlsx) or CSV (.csv) file
@@ -236,7 +245,7 @@ def load_jobs_planning_data(file_path):
         else:
             raise ValueError(f"Unsupported file format: {file_extension}. Supported formats: .csv, .xlsx, .xls")
         
-        required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_CODE', 'HOURS_NEED', 'SETTING_HOURS', 'BREAK_HOURS', 'NO_PROD', 'LCD_DATE']
+        required_cols = ['JOB', 'PROCESS_CODE', 'PRIORITY', 'RSC_CODE', 'HOURS_NEED', 'SETTING_HOURS', 'BREAK_HOURS', 'NO_PROD', 'LCD_DATE', 'MATERIAL_ARRIVAL']
         missing_cols = [col for col in required_cols if col not in df.columns]
         
         if missing_cols:
@@ -257,7 +266,7 @@ def load_jobs_planning_data(file_path):
             df = df[~df['COMPLETED'].fillna(False).astype(bool)]
             logger.info(f"Filtered out completed jobs. Remaining: {len(df)} jobs")
             
-        date_columns = [col for col in df.columns if any(date_key in col.upper() for date_key in ['DATE', 'DUE', 'TARGET', 'COMPLETION'])]
+        date_columns = [col for col in df.columns if any(date_key in col.upper() for date_key in ['DATE', 'DUE', 'TARGET', 'COMPLETION', 'ARRIVAL'])]
         logger.info(f"Found {len(date_columns)} potential date columns: {date_columns}")
         
         for col in date_columns:
@@ -265,6 +274,28 @@ def load_jobs_planning_data(file_path):
                 logger.info(f"Skipping empty date column '{col}'")
                 continue
             convert_column_to_dates(df, col)
+        
+        # Filter jobs based on MATERIAL_ARRIVAL date
+        if 'MATERIAL_ARRIVAL' in df.columns:
+            logger.info("Processing MATERIAL_ARRIVAL date to filter jobs")
+            # Get current time in Singapore timezone
+            singapore_tz = pytz.timezone('Asia/Singapore')
+            current_time = datetime.now(singapore_tz).replace(tzinfo=None)
+            
+            # Count jobs before filtering
+            total_jobs = len(df)
+            
+            # Filter out jobs where material hasn't arrived yet
+            df = df[df['MATERIAL_ARRIVAL'].notna() & (df['MATERIAL_ARRIVAL'] <= current_time)]
+            
+            filtered_jobs = total_jobs - len(df)
+            logger.info(f"Filtered out {filtered_jobs} jobs where materials haven't arrived yet. Remaining: {len(df)} jobs")
+            
+            if len(df) == 0:
+                logger.warning("No jobs with arrived materials found! Check your MATERIAL_ARRIVAL dates.")
+        else:
+            logger.error("MATERIAL_ARRIVAL column is required but not found. Cannot process jobs without material arrival information.")
+            raise ValueError("MATERIAL_ARRIVAL column is required but not found")
         
         if 'RSC_CODE' in df.columns:
             machines = df['RSC_CODE'].dropna().unique().tolist()
@@ -339,16 +370,10 @@ def load_jobs_planning_data(file_path):
         else:
             logger.info("LCD_DATE column required but not found")
             
-        # Process PLAN_DATE column if present (for display only, not used in scheduling)
+        # Process PLAN_DATE column if present (keep original format for display in chart_two.py)
         if 'PLAN_DATE' in df.columns:
-            logger.info("Found PLAN_DATE column in Excel, processing for display")
-            # Check if it's a date column that needs conversion
-            if df['PLAN_DATE'].dtype == 'object' or pd.api.types.is_datetime64_any_dtype(df['PLAN_DATE']):
-                # Convert to datetime format if it's a date
-                convert_column_to_dates(df, 'PLAN_DATE')
-                logger.info(f"Converted PLAN_DATE to datetime format for {len(df)} jobs")
-            else:
-                logger.info(f"PLAN_DATE doesn't appear to be a date column, keeping as is")
+            logger.info("Found PLAN_DATE column in Excel, keeping in original format for display")
+            # Do not convert to datetime - keep as is for chart_two.py
         else:
             logger.info("PLAN_DATE column not found, this is optional")
         
@@ -384,10 +409,14 @@ def load_jobs_planning_data(file_path):
 
 if __name__ == "__main__":
     # Set up test configuration
-    # Default to Excel file if no argument is provided
-    file_path = "mydata.xlsx" 
+    # Load environment variables from .env
+    load_dotenv()
     
-    # Check if a file path was provided as a command line argument
+    # Try to get file path from environment variable, default to mydata.xlsx if not found
+    file_path = os.getenv('file_path')
+
+    
+    # Check if a file path was provided as a command line argument (this overrides env variable)
     if len(sys.argv) > 1:
         file_path = sys.argv[1]
     
