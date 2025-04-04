@@ -310,7 +310,49 @@ def load_jobs_planning_data(file_path):
             missing_hours = df['HOURS_NEED'].isna().sum()
             if missing_hours > 0:
                 logger.info(f"Missing HOURS_NEED values for {missing_hours} jobs")
-            df['processing_time'] = df['HOURS_NEED'] * 3600
+            
+            # Process SETTING_HOURS for setup times
+            if 'SETTING_HOURS' in df.columns:
+                logger.info("Using SETTING_HOURS from Excel for machine setup times")
+                # Check for missing values
+                missing_setting = df['SETTING_HOURS'].isna().sum()
+                if missing_setting > 0:
+                    logger.info(f"Missing SETTING_HOURS values for {missing_setting} jobs")
+                df['setup_time'] = df['SETTING_HOURS'] * 3600
+            else:
+                logger.info("SETTING_HOURS column required but not found")
+                df['setup_time'] = 0
+            
+            # Process BREAK_HOURS for breaks during production
+            if 'BREAK_HOURS' in df.columns:
+                logger.info("Using BREAK_HOURS from Excel for production breaks")
+                # Check for missing values
+                missing_break = df['BREAK_HOURS'].isna().sum()
+                if missing_break > 0:
+                    logger.info(f"Missing BREAK_HOURS values for {missing_break} jobs")
+                df['break_time'] = df['BREAK_HOURS'] * 3600
+            else:
+                logger.info("BREAK_HOURS column required but not found")
+                df['break_time'] = 0
+            
+            # Process NO_PROD for non-production hours
+            if 'NO_PROD' in df.columns:
+                logger.info("Using NO_PROD from Excel for non-production hours")
+                # Check for missing values
+                missing_no_prod = df['NO_PROD'].isna().sum()
+                if missing_no_prod > 0:
+                    logger.info(f"Missing NO_PROD values for {missing_no_prod} jobs")
+                df['no_prod_time'] = df['NO_PROD'] * 3600
+            else:
+                logger.info("NO_PROD column required but not found")
+                df['no_prod_time'] = 0
+            
+            # Calculate total processing time including setup, break, and no_prod times
+            df['processing_time'] = df['HOURS_NEED'] * 3600 + df['setup_time'].fillna(0) + df['break_time'].fillna(0) + df['no_prod_time'].fillna(0)
+            
+            # Add log message about total processing time calculation
+            logger.info("Calculated total processing time including HOURS_NEED, SETTING_HOURS, BREAK_HOURS, and NO_PROD")
+            
             # Set a minimum processing time but don't default missing values
             df.loc[(df['processing_time'] <= 0) & df['processing_time'].notna(), 'processing_time'] = 3600
             
@@ -321,46 +363,6 @@ def load_jobs_planning_data(file_path):
                 df['NUMBER_OPERATOR'] = df['NUMBER_OPERATOR'].fillna(1)
                 # Ensure NUMBER_OPERATOR is at least 1
                 df.loc[df['NUMBER_OPERATOR'] < 1, 'NUMBER_OPERATOR'] = 1
-        
-        # Process SETTING_HOURS for setup times
-        if 'SETTING_HOURS' in df.columns:
-            logger.info("Using SETTING_HOURS from Excel for machine setup times")
-            # Check for missing values
-            missing_setting = df['SETTING_HOURS'].isna().sum()
-            if missing_setting > 0:
-                logger.info(f"Missing SETTING_HOURS values for {missing_setting} jobs")
-            df['setup_time'] = df['SETTING_HOURS'] * 3600
-        else:
-            logger.info("SETTING_HOURS column required but not found")
-            df['setup_time'] = None
-        
-
-        # Process BREAK_HOURS for breaks during production
-        if 'BREAK_HOURS' in df.columns:
-            logger.info("Using BREAK_HOURS from Excel for production breaks")
-            # Check for missing values
-            missing_break = df['BREAK_HOURS'].isna().sum()
-            if missing_break > 0:
-                logger.info(f"Missing BREAK_HOURS values for {missing_break} jobs")
-            df['break_time'] = df['BREAK_HOURS'] * 3600
-        else:
-            logger.info("BREAK_HOURS column required but not found")
-            df['break_time'] = None
-        
-        # Process NO_PROD for non-production hours
-        if 'NO_PROD' in df.columns:
-            logger.info("Using NO_PROD from Excel for non-production hours")
-            # Check for missing values
-            missing_no_prod = df['NO_PROD'].isna().sum()
-            if missing_no_prod > 0:
-                logger.info(f"Missing NO_PROD values for {missing_no_prod} jobs")
-            df['no_prod_time'] = df['NO_PROD'] * 3600
-        else:
-            logger.info("NO_PROD column required but not found")
-            df['no_prod_time'] = None
-        
-        # HOURS_NEED is now mandatory, so we've removed JOB_QUANTITY and EXPECT_OUTPUT_PER_HOUR processing
-        # as they're redundant when HOURS_NEED is provided directly
         
         # Check that all mandatory LCD_DATE fields are present
         if 'LCD_DATE' in df.columns:

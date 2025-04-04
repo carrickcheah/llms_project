@@ -150,8 +150,30 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
             
         machine = job['RSC_CODE']
         
-        # Convert hours to integer for solver
-        hours_need = int(math.ceil(job['HOURS_NEED']))  # Ensure hours is an integer
+        # Calculate total hours needed including non-working time components
+        total_hours = job['HOURS_NEED']
+        
+        # Add setup time if available (convert from seconds to hours)
+        if 'setup_time' in job and job['setup_time'] is not None:
+            total_hours += job['setup_time'] / 3600
+        elif 'SETTING_HOURS' in job and job['SETTING_HOURS'] is not None:
+            total_hours += job['SETTING_HOURS']
+            
+        # Add break time if available
+        if 'break_time' in job and job['break_time'] is not None:
+            total_hours += job['break_time'] / 3600
+        elif 'BREAK_HOURS' in job and job['BREAK_HOURS'] is not None:
+            total_hours += job['BREAK_HOURS']
+            
+        # Add no_prod time if available
+        if 'no_prod_time' in job and job['no_prod_time'] is not None:
+            total_hours += job['no_prod_time'] / 3600
+        elif 'NO_PROD' in job and job['NO_PROD'] is not None:
+            total_hours += job['NO_PROD']
+            
+        # Convert hours to integer for solver (round up to ensure we don't underestimate)
+        hours_need = int(math.ceil(total_hours))
+        logger.info(f"Job {job_id}: HOURS_NEED={job['HOURS_NEED']}, Total with non-working time={total_hours}, rounded={hours_need}")
         
         # Check if the job has a due date
         if 'LCD_DATE_EPOCH' in job and job['LCD_DATE_EPOCH']:

@@ -65,6 +65,11 @@ def extract_job_family(unique_job_id):
     logger.warning(f"Could not extract family from {unique_job_id}, using full code")
     return process_code
 
+def extract_base_job_code(unique_job_id):
+    """Extract the base job code from the UNIQUE_JOB_ID"""
+    family = extract_job_family(unique_job_id)
+    return family.split('-')[0]
+
 def find_best_machine(job, machines, machine_available_time):
     """Helper function to find the best machine for a job"""
     # First check if job has a specific machine requirement
@@ -226,7 +231,8 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
     
     # Process all jobs in priority order, but fill vacant machines when possible
     for family, process_num, job in all_jobs:
-        job_id = job['UNIQUE_JOB_ID']
+        print(f"Processing job {job['UNIQUE_JOB_ID']}")
+        job_id = job['UNIQUE_JOB_ID'] 
         if job_id in scheduled_jobs:
             continue
         
@@ -237,16 +243,90 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
         # Enforce process sequence - ensure ALL previous processes in the family are completed
         if enforce_sequence and process_num > 1:
             print(f"Checking dependencies for {job_id} (Process {process_num})")
+            
+            base_code = extract_base_job_code(job_id)
+            job_prefix = job_id.split('_')[0]  # Extract the job prefix (e.g., JOST888888)
+            
+            # Special handling for P05 jobs - if P01-P04 don't exist at all, allow P05 to schedule
+            if process_num == 5:
+                # Look for any related family that might contain dependencies for this job
+                # First, check if there are any P01-P04 in the current family
+                current_family_has_deps = False
+                for p in range(1, 5):
+                    if (family, p) in process_end_times:
+                        current_family_has_deps = True
+                        break
+                
+                # If current family doesn't have deps, check for related families with the same job prefix
+                if not current_family_has_deps:
+                    related_families = set()
+                    for f, p, j in all_jobs:
+                        if j['UNIQUE_JOB_ID'].split('_')[0] == job_prefix and p < 5:
+                            related_families.add(f)
+                    
+                    # For each related family, check if it has P01-P04 processes
+                    if related_families:
+                        print(f"Found related families for {job_id}: {related_families}")
+                        
+                        # Try each related family to see if it has the needed dependencies
+                        for alt_family in related_families:
+                            all_prev_complete = True
+                            latest_end_time = current_time
+                            
+                            print(f"Checking {alt_family} as potential dependency source for {job_id}")
+                            
+                            # Check if all previous processes in related family are complete
+                            for prev_process in range(1, 5):
+                                prev_process_end = process_end_times.get((alt_family, prev_process))
+                                if prev_process_end is None:
+                                    # Check if process exists but isn't scheduled yet
+                                    process_exists = False
+                                    for rf, rp, rj in all_jobs:
+                                        if rf == alt_family and rp == prev_process:
+                                            process_exists = True
+                                            break
+                                    
+                                    if process_exists:
+                                        all_prev_complete = False
+                                        print(f"Job {job_id} depends on {alt_family} P{prev_process:02d} which is not yet scheduled")
+                                        break
+                                else:
+                                    # Process exists and is scheduled, track its end time
+                                    latest_end_time = max(latest_end_time, prev_process_end)
+                                    print(f"Job {job_id} depends on {alt_family} P{prev_process:02d} which ends at {epoch_to_datetime(prev_process_end)}")
+                            
+                            if all_prev_complete:
+                                print(f"All dependencies for {job_id} are met from related family {alt_family}")
+                                dependencies_met = True
+                                min_start_time = latest_end_time
+                                # Skip regular dependency checks
+                                continue
+                        
+                        # If we tried all related families but couldn't find proper dependencies, defer
+                        if not dependencies_met:
+                            print(f"Dependencies not met for {job_id} from any related family, deferring")
+                            unscheduled_jobs.append(job)
+                            continue
+                    
+                    # If no related families with P01-P04 or no dependencies are met, allow scheduling without dependencies
+                    if not dependencies_met and not related_families:
+                        print(f"No dependency families found for {job_id}, allowing P05 to schedule without dependencies")
+                        dependencies_met = True
+                        min_start_time = current_time
+                        # Skip the regular dependency checks
+                        continue
+            
+            # Standard dependency checking for regular cases
             # Check ALL previous processes, not just the immediate predecessor
             for prev_process in range(1, process_num):
                 prev_process_end = process_end_times.get((family, prev_process))
                 if prev_process_end is None:
-                    # Previous process hasn't been scheduled yet - check if it exists
+                    # Previous process hasn't been scheduled yet - check if it exists at all
                     prev_exists = False
                     
-                    # Look for the previous process in all jobs
+                    # Look for the previous process only within the same base code
                     for f, p, j in all_jobs:
-                        if f == family and p == prev_process:
+                        if extract_base_job_code(j['UNIQUE_JOB_ID']) == base_code and p == prev_process:
                             prev_exists = True
                             # Check if it has a START_DATE constraint
                             if j.get('START_DATE_EPOCH') is not None:
@@ -254,14 +334,19 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                                 start_date = j.get('START_DATE_EPOCH')
                                 process_time = j.get('processing_time', 3600)
                                 estimated_end_time = start_date + process_time
-                                print(f"Job {job_id} depends on P{prev_process:02d} with START_DATE={epoch_to_datetime(start_date)}")
+                                print(f"Job {job_id} depends on {j['UNIQUE_JOB_ID']} with START_DATE={epoch_to_datetime(start_date)}")
                                 print(f"Setting min_start_time to {epoch_to_datetime(estimated_end_time)}")
                                 min_start_time = max(min_start_time, estimated_end_time)
                             break
                     
-                    if prev_exists and min_start_time <= current_time:
+                    if not prev_exists:
+                        # Previous process doesn't exist at all, so no need to check further dependencies
+                        print(f"Previous process P{prev_process:02d} not found for {job_id}, skipping remaining dependencies")
+                        dependencies_met = True
+                        break  
+                    elif min_start_time <= current_time:
                         # Previous process exists but isn't scheduled yet
-                        print(f"Job {job_id} depends on P{prev_process:02d} which is not scheduled yet, deferring")
+                        print(f"Job {job_id} depends on unscheduled P{prev_process:02d}, deferring") 
                         dependencies_met = False
                         break
                 else:
