@@ -113,7 +113,7 @@
         <h3>Results</h3>
         <a id="ganttLink" href="#" target="_blank">View Interactive Gantt Chart</a>
         <a id="scheduleLink" href="#" target="_blank">View Schedule Details</a>
-        <a id="scheduleLink" href="#" target="_blank">View Machine Chart</a>
+        <a id="resourceLink" href="#" target="_blank">View Machine Chart</a>
     </div>
     
     <script>
@@ -153,6 +153,8 @@
                     document.getElementById('ganttLink').target = '_blank';
                     document.getElementById('scheduleLink').href = data.schedule_view;
                     document.getElementById('scheduleLink').target = '_blank';
+                    document.getElementById('resourceLink').href = data.resource_view;
+                    document.getElementById('resourceLink').target = '_blank';
                 } else {
                     showStatus('Error: ' + data.error, 'error');
                 }

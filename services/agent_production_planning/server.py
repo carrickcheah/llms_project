@@ -156,10 +156,13 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                     self.send_header('Content-type', 'application/json')
                     self.end_headers()
                     
+                    output_resource_html = os.path.join(SCRIPT_DIR, 'interactive_schedule_by_resource.html')
+                    
                     response = {
                         'success': True,
                         'gantt_chart': f'/interactive_schedule.html?t={os.path.getmtime(output_html)}',
                         'schedule_view': f'/interactive_schedule_view.html?t={os.path.getmtime(output_view_html)}',
+                        'resource_view': f'/interactive_schedule_r.html?t={os.path.getmtime(output_resource_html) if os.path.exists(output_resource_html) else ""}',
                         'message': 'Schedule generated successfully'
                     }
                     self.wfile.write(json.dumps(response).encode())

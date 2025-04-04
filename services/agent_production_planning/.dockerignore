@@ -26,6 +26,7 @@ claude.local.md
 job_schedule.png
 interactive_schedule_view.html
 interactive_schedule.html
+interactive_schedule_r.html
 
 # Ensure necessary HTML files are included
 # (No exclusion pattern needed)
