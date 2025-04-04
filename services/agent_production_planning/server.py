@@ -121,6 +121,10 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                 enforce_sequence = form.getvalue('enforce_sequence', 'true').lower() == 'true'
                 max_operators = form.getvalue('max_operators', '500')
                 
+                # Get urgent options
+                urgent50 = form.getvalue('urgent50', 'false').lower() == 'true'
+                urgent100 = form.getvalue('urgent100', 'false').lower() == 'true'
+                
                 # Output file paths
                 output_html = os.path.join(SCRIPT_DIR, 'interactive_schedule.html')
                 output_view_html = os.path.join(SCRIPT_DIR, 'interactive_schedule_view.html')
@@ -140,6 +144,13 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                 
                 if enforce_sequence:
                     cmd.append('--enforce-sequence')
+                
+                # Add urgent options
+                if urgent50:
+                    cmd.append('--urgent50')
+                
+                if urgent100:
+                    cmd.append('--urgent100')
                 
                 # Run the command
                 logger.info(f"Running command: {' '.join(cmd)}")

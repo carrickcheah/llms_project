@@ -101,6 +101,16 @@
             <input type="number" id="maxOperators" min="0" value="50" placeholder="Default: 50">
             <span style="font-size: 0.9em; color: #666;">(0 = unlimited)</span>
         </label>
+        
+        <h4>Late Job Handling</h4>
+        <label>
+            <input type="checkbox" id="urgent50" name="urgent50">
+            Enforcement urgent_50 - reduce non-productive times by 50% for late jobs
+        </label>
+        <label>
+            <input type="checkbox" id="urgent100" name="urgent100">
+            Enforcement urgent_00 - reduce non-productive times by 100% for late jobs
+        </label>
     </div>
     
     <div style="text-align: center;">
@@ -136,6 +146,12 @@
             // Get max operators value (use empty string if not provided, server will use default from .env)
             const maxOperators = document.getElementById('maxOperators').value;
             formData.append('max_operators', maxOperators);
+            
+            // Get urgent options for late jobs
+            const urgent50 = document.getElementById('urgent50').checked;
+            const urgent100 = document.getElementById('urgent100').checked;
+            formData.append('urgent50', urgent50);
+            formData.append('urgent100', urgent100);
             
             showStatus('Processing... Please wait', 'info');
             

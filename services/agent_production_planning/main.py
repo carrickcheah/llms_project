@@ -14,6 +14,7 @@ from chart import create_interactive_gantt
 from chart_two import export_schedule_html
 from chart_three import create_report_gantt
 from setup_times import add_schedule_times_and_buffer
+from urgent import reduce_nonproductive_time, should_reschedule
 from time_utils import (
     initialize_reference_time, 
     epoch_to_datetime, 
@@ -41,6 +42,8 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging (show debug messages)")
     parser.add_argument("--max-operators", type=int, default=int(os.getenv('MAX_OPERATORS', 0)), 
                        help="Maximum number of operators available. If not provided, uses the MAX_OPERATORS value from .env file.")
+    parser.add_argument("--urgent50", action="store_true", help="Reduce non-productive times by 50% for late jobs")
+    parser.add_argument("--urgent100", action="store_true", help="Reduce non-productive times by 100% for late jobs")
     args = parser.parse_args()
 
     # Set up logging based on whether --verbose was used
@@ -248,6 +251,48 @@ def main():
         schedule = convert_cpsat_to_greedy_format(schedule)
 
     jobs = add_schedule_times_and_buffer(jobs, schedule)
+    
+    # Apply urgent handling for late jobs if specified
+    reschedule_needed = False
+    
+    if args.urgent50 or args.urgent100:
+        # Determine the reduction percentage
+        reduction_percent = 100 if args.urgent100 else 50
+        
+        # Log the urgent option being applied
+        logger.info(f"Applying urgent_{100-reduction_percent} option: Reducing non-productive times by {reduction_percent}% for late jobs")
+        
+        # Apply the reduction
+        jobs, modified = reduce_nonproductive_time(jobs, reduction_percent)
+        
+        # Check if rescheduling is recommended
+        if modified and should_reschedule(jobs, reduction_percent):
+            logger.info("Significant reductions detected, rescheduling with reduced non-productive times...")
+            reschedule_needed = True
+            
+            # Prepare valid jobs for rescheduling
+            valid_jobs = []
+            for job in jobs:
+                if 'UNIQUE_JOB_ID' not in job:
+                    continue
+                if not job.get('RSC_CODE'):
+                    continue
+                valid_jobs.append(job)
+            
+            # Re-run the greedy scheduler with the updated processing times
+            new_schedule = greedy_schedule(valid_jobs, machines, setup_times, 
+                                          enforce_sequence=args.enforce_sequence, 
+                                          max_operators=args.max_operators)
+            
+            if new_schedule and any(new_schedule.values()):
+                schedule = new_schedule
+                logger.info("Successfully rescheduled with reduced non-productive times")
+                
+                # Recalculate buffer times with the new schedule
+                jobs = add_schedule_times_and_buffer(jobs, schedule)
+                logger.info("Updated buffer times after rescheduling")
+            else:
+                logger.warning("Failed to reschedule with reduced non-productive times, using original schedule")
     
     try:
         html_output = os.path.splitext(args.output)[0] + "_view.html"

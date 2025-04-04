@@ -350,10 +350,35 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                             break
                     
                     if not prev_exists:
-                        # Previous process doesn't exist at all, so no need to check further dependencies
-                        print(f"Previous process P{prev_process:02d} not found for {job_id}, skipping remaining dependencies")
-                        dependencies_met = True
-                        break  
+                        # Check if this process should exist in the full sequence
+                       
+                        expected_sequence = True
+                        
+                        # If this is a process in a straight sequence (like 1,2,3,4,5)
+                        # then we should expect all numbers from 1 to current process
+                        family_parts = family.split('-')
+                        if len(family_parts) >= 2:
+                            # Extract the pattern before the process number
+                            family_code = family_parts[0]
+                            
+                            # Look for any job in the raw data that might have this process number
+                            # but wasn't included in scheduling due to constraints
+                            for raw_job in jobs:
+                                raw_id = raw_job.get('UNIQUE_JOB_ID', '')
+                                if family in raw_id and f"-P{prev_process:02d}-" in raw_id:
+                                    print(f"Process P{prev_process:02d} exists in job data but wasn't scheduled for {job_id}")
+                                    # The process exists in raw data but wasn't scheduled - don't skip dependencies
+                                    dependencies_met = False
+                                    break
+                        
+                        if dependencies_met:
+                            print(f"Previous process P{prev_process:02d} not found for {job_id}, skipping remaining dependencies")
+                            # Still break since we've checked this process thoroughly
+                            break
+                        else:
+                            # This is a true dependency violation - don't schedule this job
+                            print(f"Process P{prev_process:02d} exists but can't be scheduled, blocking {job_id}")
+                            break
                     elif min_start_time <= current_time:
                         # Previous process exists but isn't scheduled yet
                         print(f"Job {job_id} depends on unscheduled P{prev_process:02d}, deferring") 
