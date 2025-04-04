@@ -240,6 +240,12 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
         min_start_time = current_time
         dependencies_met = True
         
+        # Define special process rules
+        special_processes = {
+            5: {"allow_cross_family": True, "can_skip_dependencies": True}
+            # Can be expanded with other process numbers that need special handling
+        }
+        
         # Enforce process sequence - ensure ALL previous processes in the family are completed
         if enforce_sequence and process_num > 1:
             print(f"Checking dependencies for {job_id} (Process {process_num})")
@@ -247,12 +253,15 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
             base_code = extract_base_job_code(job_id)
             job_prefix = job_id.split('_')[0]  # Extract the job prefix (e.g., JOST888888)
             
-            # Special handling for P05 jobs - if P01-P04 don't exist at all, allow P05 to schedule
-            if process_num == 5:
+            # Calculate max process number dynamically instead of hard-coding
+            max_process = max([p for _, p, _ in all_jobs]) if all_jobs else process_num
+            
+            # Special handling for processes with cross-family dependencies
+            if process_num in special_processes and special_processes[process_num]["allow_cross_family"]:
                 # Look for any related family that might contain dependencies for this job
-                # First, check if there are any P01-P04 in the current family
+                # First, check if there are any previous processes in the current family
                 current_family_has_deps = False
-                for p in range(1, 5):
+                for p in range(1, process_num):
                     if (family, p) in process_end_times:
                         current_family_has_deps = True
                         break
@@ -261,10 +270,10 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                 if not current_family_has_deps:
                     related_families = set()
                     for f, p, j in all_jobs:
-                        if j['UNIQUE_JOB_ID'].split('_')[0] == job_prefix and p < 5:
+                        if j['UNIQUE_JOB_ID'].split('_')[0] == job_prefix and p < process_num:
                             related_families.add(f)
                     
-                    # For each related family, check if it has P01-P04 processes
+                    # For each related family, check if it has previous processes
                     if related_families:
                         print(f"Found related families for {job_id}: {related_families}")
                         
@@ -276,7 +285,7 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                             print(f"Checking {alt_family} as potential dependency source for {job_id}")
                             
                             # Check if all previous processes in related family are complete
-                            for prev_process in range(1, 5):
+                            for prev_process in range(1, process_num):
                                 prev_process_end = process_end_times.get((alt_family, prev_process))
                                 if prev_process_end is None:
                                     # Check if process exists but isn't scheduled yet
@@ -308,9 +317,10 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                             unscheduled_jobs.append(job)
                             continue
                     
-                    # If no related families with P01-P04 or no dependencies are met, allow scheduling without dependencies
-                    if not dependencies_met and not related_families:
-                        print(f"No dependency families found for {job_id}, allowing P05 to schedule without dependencies")
+                    # If no related families with previous processes or no dependencies are met
+                    # AND this process is allowed to skip dependencies, schedule it anyway
+                    if not dependencies_met and not related_families and special_processes[process_num]["can_skip_dependencies"]:
+                        print(f"No dependency families found for {job_id}, allowing P{process_num:02d} to schedule without dependencies")
                         dependencies_met = True
                         min_start_time = current_time
                         # Skip the regular dependency checks

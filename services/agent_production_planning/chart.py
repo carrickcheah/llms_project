@@ -285,7 +285,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             group_tasks=True,  # Group tasks by family
             showgrid_x=True,
             showgrid_y=True,
-            title='Interactive Production Schedule',
+            title='Production Planning System',
             bar_width=0.4,
             height=max(800, len(df) * 30)
         )
@@ -339,7 +339,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 categoryarray=df['Task'].tolist()
             ),
             title=dict(
-                text='Interactive Production Schedule',
+                text='Production Planning System',
                 font=dict(size=20, family='Arial, sans-serif'),
                 x=0.5,
                 y=0.95
@@ -357,7 +357,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
         # Save the chart
         logger.info(f"Saving Gantt chart to: {os.path.abspath(output_file)}")
         pyo.plot(fig, filename=output_file, auto_open=False)
-        logger.info(f"Interactive Gantt chart saved to: {os.path.abspath(output_file)}")
+        logger.info(f"Production Planning System saved to: {os.path.abspath(output_file)}")
         return True
 
     except Exception as e:

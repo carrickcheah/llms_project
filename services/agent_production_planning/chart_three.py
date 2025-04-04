@@ -1,4 +1,4 @@
-# chart.py | dont edit this line
+# chart_three.py | dont edit this line
 import os
 import re
 from datetime import datetime, timedelta
@@ -141,7 +141,7 @@ def is_same_task(job_id1, job_id2):
     # Here we examine the ENTIRE process code, not just the process number
     return job1 == job2 and process1 == process2
 
-def create_interactive_gantt(schedule, jobs=None, output_file='interactive_schedule.html'):
+def create_report_gantt(schedule, jobs=None, output_file='interactive_schedule1.html'):
     """
     Create an interactive Gantt chart from the schedule and save it as an HTML file.
     Tooltips are removed. Range selector buttons updated.
@@ -273,19 +273,32 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
             logger.error("No valid jobs to display")
             return False
 
-        # Sort DataFrame by family and process number in natural order
-        df = df.sort_values(['Family', 'ProcessNum', 'Start'], ascending=[True, True, True])
+        # Sort DataFrame by machines and then by start time within each machine
+        df = df.sort_values(['Resource', 'Start'], ascending=[True, True])
+        
+        # Create a modified dataframe to trick Plotly into grouping by Resource
+        # We'll swap Resource and Task columns, then add the Task as a hover detail
+        df_for_gantt = df.copy()
+        df_for_gantt['OriginalTask'] = df_for_gantt['Task']  # Save original Task
+        df_for_gantt['Task'] = df_for_gantt['Resource']      # Use Resource as Task
+        df_for_gantt['Resource'] = df_for_gantt['OriginalTask']  # Use original Task as Resource
+        
+        # Update Description to show both machine and job ID
+        for i, row in df_for_gantt.iterrows():
+            job_id = row['OriginalTask']
+            machine = row['Task']  # Now contains the machine name
+            df_for_gantt.at[i, 'Description'] = f"{df_for_gantt.at[i, 'Description']}<br><b>Job:</b> {job_id}"
 
         # Create gantt chart
         fig = ff.create_gantt(
-            df,
+            df_for_gantt,
             colors=colors,
             index_col='Priority',
             show_colorbar=True,
-            group_tasks=True,  # Group tasks by family
+            group_tasks=True,  # Now groups by machine (since it's in the Task column)
             showgrid_x=True,
             showgrid_y=True,
-            title='Interactive Production Schedule',
+            title='Group by Machine Type',
             bar_width=0.4,
             height=max(800, len(df) * 30)
         )
@@ -320,7 +333,7 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 dtick="D7"  # Weekly major gridlines
             ),
             yaxis=dict(
-                title='Jobs',
+                title='Machines',
                 tickfont=dict(size=12),
                 gridcolor='#d9d9d9',  # Darker gray for major grid
                 showgrid=True,
@@ -336,10 +349,11 @@ def create_interactive_gantt(schedule, jobs=None, output_file='interactive_sched
                 linewidth=1,
                 linecolor='#d9d9d9',
                 categoryorder='array',
-                categoryarray=df['Task'].tolist()
+                # Since we swapped Task and Resource, we now use unique Tasks (which are machines)
+                categoryarray=df_for_gantt['Task'].unique().tolist()
             ),
             title=dict(
-                text='Interactive Production Schedule',
+                text='Group by Machine Type',
                 font=dict(size=20, family='Arial, sans-serif'),
                 x=0.5,
                 y=0.95
@@ -400,11 +414,11 @@ if __name__ == "__main__":
         logger.info(f"Sample job: {jobs[0] if jobs else 'None'}")  # Log first job
         
         schedule = greedy_schedule(jobs, machines, setup_times, enforce_sequence=True)
-        success = create_interactive_gantt(schedule, jobs, 'interactive_schedule.html')
+        success = create_report_gantt(schedule, jobs, 'report_schedule_by_resource.html')
         if success:
-            print(f"Gantt chart saved to: {os.path.abspath('interactive_schedule.html')}")
+            print(f"Resource Gantt chart saved to: {os.path.abspath('report_schedule_by_resource.html')}")
         else:
-            print("Failed to create Gantt chart.")
+            print("Failed to create report gantt.")
     except Exception as e:
-        logger.error(f"Error during Gantt chart generation: {e}", exc_info=True)
+        logger.error(f"Error during report gantt generation: {e}", exc_info=True)
         print(f"Error: {e}")

@@ -12,6 +12,7 @@ from sch_jobs import schedule_jobs
 from greedy import greedy_schedule
 from chart import create_interactive_gantt
 from chart_two import export_schedule_html
+from chart_three import create_report_gantt
 from setup_times import add_schedule_times_and_buffer
 from time_utils import (
     initialize_reference_time, 
@@ -362,6 +363,15 @@ def main():
     except Exception as e:
         logger.error(f"Error creating Gantt chart: {e}")
     
+    # Generate the Report Gantt with resources on y-axis
+    try:
+        report_output = os.path.splitext(args.output)[0] + "_r.html"
+        create_report_gantt(schedule, jobs, report_output)
+        logger.info(f"Saving Resource Gantt chart to: {os.path.abspath(report_output)}")
+        logger.info(f"Interactive Resource Gantt chart saved to: {os.path.abspath(report_output)}")
+    except Exception as e:
+        logger.error(f"Error creating Resource Gantt chart: {e}")
+
     # Output detailed statistics
     print("\nBuffer statistics:")
     buffer_hours = [job.get('buffer_hours', 0) for job in jobs if 'buffer_hours' in job]
