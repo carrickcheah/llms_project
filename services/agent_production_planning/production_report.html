@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Scheduler Report - 2025-04-06</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        header {
+            margin-bottom: 30px;
+            border-bottom: 2px solid #1a73e8;
+            padding-bottom: 20px;
+        }
+        h1 {
+            color: #1a73e8;
+            margin: 0 0 10px 0;
+        }
+        h2 {
+            color: #1a73e8;
+            margin-top: 30px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .meta-info {
+            display: flex;
+            justify-content: space-between;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .meta-item {
+            text-align: center;
+        }
+        .meta-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .meta-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        ul, ol {
+            padding-left: 25px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Production Scheduler Report</h1>
+            <p>Analysis of production scheduling operations</p>
+        </header>
+        
+        <div class="meta-info">
+            <div class="meta-item">
+                <div class="meta-label">Report Date</div>
+                <div class="meta-value">2025-04-06</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Report Time</div>
+                <div class="meta-value">00:31:02</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Log File</div>
+                <div class="meta-value">production_scheduler.log</div>
+            </div>
+        </div>
+        
+        <div class="report-content">
+            Okay, here's a breakdown of the log entries, categorized for clarity:<br><br>**1. Initial Setup & Job Input:**<br><br>*   **2025-04-06 00:20:32,402 - INFO - Input Job JOST111111_CP11-111-P01-08:** This indicates the system is receiving input about a job named "JOST111111_CP11-111-P01-08".  It's also setting the `START_DATE_EPOC` to a specific value (1744534800.0), which is likely a timestamp representing the start date of the job.<br><br>**2. Schedule Generation & Resource Allocation:**<br><br>*   **2025-04-06 00:20:32,402 - INFO - Schedule contains 7 machines:** The system has determined that 7 machines are involved in the production plan.<br>*   **2025-04-06 00:20:32,402 - INFO - Machine PAINTING: 7 jobs:**  The "PAINTING" machine is assigned 7 jobs.<br>*   **2025-04-06 00:20:32,403 - INFO - Machine CHECKING: 1 jobs:** The "CHECKING" machine is assigned 1 job.<br>*   **2025-04-06 00:20:32,403 - INFO - Machine TW01: 2 jobs:** The "TW01" machine is assigned 2 jobs.<br>*   **2025-04-06 00:20:32,403 - INFO - Machine VM03: 4 jobs:** The "VM03" machine is assigned 4 jobs.<br>*   **2025-04-06 00:20:32,403 - INFO - Machine VM04: 6 jobs:** The "VM04" machine is assigned 6 jobs.<br>*   **2025-04-06 00:20:32,403 - INFO - Machine Checking: 1 jobs:** The "Checking" machine is assigned 1 job.<br><br>**3. Gantt Chart Saving & Output:**<br><br>*   **2025-04-06 00:20:32,427 - INFO - Saving Gantt chart to: /Users/carrickcheah/llms_project/services/agent_production_planning/interactive_schedule_r.html:** The system is saving the primary Gantt chart to a file named `interactive_schedule_r.html`.<br>*   **2025-04-06 00:20:32,427 - INFO - Interactive Gantt chart saved to: /Users/carrickcheah/llms_project/services/agent_production_planning/interactive_schedule_r.html:**  This confirms the interactive Gantt chart is also saved.<br>*   **2025-04-06 00:20:32,427 - INFO - Saving Resource Gantt chart to: /Users/carrickcheah/llms_project/services/agent_production_planning/interactive_schedule_r.html:** The system is saving a resource Gantt chart to the same file.<br><br>**Key Observations & Potential Implications:**<br><br>*   **Interactive Gantt Charts:** The system is generating interactive Gantt charts, allowing users to potentially view and manipulate the production schedule.<br>*   **Resource Allocation:** The log shows the system is assigning jobs to specific machines (resources).<br>*   **Multiple Chart Files:**  The system is saving both a primary Gantt chart and a resource Gantt chart to the same file. This suggests a potentially more detailed view of the production plan.<br>*   **File Naming Convention:** The use of `_r` in the file name (`interactive_schedule_r.html`) likely indicates a revision or a different type of chart.<br><br>To help you further, could you tell me:<br><br>*   What is the purpose of this system? (e.g., a manufacturing planning system, a project management tool, etc.)<br>*   What are you trying to achieve by analyzing these log entries?
+        </div>
+    </div>
+</body>
+</html>
