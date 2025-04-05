@@ -35,7 +35,6 @@ def extract_process_number(unique_job_id):
     match = re.search(r'-P(\d{2})-', str(process_code).upper())  # Match the pattern -P##-
     if match:
         seq = int(match.group(1))
-        print(f"Extracted process number {seq} from {unique_job_id}")
         return seq
     return 999
 
@@ -214,7 +213,6 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
             process_num = extract_process_number(job_id)
             family_end_times[family] = max(family_end_times[family], end_time_epoch)
             process_end_times[(family, process_num)] = end_time_epoch
-            print(f"Scheduled START_DATE job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(start_time_epoch))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
             logger.info(f"Scheduled START_DATE job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(start_time_epoch))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
         else:
             unscheduled_jobs.append(job)
