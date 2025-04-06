@@ -18,7 +18,14 @@ import pandas as pd
 from datetime import datetime
 import re
 from loguru import logger
+import sys
 
+# Configure loguru logger to only write to production_scheduler.log file
+# Remove default handlers
+logger.remove()
+# Add file handler with WARNING level
+logger.add("production_scheduler.log", level="WARNING", format="{time} | {level} | {name}:{function}:{line} - {message}")
+# No console handler to suppress output
 
 def get_start_date_epoch(job):
     """
@@ -97,12 +104,10 @@ def extract_job_family(unique_job_id):
     match = re.search(r'(.*?)-P\d+', process_code)
     if match:
         family = match.group(1)
-        logger.debug(f"Extracted family {family} from {unique_job_id}")
         return family
     parts = process_code.split("-P")
     if len(parts) >= 2:
         family = parts[0]
-        logger.debug(f"Extracted family {family} from {unique_job_id} (using split)")
         return family
     logger.warning(f"Could not extract family from {unique_job_id}, using full code")
     return process_code

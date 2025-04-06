@@ -16,7 +16,7 @@ from time_utils import (
 )
 
 # Configure logging (standalone or align with project setup)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def extract_process_number(unique_job_id):
@@ -54,12 +54,10 @@ def extract_job_family(unique_job_id):
     match = re.search(r'(.*?)-P\d+', process_code)
     if match:
         family = match.group(1)
-        logger.debug(f"Extracted family {family} from {unique_job_id}")
         return family
     parts = process_code.split("-P")
     if len(parts) >= 2:
         family = parts[0]
-        logger.debug(f"Extracted family {family} from {unique_job_id} (using split)")
         return family
     logger.warning(f"Could not extract family from {unique_job_id}, using full code")
     return process_code
@@ -229,7 +227,6 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
     
     # Process all jobs in priority order, but fill vacant machines when possible
     for family, process_num, job in all_jobs:
-        print(f"Processing job {job['UNIQUE_JOB_ID']}")
         job_id = job['UNIQUE_JOB_ID'] 
         if job_id in scheduled_jobs:
             continue
@@ -246,7 +243,7 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
         
         # Enforce process sequence - ensure ALL previous processes in the family are completed
         if enforce_sequence and process_num > 1:
-            print(f"Checking dependencies for {job_id} (Process {process_num})")
+            # Removed debug print
             
             base_code = extract_base_job_code(job_id)
             job_prefix = job_id.split('_')[0]  # Extract the job prefix (e.g., JOST888888)
@@ -273,14 +270,14 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                     
                     # For each related family, check if it has previous processes
                     if related_families:
-                        print(f"Found related families for {job_id}: {related_families}")
+                        # Removed debug print
                         
                         # Try each related family to see if it has the needed dependencies
                         for alt_family in related_families:
                             all_prev_complete = True
                             latest_end_time = current_time
                             
-                            print(f"Checking {alt_family} as potential dependency source for {job_id}")
+                            # Removed debug print
                             
                             # Check if all previous processes in related family are complete
                             for prev_process in range(1, process_num):
@@ -295,15 +292,14 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                                     
                                     if process_exists:
                                         all_prev_complete = False
-                                        print(f"Job {job_id} depends on {alt_family} P{prev_process:02d} which is not yet scheduled")
+                                        # Removed debug print
                                         break
                                 else:
                                     # Process exists and is scheduled, track its end time
                                     latest_end_time = max(latest_end_time, prev_process_end)
-                                    print(f"Job {job_id} depends on {alt_family} P{prev_process:02d} which ends at {epoch_to_datetime(prev_process_end)}")
                             
                             if all_prev_complete:
-                                print(f"All dependencies for {job_id} are met from related family {alt_family}")
+                                # Removed debug print
                                 dependencies_met = True
                                 min_start_time = latest_end_time
                                 # Skip regular dependency checks
@@ -311,14 +307,14 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                         
                         # If we tried all related families but couldn't find proper dependencies, defer
                         if not dependencies_met:
-                            print(f"Dependencies not met for {job_id} from any related family, deferring")
+                            # Removed debug print
                             unscheduled_jobs.append(job)
                             continue
                     
                     # If no related families with previous processes or no dependencies are met
                     # AND this process is allowed to skip dependencies, schedule it anyway
                     if not dependencies_met and not related_families and special_processes[process_num]["can_skip_dependencies"]:
-                        print(f"No dependency families found for {job_id}, allowing P{process_num:02d} to schedule without dependencies")
+                        # Removed debug print
                         dependencies_met = True
                         min_start_time = current_time
                         # Skip the regular dependency checks
@@ -342,33 +338,32 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                                 start_date = j.get('START_DATE_EPOCH')
                                 process_time = j.get('processing_time', 3600)
                                 estimated_end_time = start_date + process_time
-                                print(f"Job {job_id} depends on {j['UNIQUE_JOB_ID']} with START_DATE={epoch_to_datetime(start_date)}")
-                                print(f"Setting min_start_time to {epoch_to_datetime(estimated_end_time)}")
+                                # Removed debug print
                                 min_start_time = max(min_start_time, estimated_end_time)
                             break
                     
                     if not prev_exists:
                         # Previous process doesn't exist at all
-                        print(f"Previous process P{prev_process:02d} not found for {job_id}")
+                        # Removed debug print
                         
                         # Check material status - if a previous process is missing due to material issues, don't schedule later processes
                         if "MATERIAL_ARRIVAL" in job_id or (process_num > 1 and process_num <= max_process):
-                            print(f"Missing process P{prev_process:02d} in dependency chain, cannot schedule {job_id}")
+                            # Removed debug print
                             dependencies_met = False
                             break
                         else:
                             # Only skip dependencies for special cases not related to material issues
-                            print(f"Allowing job {job_id} to proceed despite missing P{prev_process:02d}")
+                            # Removed debug print
                             dependencies_met = True
                             break
                     elif min_start_time <= current_time:
                         # Previous process exists but isn't scheduled yet
-                        print(f"Job {job_id} depends on unscheduled P{prev_process:02d}, deferring") 
+                        # Removed debug print
                         dependencies_met = False
                         break
                 else:
                     # Previous process exists and has been scheduled, must wait for it
-                    print(f"Job {job_id} depends on P{prev_process:02d} which ends at {epoch_to_datetime(prev_process_end)}")
+                    # Removed debug print
                     min_start_time = max(min_start_time, prev_process_end)
         
         # If dependencies aren't met, defer this job for later
@@ -443,7 +438,6 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                 for hour in range(int(start_rel), int(end_rel) + 1):
                     operators_in_use[hour] += 1
             
-            print(f"Scheduled job {job_id} (priority {job.get('PRIORITY')}) on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
             logger.info(f"Scheduled job {job_id} (priority {job.get('PRIORITY')}) on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
         else:
             # Couldn't find a valid slot - try increasing time until we find one
@@ -472,7 +466,6 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                     for hour in range(int(start_rel), int(end_rel) + 1):
                         operators_in_use[hour] += 1
                 
-                print(f"Scheduled job {job_id} (priority {job.get('PRIORITY')}) on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
                 logger.info(f"Scheduled job {job_id} (priority {job.get('PRIORITY')}) on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
     
     # Finally schedule any remaining unassigned jobs
@@ -535,7 +528,6 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                 for hour in range(int(start_rel), int(end_rel) + 1):
                     operators_in_use[hour] += 1
             
-            print(f"Scheduled unassigned job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
             logger.info(f"Scheduled unassigned job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
         else:
             # If we couldn't find a valid slot, try increasing the time
@@ -557,7 +549,6 @@ def greedy_schedule(jobs, machines, setup_times=None, enforce_sequence=True, max
                     for hour in range(int(start_rel), int(end_rel) + 1):
                         operators_in_use[hour] += 1
                 
-                print(f"Scheduled unassigned job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
                 logger.info(f"Scheduled unassigned job {job_id} on {machine_id}: {format_datetime_for_display(epoch_to_datetime(earliest_start))} to {format_datetime_for_display(epoch_to_datetime(end_time_epoch))}")
     
     # Sort the schedule on each machine by start time

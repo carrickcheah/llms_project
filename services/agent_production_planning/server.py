@@ -16,7 +16,7 @@ from datetime import datetime
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Directory where this script is located
@@ -125,9 +125,13 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                 urgent50 = form.getvalue('urgent50', 'false').lower() == 'true'
                 urgent100 = form.getvalue('urgent100', 'false').lower() == 'true'
                 
+                # Get report generation option
+                generate_report = form.getvalue('generate_report', 'false').lower() == 'true'
+                
                 # Output file paths
                 output_html = os.path.join(SCRIPT_DIR, 'interactive_schedule.html')
                 output_view_html = os.path.join(SCRIPT_DIR, 'interactive_schedule_view.html')
+                output_report_html = os.path.join(SCRIPT_DIR, 'production_report.html')
                 
                 # Build command to run the main.py script
                 cmd = [
@@ -151,6 +155,12 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                 
                 if urgent100:
                     cmd.append('--urgent100')
+                
+                # Add report generation option
+                if generate_report:
+                    cmd.append('--generate-report')
+                    cmd.append('--report-output')
+                    cmd.append(output_report_html)
                 
                 # Run the command
                 logger.info(f"Running command: {' '.join(cmd)}")
@@ -176,6 +186,11 @@ class ProductionPlanningHandler(BaseHTTPRequestHandler):
                         'resource_view': f'/interactive_schedule_r.html?t={os.path.getmtime(output_resource_html) if os.path.exists(output_resource_html) else ""}',
                         'message': 'Schedule generated successfully'
                     }
+                    
+                    # Add report view to response if report was generated
+                    if generate_report and os.path.exists(output_report_html):
+                        response['report_view'] = f'/production_report.html?t={os.path.getmtime(output_report_html)}'
+                    
                     self.wfile.write(json.dumps(response).encode())
                 else:
                     # Send error response

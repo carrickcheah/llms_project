@@ -24,8 +24,15 @@ from time_utils import (
     convert_job_times_to_epoch
 )
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging with file handler only, no console output
+logging.basicConfig(
+    level=logging.WARNING,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("production_scheduler.log"),
+        # No StreamHandler to suppress console output
+    ]
+)
 logger = logging.getLogger(__name__)
 
 def main():
@@ -44,6 +51,8 @@ def main():
                        help="Maximum number of operators available. If not provided, uses the MAX_OPERATORS value from .env file.")
     parser.add_argument("--urgent50", action="store_true", help="Reduce non-productive times by 50% for late jobs")
     parser.add_argument("--urgent100", action="store_true", help="Reduce non-productive times by 100% for late jobs")
+    parser.add_argument("--generate-report", action="store_true", help="Generate detailed production report")
+    parser.add_argument("--report-output", default="production_report.html", help="Output file for the production report")
     args = parser.parse_args()
 
     # Set up logging based on whether --verbose was used
@@ -518,6 +527,227 @@ def main():
     print(f"- Gantt chart: {os.path.abspath(args.output)}")
     print(f"- HTML Schedule View: {os.path.abspath(html_output)}")
     
+    # Generate production report if requested
+    if args.generate_report:
+        try:
+            logger.info(f"Generating production report to: {os.path.abspath(args.report_output)}")
+            
+            # Create a detailed production report
+            report_html = []
+            report_html.append("""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Production Report</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+                    h1, h2, h3 { color: #333; }
+                    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    th { background-color: #f2f2f2; }
+                    tr:nth-child(even) { background-color: #f9f9f9; }
+                    .late { color: #e74c3c; font-weight: bold; }
+                    .warning { color: #e67e22; }
+                    .good { color: #2ecc71; }
+                    .summary { background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+                </style>
+            </head>
+            <body>
+                <h1>Production Planning Report</h1>
+                <div class="summary">
+                    <h2>Schedule Summary</h2>
+                    <p><strong>Total jobs scheduled:</strong> {}</p>
+                    <p><strong>Machines utilized:</strong> {}/{} ({:.1f}%)</p>
+                    <p><strong>Average machine load:</strong> {:.1f} hours</p>
+                    <p><strong>Most loaded machine:</strong> {} ({:.1f} hours)</p>
+                    <p><strong>Schedule completion date:</strong> {}</p>
+                    <p><strong>Total production time:</strong> {:.1f} hours</p>
+                    <p><strong>Schedule span:</strong> {:.1f} hours</p>
+                </div>
+            """.format(
+                sum(len(machine_jobs) for machine_jobs in schedule.values()),
+                machines_used, 
+                total_machines,
+                utilization_pct,
+                avg_load if 'avg_load' in locals() else 0,
+                max_load_machine[0] if 'max_load_machine' in locals() else "None",
+                max_load_machine[1] if 'max_load_machine' in locals() else 0,
+                format_datetime_for_display(horizon_end_dt) if horizon_end_dt else "Unknown",
+                total_hours,
+                span_hours
+            ))
+            
+            # Late jobs section
+            late_jobs = []
+            for job in jobs:
+                if 'UNIQUE_JOB_ID' not in job:
+                    continue
+                
+                end_time = job.get('END_TIME')
+                lcd_date = job.get('LCD_DATE_EPOCH')
+                
+                if end_time and lcd_date and end_time > lcd_date:
+                    job_id = job['UNIQUE_JOB_ID']
+                    machine = next((m for m, tasks in schedule.items() 
+                                for task in tasks if task[0] == job_id), "Unknown")
+                    
+                    end_dt = epoch_to_datetime(end_time)
+                    lcd_dt = epoch_to_datetime(lcd_date)
+                    
+                    # Calculate hours late
+                    hours_late = (end_time - lcd_date) / 3600
+                    
+                    late_jobs.append({
+                        'job_id': job_id,
+                        'machine': machine,
+                        'end_date': format_datetime_for_display(end_dt) if end_dt else "Unknown",
+                        'due_date': format_datetime_for_display(lcd_dt) if lcd_dt else "Unknown",
+                        'hours_late': hours_late
+                    })
+            
+            if late_jobs:
+                report_html.append("""
+                <h2>Late Jobs</h2>
+                <table>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Machine</th>
+                        <th>Due Date</th>
+                        <th>Completion Date</th>
+                        <th>Hours Late</th>
+                    </tr>
+                """)
+                
+                for job in sorted(late_jobs, key=lambda x: x['hours_late'], reverse=True):
+                    report_html.append(f"""
+                    <tr>
+                        <td>{job['job_id']}</td>
+                        <td>{job['machine']}</td>
+                        <td>{job['due_date']}</td>
+                        <td>{job['end_date']}</td>
+                        <td class="late">{job['hours_late']:.1f}</td>
+                    </tr>
+                    """)
+                
+                report_html.append("</table>")
+            
+            # Machine utilization section
+            report_html.append("""
+            <h2>Machine Utilization</h2>
+            <table>
+                <tr>
+                    <th>Machine</th>
+                    <th>Number of Jobs</th>
+                    <th>Total Hours</th>
+                </tr>
+            """)
+            
+            for machine, tasks in sorted(schedule.items(), key=lambda x: len(x[1]), reverse=True):
+                machine_hours = sum((end - start) for _, start, end, *_ in tasks) / 3600
+                report_html.append(f"""
+                <tr>
+                    <td>{machine}</td>
+                    <td>{len(tasks)}</td>
+                    <td>{machine_hours:.1f}</td>
+                </tr>
+                """)
+            
+            report_html.append("</table>")
+            
+            # Job details section
+            report_html.append("""
+            <h2>Job Details</h2>
+            <table>
+                <tr>
+                    <th>Job ID</th>
+                    <th>Machine</th>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Due Date</th>
+                    <th>Buffer</th>
+                    <th>Status</th>
+                </tr>
+            """)
+            
+            job_details = []
+            for job in jobs:
+                if 'UNIQUE_JOB_ID' not in job:
+                    continue
+                
+                job_id = job['UNIQUE_JOB_ID']
+                scheduled_jobs = [task for task in flat_schedule if task['job_id'] == job_id]
+                
+                if not scheduled_jobs:
+                    continue
+                
+                scheduled_job = scheduled_jobs[0]
+                machine = scheduled_job['machine']
+                
+                start_dt = epoch_to_datetime(scheduled_job['start'])
+                end_dt = epoch_to_datetime(scheduled_job['end'])
+                lcd_dt = epoch_to_datetime(job.get('LCD_DATE_EPOCH')) if 'LCD_DATE_EPOCH' in job else None
+                
+                buffer_hours = job.get('buffer_hours', 0)
+                
+                # Determine status
+                status = "On Time"
+                status_class = "good"
+                
+                if lcd_dt and end_dt and end_dt > lcd_dt:
+                    hours_late = (scheduled_job['end'] - job.get('LCD_DATE_EPOCH', 0)) / 3600
+                    status = f"Late ({hours_late:.1f} hrs)"
+                    status_class = "late"
+                elif buffer_hours < 8:
+                    status = f"Critical Buffer ({buffer_hours:.1f} hrs)"
+                    status_class = "warning"
+                
+                job_details.append({
+                    'job_id': job_id,
+                    'machine': machine,
+                    'start': format_datetime_for_display(start_dt) if start_dt else "Unknown",
+                    'end': format_datetime_for_display(end_dt) if end_dt else "Unknown",
+                    'due': format_datetime_for_display(lcd_dt) if lcd_dt else "Unknown",
+                    'buffer': buffer_hours,
+                    'status': status,
+                    'status_class': status_class,
+                    'end_epoch': scheduled_job['end']  # For sorting
+                })
+            
+            for job in sorted(job_details, key=lambda x: x['end_epoch']):
+                report_html.append(f"""
+                <tr>
+                    <td>{job['job_id']}</td>
+                    <td>{job['machine']}</td>
+                    <td>{job['start']}</td>
+                    <td>{job['end']}</td>
+                    <td>{job['due']}</td>
+                    <td>{job['buffer']:.1f} hrs</td>
+                    <td class="{job['status_class']}">{job['status']}</td>
+                </tr>
+                """)
+            
+            report_html.append("</table>")
+            
+            # Close the HTML
+            report_html.append("""
+            <p><i>Report generated on {}</i></p>
+            </body>
+            </html>
+            """.format(format_datetime_for_display(datetime.now())))
+            
+            # Write the report to file
+            with open(args.report_output, 'w') as f:
+                f.write("".join(report_html))
+            
+            print(f"- Production Report: {os.path.abspath(args.report_output)}")
+            logger.info(f"Production report saved to: {os.path.abspath(args.report_output)}")
+            
+        except Exception as e:
+            logger.error(f"Error generating production report: {e}")
+            logger.error("Stack trace:", exc_info=True)
+
 def convert_cpsat_to_greedy_format(cpsat_schedule):
     """
     Convert the CP-SAT solver schedule format to the greedy scheduler format.

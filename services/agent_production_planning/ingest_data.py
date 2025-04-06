@@ -21,14 +21,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("production_scheduler.log"),
-        logging.StreamHandler()
-    ]
-)
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
@@ -423,7 +416,7 @@ if __name__ == "__main__":
         file_path = sys.argv[1]
     
     # Configure logging to see what's happening
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.WARNING)
     
     try:
         # Test loading the data

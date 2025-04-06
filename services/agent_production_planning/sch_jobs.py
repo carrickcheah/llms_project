@@ -20,8 +20,12 @@ from time_utils import (
 )
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Suppress OR-Tools logging output
+ortools_logger = logging.getLogger('ortools')
+ortools_logger.setLevel(logging.ERROR)  # Set to ERROR to hide all but errors
 
 def extract_process_number(unique_job_id):
     """
@@ -454,7 +458,7 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     # Create solver and set time limit
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = time_limit_seconds
-    solver.parameters.log_search_progress = True
+    solver.parameters.log_search_progress = False  # Disable all solver logging
     solver.parameters.linearization_level = 2  # More aggressive linearization
     solver.parameters.num_search_workers = 8
     
@@ -462,14 +466,21 @@ def schedule_jobs(jobs, machines, setup_times=None, enforce_sequence=True, time_
     solver.parameters.optimize_with_core = True
     solver.parameters.mip_max_bound = 1e9
     
-    # Print solver configuration
-    logger.info(f"Starting CP-SAT solver v{ortools.__version__}")
-    logger.info(f"Parameters: max_time_in_seconds: {time_limit_seconds} log_search_progress: true search_branching: HINT_SEARCH num_search_workers: 8")
+    # Print solver configuration (but only as debug level)
+    logger.debug(f"Starting CP-SAT solver v{ortools.__version__}")
+    logger.debug(f"Parameters: max_time_in_seconds: {time_limit_seconds} log_search_progress: false num_search_workers: 8")
     
-    # Try to solve
+    # Try to solve with stdout redirection to suppress solver output
+    import sys
+    import io
+    original_stdout = sys.stdout  # Save the original stdout
+    sys.stdout = io.StringIO()  # Redirect stdout to a string buffer
+    
     try:
         status = solver.Solve(model)
+        sys.stdout = original_stdout  # Restore stdout
     except Exception as e:
+        sys.stdout = original_stdout  # Restore stdout even if there's an error
         logger.error(f"Error solving CP-SAT model: {e}")
         return None
     

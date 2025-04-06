@@ -1,6 +1,6 @@
 # Coding Guidelines
 
-- My project's programming language is python 3.13
+- My project's programming language is python 3.11
 - Use early returns when possible
 - Always add documentation when creating new functions and classes
 

@@ -13,7 +13,7 @@ from ingest_data import load_jobs_planning_data
 from greedy import greedy_schedule
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Set up Singapore timezone
