@@ -108,26 +108,27 @@ async def update_report_timestamp(report_file: str):
             current_date = datetime.now().strftime("%Y-%m-%d")
             current_time = datetime.now().strftime("%H:%M:%S")
             
-            # Update the report date and time
+            # Update the report date and time - more aggressive pattern matching
             updated_content = content
             
-            # Update date and time in the meta-info section
-            if '<div class="meta-label">Report Date</div>' in content:
-                # This is the format from report_generator.py
-                updated_content = updated_content.replace(
-                    f'<div class="meta-value">{current_date[:4]}-{current_date[5:7]}-{current_date[8:10]}</div>',
-                    f'<div class="meta-value">{current_date}</div>'
-                )
-                updated_content = updated_content.replace(
-                    '<div class="meta-value">01:12:18</div>',
-                    f'<div class="meta-value">{current_time}</div>'
-                )
+            # Update date in meta-info section
+            import re
+            
+            # Replace the date value directly
+            date_pattern = r'<div class="meta-label">Report Date</div>\s*<div class="meta-value">[^<]*</div>'
+            date_replacement = f'<div class="meta-label">Report Date</div>\n                <div class="meta-value">{current_date}</div>'
+            updated_content = re.sub(date_pattern, date_replacement, updated_content)
+            
+            # Replace the time value directly
+            time_pattern = r'<div class="meta-label">Report Time</div>\s*<div class="meta-value">[^<]*</div>'
+            time_replacement = f'<div class="meta-label">Report Time</div>\n                <div class="meta-value">{current_time}</div>'
+            updated_content = re.sub(time_pattern, time_replacement, updated_content)
             
             # Update the generated timestamp at the end if it exists 
             if '<p><i>Report generated on' in updated_content:
-                import re
+                timestamp_pattern = r'<p><i>Report generated on .*?</i></p>'
                 updated_content = re.sub(
-                    r'<p><i>Report generated on .*?</i></p>',
+                    timestamp_pattern,
                     f'<p><i>Report generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</i></p>',
                     updated_content
                 )
@@ -218,10 +219,10 @@ async def process_file(
             global LAST_PROCESSED_FILE
             LAST_PROCESSED_FILE = temp_file_path
             
-            # If report was generated, update its timestamp
+            # If report was generated, update its timestamp directly instead of using background tasks
             if generate_report_bool and os.path.exists(output_report_html):
-                # Schedule the timestamp update as a background task
-                background_tasks.add_task(update_report_timestamp, output_report_html)
+                # Update timestamps directly rather than in background for more reliable results
+                await update_report_timestamp(output_report_html)
             
             output_resource_html = os.path.join(SCRIPT_DIR, 'interactive_schedule_r.html')
             
@@ -235,8 +236,7 @@ async def process_file(
             
             # Add report view to response if report was generated
             if generate_report_bool and os.path.exists(output_report_html):
-                # Wait a moment for the background task to update the timestamp
-                await asyncio.sleep(0.5)
+                # No need to sleep since we waited for the update to complete
                 response.report_view = f'/production_report.html?t={os.path.getmtime(output_report_html)}'
             
             return response

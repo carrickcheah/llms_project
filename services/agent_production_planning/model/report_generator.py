@@ -1,19 +1,17 @@
-from openai import OpenAI
 import os
 import re
 import sys
 from datetime import datetime
-from time import sleep
+import ollama
+from ollama import ChatResponse
 
+# Global model name setting
+OLLAMA_MODEL = "xingyaow/codeact-agent-mistral"
+MAX_TOKENS = 2048  
 
-client = OpenAI(
-    base_url = 'http://localhost:11434/v1',
-    api_key='ollama',
-)
-
-def generate_report_from_logs(log_file_path="../production_scheduler.log", max_tokens=5000):
+def generate_report_from_logs(log_file_path="../production_scheduler.log", max_tokens=MAX_TOKENS):
     """
-    Generate a structured report from production scheduler logs using LLM.
+    Generate a structured report from production scheduler logs using Ollama.
     This is an internal function used by generate_html_report.
     Only processes the latest run data from the log file.
     
@@ -44,60 +42,126 @@ def generate_report_from_logs(log_file_path="../production_scheduler.log", max_t
         
         # If we found a marker for the latest run, extract only those lines
         if latest_run_start >= 0:
-            log_content = ''.join(log_lines[latest_run_start:])
-            print(f"Processing only the latest run data from line {latest_run_start+1} of the log file")
+            # Don't use all lines after marker, just take the last 100 lines after the marker
+            # or all lines after marker if fewer than 50
+            lines_after_marker = log_lines[latest_run_start:]
+            num_lines = min(50, len(lines_after_marker))
+            
+            # Strip timestamps from log lines to reduce token usage
+            processed_lines = []
+            for line in lines_after_marker[-num_lines:]:
+                # Remove timestamp pattern (e.g., 2025-04-07T14:47:14.374181+0800)
+                line = re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{4}\s+\|\s+', '', line)
+                processed_lines.append(line)
+            
+            log_content = ''.join(processed_lines)
+            print(f"Processing only the last {num_lines} lines from the latest run (starting at line {latest_run_start+1})")
         else:
             # Fallback to recent lines if no run marker found
-            # Take the last 500 lines or all if fewer
-            num_lines = min(500, len(log_lines))
-            log_content = ''.join(log_lines[-num_lines:])
+            # Take the last 50 lines or all if fewer 
+            num_lines = min(50, len(log_lines))
+            
+            # Strip timestamps from log lines to reduce token usage
+            processed_lines = []
+            for line in log_lines[-num_lines:]:
+                # Remove timestamp pattern (e.g., 2025-04-07T14:47:14.374181+0800)
+                line = re.sub(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{4}\s+\|\s+', '', line)
+                processed_lines.append(line)
+            
+            log_content = ''.join(processed_lines)
             print(f"No run marker found, processing last {num_lines} lines of the log file")
     except Exception as e:
         return f"Error reading log file: {str(e)}"
     
     # Truncate log if still needed to fit token limits
-    if len(log_content) > max_tokens * 4:  # Rough estimate of characters to tokens
+    if len(log_content) > max_tokens * 3:  # Conservative estimate of characters to tokens
         # Get the last part of the log file
-        log_content = log_content[-max_tokens * 4:]
+        log_content = log_content[-max_tokens * 3:]
         # Find the first complete log entry to avoid partial entries
         first_entry = re.search(r'\d{4}-\d{2}-\d{2}', log_content)
         if first_entry:
             log_content = log_content[first_entry.start():]
+        else:
+            # If no timestamp found, just take the last n characters as a fallback
+            log_content = log_content[-max_tokens * 2:]
     
-    # Get current date for the report
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    print(f"Log content length: {len(log_content)} characters, approximately {len(log_content)/4} tokens")
     
-    # Prepare the prompt for the LLM - more concise for faster response
+    # Prepare system prompt for structured analysis
     system_prompt = (
-        "Create a concise production scheduling report with: 1) Executive summary, 2) Key metrics, "
-        "3) Issues/warnings, 4) Performance analysis, 5) Brief recommendations. Use bullet points where possible."
+        "You are an expert in production scheduling analysis. Analyze the log content and create a concise report with exactly 5 paragraphs of about 30 words each:\n"
+        "1. Overall schedule status and key metrics\n\n"
+        "2. Most critical late jobs with specific details\n\n"
+        "3. Machine utilization and capacity analysis\n\n"
+        "4. Highest priority concerns\n\n"
+        "5. Immediate recommendations\n\n"
+        "Format each paragraph as plain text with no markdown, no HTML, no bold, no italics, no formatting. Use clear, concise language. Do not include any interactive elements or questions at the end."
     )
     
-    user_prompt = f"Generate a production scheduling report based on these logs:\n\n{log_content}"
+    # Prepare the chat messages
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Analyze this production scheduler log and create a concise 5-paragraph report:\n\n{log_content}"}
+    ]
     
-    # Specify OpenAI model directly
-    model = "gemma3"  # You can also use "gpt-4" for more advanced analysis
+    print(f"Using Ollama model: {OLLAMA_MODEL}")
     
-    # Generate the report using the LLM
+    # Generate the report using Ollama
     try:
-        response = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            model=model,
-            temperature=0.3,  # Lower temperature for more factual output
-            max_tokens=5000,   # Reduced token limit for faster response
-            timeout=65  # Reduced timeout for faster total processing
+        # Use Ollama Python library to call the model
+        response: ChatResponse = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=messages,
+            options={"temperature": 0.7}
         )
+        return response.message.content
         
-        report = response.choices[0].message.content
-        return report
-    
     except Exception as e:
-        return f"Error generating report: {str(e)}"
+        print(f"Error using Ollama API: {str(e)}")
+        print("Falling back to basic report generation")
+        return generate_basic_report(log_content)
 
-def generate_html_report(log_file_path="../production_scheduler.log", max_tokens=5000):
+def generate_basic_report(log_content):
+    """Generate a basic report without using LLM when API calls fail"""
+    # Extract some basic info from logs
+    late_jobs = []
+    for line in log_content.split('\n'):
+        if "late" in line.lower() and "job" in line.lower():
+            if len(line) > 20:  # Only include meaningful lines
+                late_jobs.append(line)
+    
+    late_jobs = late_jobs[:5]  # Limit to 5 examples
+    
+    report = """
+## Production Schedule Analysis
+
+### Executive Summary
+The production schedule appears to have some jobs that will complete after their due dates.
+
+### Key Metrics
+Several jobs are showing as late in the schedule.
+
+### Issues/Warnings
+"""
+    
+    if late_jobs:
+        report += "Late jobs detected:\n"
+        for job in late_jobs:
+            report += f"- {job.strip()}\n"
+    else:
+        report += "No specific issues could be extracted from the logs.\n"
+    
+    report += """
+### Performance Analysis
+The system is generating schedules but may need optimization to reduce late jobs.
+
+### Recommendations
+Consider resource reallocation or adjusting due dates where possible.
+"""
+    
+    return report
+
+def generate_html_report(log_file_path="../production_scheduler.log", max_tokens=MAX_TOKENS):
     """
     Generate an HTML report from production scheduler logs.
     
@@ -170,8 +234,7 @@ def generate_html_report(log_file_path="../production_scheduler.log", max_tokens
     current_date = datetime.now().strftime("%Y-%m-%d")
     report_time = datetime.now().strftime("%H:%M:%S")
     
-    # Skip the second API call and use a simplified template to wrap the report
-    # This saves significant time by avoiding a second LLM call
+    # Format the report in HTML
     formatted_report = text_report.replace("\n", "<br>")
     
     html_template = f"""<!DOCTYPE html>
@@ -232,36 +295,11 @@ def generate_html_report(log_file_path="../production_scheduler.log", max_tokens
             font-size: 1.1rem;
             font-weight: 600;
         }}
-        pre {{
-            white-space: pre-wrap;
-            word-wrap: break-word;
+        .report-content {{
+            padding: 20px;
             background-color: #f8f9fa;
-            padding: 15px;
             border-radius: 8px;
-            overflow-x: auto;
-        }}
-        ul, ol {{
-            padding-left: 25px;
-        }}
-        li {{
-            margin-bottom: 8px;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }}
-        th, td {{
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            text-align: left;
-        }}
-        th {{
-            background-color: #f8f9fa;
-            font-weight: 600;
-        }}
-        tr:nth-child(even) {{
-            background-color: #f8f9fa;
+            line-height: 1.7;
         }}
     </style>
 </head>
@@ -321,13 +359,8 @@ def save_html_report(html_report, output_file=None):
 # Example usage
 if __name__ == "__main__":
     try:
-        # Print which model we're using
-        model = "gemma3"
-        print(f"Using model: {model}")
-        
         # Generate HTML report
         print("Generating HTML report... This may take up to 30 seconds...")
-        # Removed sleep to save time
         html_report = generate_html_report()
         
         # Save the HTML report with fixed filename

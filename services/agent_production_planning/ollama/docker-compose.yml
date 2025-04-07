@@ -1,0 +1,18 @@
+version: '3'
+services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "ollama serve & 
+      sleep 10 && 
+      (ollama list | grep -q xingyaow/codeact-agent-mistral || ollama pull xingyaow/codeact-agent-mistral) && 
+      wait"
+
+volumes:
+  ollama_data:
