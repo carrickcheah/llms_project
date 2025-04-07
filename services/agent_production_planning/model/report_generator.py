@@ -45,7 +45,7 @@ def generate_report_from_logs(log_file_path="../production_scheduler.log", max_t
             # Don't use all lines after marker, just take the last 100 lines after the marker
             # or all lines after marker if fewer than 50
             lines_after_marker = log_lines[latest_run_start:]
-            num_lines = min(50, len(lines_after_marker))
+            num_lines = min(400, len(lines_after_marker))
             
             # Strip timestamps from log lines to reduce token usage
             processed_lines = []
@@ -59,7 +59,7 @@ def generate_report_from_logs(log_file_path="../production_scheduler.log", max_t
         else:
             # Fallback to recent lines if no run marker found
             # Take the last 50 lines or all if fewer 
-            num_lines = min(50, len(log_lines))
+            num_lines = min(400, len(log_lines))
             
             # Strip timestamps from log lines to reduce token usage
             processed_lines = []

@@ -23,17 +23,193 @@ from time_utils import (
     convert_job_times_to_relative,
     convert_job_times_to_epoch
 )
+import subprocess
+import json
+import pytz
+import sys
 
-# Configure logging with file handler only, no console output
-logging.basicConfig(
-    level=logging.WARNING,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("production_scheduler.log"),
-        # No StreamHandler to suppress console output
-    ]
-)
-logger = logging.getLogger(__name__)
+# Clear any existing handlers in the root logger
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+# Configure root logger to write to both file and console
+file_handler = logging.FileHandler("production_scheduler.log", mode='w')  # Start with a fresh log
+console_handler = logging.StreamHandler(sys.stdout)
+
+# Set formatter for both handlers
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+console_handler.setFormatter(formatter)
+
+# Add handlers to root logger
+logging.root.addHandler(file_handler)
+logging.root.addHandler(console_handler)
+logging.root.setLevel(logging.INFO)
+
+# Set the root logger as the default for all modules
+logger = logging.getLogger()
+
+# Direct file write function for machine metrics
+def write_to_log_file(content):
+    """Write content directly to the log file."""
+    with open("production_scheduler.log", "a") as f:
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"{timestamp} - INFO - {content}\n")
+
+# Import functions from machine_metrics_logger
+def format_seconds(seconds):
+    """Convert seconds to human-readable format (HH:MM:SS)"""
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{int(hours)}:{int(minutes):02d}:{int(secs):02d}"
+
+def format_timestamp(timestamp):
+    """Convert epoch timestamp to human-readable date/time"""
+    try:
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        return f"Invalid timestamp: {timestamp}"
+
+def calculate_machine_metrics(schedule):
+    """
+    Calculate machine utilization metrics from the schedule.
+    """
+    metrics = {}
+    
+    # Track overall schedule timespan
+    all_start_times = []
+    all_end_times = []
+    
+    for machine, tasks in schedule.items():
+        if not tasks:
+            continue
+            
+        # Convert tasks to list of (start, end) tuples for easier processing
+        job_spans = []
+        
+        for task in tasks:
+            # Handle both 4-tuple and 5-tuple formats
+            if len(task) >= 3:  # We only need start and end times
+                job_id = task[0]
+                start = task[1]
+                end = task[2]
+                job_spans.append((start, end, job_id))
+                
+                # Track overall schedule timing
+                all_start_times.append(start)
+                all_end_times.append(end)
+        
+        # Sort by start time
+        job_spans.sort()
+        
+        if not job_spans:
+            continue
+            
+        # Calculate machine-specific metrics
+        machine_start = job_spans[0][0]
+        machine_end = max(end for _, end, _ in job_spans)
+        total_span = machine_end - machine_start  # seconds
+        
+        # Calculate working time
+        working_time = sum(end - start for start, end, _ in job_spans)  # seconds
+        
+        # Calculate utilization percentage
+        utilization = (working_time / total_span * 100) if total_span > 0 else 0
+        
+        # Find idle periods (gaps between jobs)
+        idle_periods = []
+        for i in range(1, len(job_spans)):
+            prev_end = job_spans[i-1][1]
+            curr_start = job_spans[i][0]
+            
+            if curr_start > prev_end:
+                idle_periods.append((prev_end, curr_start, curr_start - prev_end))
+        
+        # Calculate job durations
+        job_durations = [(end - start, job_id) for start, end, job_id in job_spans]
+        
+        # Store metrics for this machine
+        metrics[machine] = {
+            'num_jobs': len(job_spans),
+            'total_span_seconds': total_span,
+            'working_time_seconds': working_time,
+            'utilization_percent': utilization,
+            'idle_periods': idle_periods,
+            'job_durations': job_durations,
+            'start_time': machine_start,
+            'end_time': machine_end
+        }
+    
+    # Calculate overall schedule metrics
+    if all_start_times and all_end_times:
+        overall_start = min(all_start_times)
+        overall_end = max(all_end_times)
+        overall_span = overall_end - overall_start
+        
+        metrics['overall'] = {
+            'start_time': overall_start,
+            'end_time': overall_end,
+            'total_span_seconds': overall_span
+        }
+        
+    return metrics
+
+def log_machine_metrics_to_file(metrics):
+    """
+    Write machine metrics directly to the log file.
+    """
+    write_to_log_file("========== MACHINE UTILIZATION REPORT ==========")
+    
+    # First log the overall statistics
+    if 'overall' in metrics:
+        overall = metrics['overall']
+        write_to_log_file(f"Schedule timespan: {format_timestamp(overall['start_time'])} to {format_timestamp(overall['end_time'])}")
+        write_to_log_file(f"Total schedule duration: {format_seconds(overall['total_span_seconds'])} ({overall['total_span_seconds']/3600:.2f} hours)")
+        write_to_log_file("---------------------------------------------")
+    
+    # Log machine-specific metrics
+    for machine, machine_metrics in sorted(metrics.items()):
+        if machine == 'overall':
+            continue
+            
+        # Skip empty metrics
+        if not machine_metrics:
+            continue
+        
+        num_jobs = machine_metrics['num_jobs']
+        total_span = machine_metrics['total_span_seconds']
+        working_time = machine_metrics['working_time_seconds']
+        utilization = machine_metrics['utilization_percent']
+        idle_periods = machine_metrics['idle_periods']
+        start_time = machine_metrics['start_time']
+        end_time = machine_metrics['end_time']
+        
+        # Log basic metrics
+        write_to_log_file(f"Machine: {machine}")
+        write_to_log_file(f"  Number of jobs: {num_jobs}")
+        write_to_log_file(f"  Timespan: {format_timestamp(start_time)} to {format_timestamp(end_time)}")
+        write_to_log_file(f"  Duration: {format_seconds(total_span)} ({total_span/3600:.2f} hours)")
+        write_to_log_file(f"  Working time: {format_seconds(working_time)} ({working_time/3600:.2f} hours)")
+        write_to_log_file(f"  Utilization: {utilization:.2f}%")
+        
+        # Log idle periods
+        total_idle_time = sum(duration for _, _, duration in idle_periods)
+        write_to_log_file(f"  Idle periods: {len(idle_periods)}")
+        write_to_log_file(f"  Total idle time: {format_seconds(total_idle_time)} ({total_idle_time/3600:.2f} hours)")
+        
+        if idle_periods:
+            write_to_log_file("  Idle period details:")
+            for i, (start, end, duration) in enumerate(idle_periods, 1):
+                write_to_log_file(f"    {i}. {format_timestamp(start)} to {format_timestamp(end)}: {format_seconds(duration)} ({duration/3600:.2f} hours)")
+        
+        # Log job durations
+        write_to_log_file("  Job durations:")
+        for duration, job_id in sorted(machine_metrics['job_durations'], reverse=True)[:5]:  # Top 5 longest jobs
+            write_to_log_file(f"    {job_id}: {format_seconds(duration)} ({duration/3600:.2f} hours)")
+        
+        write_to_log_file("---------------------------------------------")
 
 def main():
     print("Production Planning Scheduler")
@@ -53,6 +229,7 @@ def main():
     parser.add_argument("--urgent100", action="store_true", help="Reduce non-productive times by 100% for late jobs")
     parser.add_argument("--generate-report", action="store_true", help="Generate detailed production report")
     parser.add_argument("--report-output", default="production_report.html", help="Output file for the production report")
+    parser.add_argument("--skip-metrics", action="store_true", help="Skip generation of machine utilization metrics")
     args = parser.parse_args()
 
     # Set up logging based on whether --verbose was used
@@ -746,6 +923,34 @@ def main():
             
         except Exception as e:
             logger.error(f"Error generating production report: {e}")
+            logger.error("Stack trace:", exc_info=True)
+            
+    # Generate machine utilization metrics unless explicitly skipped
+    if not args.skip_metrics:
+        try:
+            logger.info("Generating machine utilization metrics...")
+            
+            # Save schedule to JSON file for reference
+            schedule_json_path = os.path.splitext(args.output)[0] + ".json"
+            with open(schedule_json_path, 'w') as f:
+                json.dump(schedule, f)
+            
+            print(f"- Schedule JSON: {os.path.abspath(schedule_json_path)}")
+            
+            # Log machine metrics directly to the file
+            write_to_log_file("=" * 50)
+            write_to_log_file(f"MACHINE METRICS LOG - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            write_to_log_file("=" * 50)
+            
+            # Calculate and log metrics directly to the file
+            metrics = calculate_machine_metrics(schedule)
+            log_machine_metrics_to_file(metrics)
+            
+            write_to_log_file("Machine utilization metrics generated successfully")
+            print("- Metrics log: Added to production_scheduler.log")
+            
+        except Exception as e:
+            logger.error(f"Error generating machine utilization metrics: {e}")
             logger.error("Stack trace:", exc_info=True)
 
 def convert_cpsat_to_greedy_format(cpsat_schedule):

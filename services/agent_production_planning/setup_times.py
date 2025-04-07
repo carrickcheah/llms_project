@@ -17,15 +17,11 @@ The overall workflow is:
 import pandas as pd
 from datetime import datetime
 import re
-from loguru import logger
+import logging
 import sys
 
-# Configure loguru logger to only write to production_scheduler.log file
-# Remove default handlers
-logger.remove()
-# Add file handler with WARNING level
-logger.add("production_scheduler.log", level="WARNING", format="{time} | {level} | {name}:{function}:{line} - {message}")
-# No console handler to suppress output
+# This change ensures logs go to the root logger handlers
+logger = logging.getLogger()
 
 def get_start_date_epoch(job):
     """
